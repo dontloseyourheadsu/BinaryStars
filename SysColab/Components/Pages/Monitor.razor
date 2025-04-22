@@ -1,0 +1,147 @@
+@page "/monitor"
+@using SysColab.Models
+@using SysColab.Services
+@inject BluetoothService BluetoothService
+
+<article>
+    <h1 class="page-title">Device Monitor</h1>
+
+    <!-- Device Selector -->
+    <div class="mb-3">
+        <label for="deviceSelect" class="form-label">Select Device</label>
+        <select id="deviceSelect"
+                class="form-control"
+                @bind="SelectedDeviceAddress"
+                @bind:event="onchange">
+            <option value="">-- Select a Device --</option>
+            @foreach (var d in AvailableDevices)
+            {
+                <option value="@d.Address">
+                    @d.Name (@d.Address)
+                </option>
+            }
+        </select>
+    </div>
+
+    @if (!string.IsNullOrEmpty(SelectedDeviceAddress))
+    {
+        <div class="row g-4 mt-4 align-items-stretch">
+            <!-- CPU Usage -->
+            <div class="col-md-6 d-flex">
+                <div class="card-surface h-100 flex-fill d-flex flex-column">
+                    <h2 class="section-title">CPU Usage</h2>
+                    <div class="flex-fill d-flex align-items-center">
+                        <div class="progress w-100">
+                            <div class="progress-bar"
+                                 role="progressbar"
+                                 style="width:@Metrics.CpuUsage%"
+                                 aria-valuenow="@Metrics.CpuUsage"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">
+                                @Metrics.CpuUsage%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RAM Usage -->
+            <div class="col-md-6 d-flex">
+                <div class="card-surface h-100 flex-fill d-flex flex-column">
+                    <h2 class="section-title">RAM Usage</h2>
+                    <div class="flex-fill d-flex align-items-center">
+                        <div class="progress w-100">
+                            <div class="progress-bar"
+                                 role="progressbar"
+                                 style="width:@Metrics.RamUsage%"
+                                 aria-valuenow="@Metrics.RamUsage"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">
+                                @Metrics.RamUsage%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Storage Usage -->
+            <div class="col-md-6 d-flex">
+                <div class="card-surface h-100 flex-fill d-flex flex-column">
+                    <h2 class="section-title">Storage Usage</h2>
+                    <div class="flex-fill d-flex align-items-center">
+                        <div class="progress w-100">
+                            <div class="progress-bar"
+                                 role="progressbar"
+                                 style="width:@Metrics.StorageUsage%"
+                                 aria-valuenow="@Metrics.StorageUsage"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">
+                                @Metrics.StorageUsage%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Throughput -->
+            <div class="col-md-6 d-flex">
+                <div class="card-surface h-100 flex-fill d-flex flex-column">
+                    <h2 class="section-title">Network Throughput</h2>
+                    <div class="flex-fill">
+                        <p class="mb-2">Up: @Metrics.NetworkUp KB/s</p>
+                        <p class="mb-0">Down: @Metrics.NetworkDown KB/s</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <p>Please select a device to monitor.</p>
+    }
+</article>
+
+@code {
+    private List<DeviceInfo> AvailableDevices = new();
+    private DeviceMetrics Metrics = new DeviceMetrics();
+
+    // Backing field + property so we can react when it changes
+    private string selectedDeviceAddress;
+    public string SelectedDeviceAddress
+    {
+        get => selectedDeviceAddress;
+        set
+        {
+            if (selectedDeviceAddress != value)
+            {
+                selectedDeviceAddress = value;
+                LoadMetricsFor(value);
+            }
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        AvailableDevices = new List<DeviceInfo>
+        {
+            new DeviceInfo("Device A", "00:11:22:33:AA:BB", true),
+            new DeviceInfo("Device B", "00:11:22:33:CC:DD", true)
+        };
+    }
+
+    private void LoadMetricsFor(string address)
+    {
+        if (!string.IsNullOrEmpty(address))
+        {
+            var rnd = new Random();
+            Metrics = new DeviceMetrics
+                {
+                    CpuUsage = rnd.Next(10, 90),
+                    RamUsage = rnd.Next(20, 80),
+                    StorageUsage = rnd.Next(5, 70),
+                    NetworkUp = rnd.Next(50, 500),
+                    NetworkDown = rnd.Next(50, 500)
+                };
+        }
+    }
+}

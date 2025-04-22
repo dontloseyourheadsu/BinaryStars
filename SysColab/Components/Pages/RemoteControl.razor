@@ -1,0 +1,115 @@
+﻿@page "/"
+@using SysColab.Models
+@using SysColab.Services
+@inject RemoteInputService RemoteInputService
+
+<article>
+    <h1 class="page-title">Remote Control</h1>
+
+    <!-- Device Selector -->
+    <div class="mb-3">
+        <label for="deviceSelect" class="form-label">Select Device</label>
+        <select id="deviceSelect"
+                class="form-control"
+                @bind="SelectedDeviceAddress"
+                @bind:event="onchange">
+            <option value="">-- Select a Device --</option>
+            @foreach (var d in AvailableDevices)
+            {
+                <option value="@d.Address">@d.Name (@d.Address)</option>
+            }
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Input Type</label>
+        <div class="form-check">
+            <input class="form-check-input"
+                   type="radio"
+                   name="inputType"
+                   id="keyboardOption"
+                   value="Keyboard"
+                   checked="@(SelectedInputType == "Keyboard")"
+                   @onchange="@(() => SelectedInputType = " Keyboard")" />
+            <label class="form-check-label" for="keyboardOption">
+                Keyboard Input
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input"
+                   type="radio"
+                   name="inputType"
+                   id="mouseOption"
+                   value="Mouse"
+                   checked="@(SelectedInputType == "Mouse")"
+                   @onchange="@(() => SelectedInputType = " Mouse")" />
+            <label class="form-check-label" for="mouseOption">
+                Mouse Input
+            </label>
+        </div>
+    </div>
+
+
+    @* Only show the keyboard input UI once a device is picked and “Keyboard” is active *@
+    @if (!string.IsNullOrEmpty(SelectedDeviceAddress) && SelectedInputType == "Keyboard")
+    {
+        <!-- Input Area -->
+        <div class="mb-3">
+            <label for="inputText" class="form-label">Enter Keyboard Input</label>
+            <input id="inputText"
+                   type="text"
+                   class="form-control"
+                   @bind="CurrentInput"
+                   @bind:event="oninput" />
+        </div>
+
+        <div class="card-surface mb-3">
+            <h2 class="section-title">Input Stream</h2>
+            <pre class="p-2" 
+                 style="background-color: var(--panel-bg); color: var(--text-body);">
+@InputStream
+            </pre>
+        </div>
+
+        <button class="btn btn-primary"
+                @onclick="TransmitKeyboardInput">
+            Send Input
+        </button>
+    }
+    else
+    {
+        <p class="text-body">
+            Please select a device and “Keyboard” input to begin.
+        </p>
+    }
+</article>
+
+@code {
+    // Mock connected devices
+    private List<DeviceInfo> AvailableDevices = new()
+    {
+        new DeviceInfo("Device A", "00:11:22:33:AA:BB", true),
+        new DeviceInfo("Device B", "00:11:22:33:CC:DD", true)
+    };
+
+    private string SelectedDeviceAddress { get; set; }
+    private string SelectedInputType { get; set; } = "Keyboard";
+    private string CurrentInput { get; set; } = string.Empty;
+    private string InputStream { get; set; } = string.Empty;
+
+    private async Task TransmitKeyboardInput()
+    {
+        // nothing to send?
+        if (string.IsNullOrWhiteSpace(CurrentInput))
+            return;
+
+        // append with newline
+        InputStream += CurrentInput + Environment.NewLine;
+
+        // send and await
+        await RemoteInputService.SendKeyboardInputAsync(SelectedDeviceAddress, CurrentInput);
+
+        // clear
+        CurrentInput = string.Empty;
+    }
+}

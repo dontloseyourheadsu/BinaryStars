@@ -1,0 +1,88 @@
+@page "/device-discovery"
+@using SysColab.Services
+@using SysColab.Models
+@inject NavigationManager Navigation
+@inject BluetoothService BluetoothService
+
+<article>
+    <h1 class="page-title">Device Discovery</h1>
+    <div class="my-4">
+        <button class="btn btn-primary" @onclick="ScanDevices" disabled="@isScanning">
+            @if (isScanning)
+            {
+                <span>Scanning...</span>
+            }
+            else
+            {
+                <span>Scan for Devices</span>
+            }
+        </button>
+    </div>
+    <div>
+        @if (Devices.Any())
+        {
+            <ul class="simple-list mb-0">
+                @foreach (var device in Devices)
+                {
+                    <li class="simple-list-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>@device.Name</strong><br />
+                            <small>@device.Address</small>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm" @onclick="() => Connect(device)">
+                            @(device.IsPaired ? "Reconnect" : "Pair")
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+        else if (isScanning)
+        {
+            <p>Scanning for devices...</p>
+        }
+        else
+        {
+            <p>No devices found.</p>
+        }
+    </div>
+</article>
+
+@code {
+    private bool isScanning = false;
+    private List<DeviceInfo> Devices = new();
+
+    protected override void OnInitialized()
+    {
+        // Initial mock data
+        Devices = new List<DeviceInfo>
+        {
+            new DeviceInfo("Device A", "00:11:22:33:AA:BB", false),
+            new DeviceInfo("Device B", "00:11:22:33:CC:DD", true),
+            new DeviceInfo("Device C", "00:11:22:33:EE:FF", false),
+        };
+    }
+
+    private async Task ScanDevices()
+    {
+        isScanning = true;
+        Devices.Clear();
+        StateHasChanged();
+
+        // Simulate a Bluetooth scan
+        await Task.Delay(1500);
+        Devices = new List<DeviceInfo>
+        {
+            new DeviceInfo("New Device X", "AA:BB:CC:11:22:33", false),
+            new DeviceInfo("New Device Y", "AA:BB:CC:44:55:66", false),
+        };
+
+        isScanning = false;
+    }
+
+    private void Connect(DeviceInfo device)
+    {
+        // Mock connect/pair logic
+        device.IsPaired = true;
+    }
+
+}

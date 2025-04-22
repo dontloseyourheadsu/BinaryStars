@@ -1,0 +1,68 @@
+@page "/connected-devices"
+@using SysColab.Models
+@using SysColab.Services
+@inject BluetoothService BluetoothService
+@inject NavigationManager Navigation
+
+<article>
+    <h1 class="page-title">Connected Devices</h1>
+    <div class="my-4">
+        <button class="btn btn-primary" @onclick="RefreshList">Refresh</button>
+    </div>
+    <div>
+        @if (ConnectedDevicesList.Any())
+        {
+            <ul class="simple-list mb-0">
+                @foreach (var device in ConnectedDevicesList)
+                {
+                    <li class="simple-list-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>@device.Name</strong><br />
+                            <small>@device.Address</small>
+                        </div>
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm me-2" @onclick="() => NavigateToMonitor(device)">Monitor</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => Disconnect(device)">Disconnect</button>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p>No devices currently connected.</p>
+        }
+    </div>
+</article>
+
+@code {
+    private List<DeviceInfo> ConnectedDevicesList = new();
+
+    protected override void OnInitialized()
+    {
+        // Mock connected devices
+        ConnectedDevicesList = new List<DeviceInfo>
+        {
+            new DeviceInfo("Device B", "00:11:22:33:CC:DD", true),
+            new DeviceInfo("Device D", "00:11:22:33:77:88", true)
+        };
+    }
+
+    private void RefreshList()
+    {
+        // Placeholder: retrieve real list from service
+        //ConnectedDevicesList = BluetoothService.GetConnectedDevices();
+    }
+
+    private void Disconnect(DeviceInfo device)
+    {
+        // Simulate disconnect logic
+        device.IsPaired = false;
+        ConnectedDevicesList.Remove(device);
+    }
+
+    private void NavigateToMonitor(DeviceInfo device)
+    {
+        Navigation.NavigateTo($"monitor?device={Uri.EscapeDataString(device.Address)}");
+    }
+}
