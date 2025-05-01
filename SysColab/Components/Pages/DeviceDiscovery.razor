@@ -2,20 +2,13 @@
 @using SysColab.Services
 @using SysColab.Models
 @inject NavigationManager Navigation
-@inject BluetoothService BluetoothService
+@inject ConnectivityService ConnectivityService
 
 <article>
     <h1 class="page-title">Device Discovery</h1>
     <div class="my-4">
-        <button class="btn btn-primary" @onclick="ScanDevices" disabled="@isScanning">
-            @if (isScanning)
-            {
-                <span>Scanning...</span>
-            }
-            else
-            {
-                <span>Scan for Devices</span>
-            }
+        <button class="btn btn-primary" @onclick="ScanDevices">
+            <span>Scan for Devices</span>
         </button>
     </div>
     <div>
@@ -36,47 +29,34 @@
                 }
             </ul>
         }
-        else if (isScanning)
-        {
-            <p>Scanning for devices...</p>
-        }
         else
         {
-            <p>No devices found.</p>
+            <p>No devices scanned.</p>
         }
     </div>
 </article>
 
 @code {
-    private bool isScanning = false;
     private List<DeviceInfo> Devices = new();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        // Initial mock data
-        Devices = new List<DeviceInfo>
-        {
-            new DeviceInfo("Device A", "00:11:22:33:AA:BB", false),
-            new DeviceInfo("Device B", "00:11:22:33:CC:DD", true),
-            new DeviceInfo("Device C", "00:11:22:33:EE:FF", false),
-        };
+        
     }
 
-    private async Task ScanDevices()
+    private void ScanDevices()
     {
-        isScanning = true;
         Devices.Clear();
         StateHasChanged();
 
-        // Simulate a Bluetooth scan
-        await Task.Delay(1500);
-        Devices = new List<DeviceInfo>
-        {
-            new DeviceInfo("New Device X", "AA:BB:CC:11:22:33", false),
-            new DeviceInfo("New Device Y", "AA:BB:CC:44:55:66", false),
-        };
+        //var scannedDevices = ConnectivityService.ScanForDevices();
 
-        isScanning = false;
+        //foreach (var device in scannedDevices)
+        //{
+        //    Devices.Add(new DeviceInfo(device.Name ?? "Unknown", device.Uuid, device.Status == Shiny.BluetoothLE.ConnectionState.Connected));
+        //}
+
+        StateHasChanged();
     }
 
     private void Connect(DeviceInfo device)
@@ -84,5 +64,4 @@
         // Mock connect/pair logic
         device.IsPaired = true;
     }
-
 }

@@ -1,6 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35931.197 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SysColab", "SysColab\SysColab.csproj", "{A699DE77-0B42-404F-9FD6-56DFAF3C1E7C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SysColabServer", "SysColabServer\SysColabServer.csproj", "{3609561C-B85B-46B4-A74F-4D5571A1FFF9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SysColab.Shared", "SysColab.Shared\SysColab.Shared.csproj", "{81662AFC-5B4D-416E-8E7E-610B083BC07B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -12,5 +19,19 @@ Global
 		{A699DE77-0B42-404F-9FD6-56DFAF3C1E7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A699DE77-0B42-404F-9FD6-56DFAF3C1E7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A699DE77-0B42-404F-9FD6-56DFAF3C1E7C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3609561C-B85B-46B4-A74F-4D5571A1FFF9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3609561C-B85B-46B4-A74F-4D5571A1FFF9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3609561C-B85B-46B4-A74F-4D5571A1FFF9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3609561C-B85B-46B4-A74F-4D5571A1FFF9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81662AFC-5B4D-416E-8E7E-610B083BC07B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81662AFC-5B4D-416E-8E7E-610B083BC07B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81662AFC-5B4D-416E-8E7E-610B083BC07B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81662AFC-5B4D-416E-8E7E-610B083BC07B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {CD860628-8A0E-4A00-9241-B2FFA1A74799}
 	EndGlobalSection
 EndGlobal

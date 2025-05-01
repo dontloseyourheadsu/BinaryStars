@@ -1,13 +1,11 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
 <div class="d-flex flex-column vh-100">
-    <!-- ① El checkbox controla el estado (checked = nav visible) -->
     <input id="nav-toggle" class="nav-toggle" type="checkbox" />
     <div class="d-flex">
-        <!-- ② Barra superior -->
         <div class="top-row">
-            <!-- Label = botón hamburger personalizado sin borde -->
-            <label class="sidebar-toggle"
-                   for="nav-toggle">
+            <label class="sidebar-toggle" for="nav-toggle">
                 <div class="hamburger-icon">
                     <span></span>
                     <span></span>
@@ -16,42 +14,43 @@
             </label>
             <div class="app-title">Device Management</div>
         </div>
-        <!-- ③ Contenedor principal -->
+
         <div class="page">
             <div class="sidebar">
                 <nav>
-                    <div class="nav-item">
-                        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <div class="nav-item" @onclick="@(() => NavigateTo("/"))">
+                        <div class="nav-link">
                             <span class="nav-icon">•</span> Home
-                        </NavLink>
+                        </div>
                     </div>
-                    <div class="nav-item">
-                        <NavLink class="nav-link" href="device-discovery">
+                    <div class="nav-item" @onclick="@(() => NavigateTo("/device-discovery"))">
+                        <div class="nav-link">
                             <span class="nav-icon">•</span> Device Discovery
-                        </NavLink>
+                        </div>
                     </div>
-                    <div class="nav-item">
-                        <NavLink class="nav-link" href="connected-devices">
+                    <div class="nav-item" @onclick="@(() => NavigateTo("/connected-devices"))">
+                        <div class="nav-link">
                             <span class="nav-icon">•</span> Connected Devices
-                        </NavLink>
+                        </div>
                     </div>
-                    <div class="nav-item">
-                        <NavLink class="nav-link" href="file-transfer">
+                    <div class="nav-item" @onclick="@(() => NavigateTo("/file-transfer"))">
+                        <div class="nav-link">
                             <span class="nav-icon">•</span> File Transfer
-                        </NavLink>
+                        </div>
                     </div>
-                    <div class="nav-item">
-                        <NavLink class="nav-link" href="monitor">
+                    <div class="nav-item" @onclick="@(() => NavigateTo("/monitor"))">
+                        <div class="nav-link">
                             <span class="nav-icon">•</span> Monitor
-                        </NavLink>
+                        </div>
                     </div>
-                    <div class="nav-item">
-                        <NavLink class="nav-link" href="remote-control">
+                    <div class="nav-item" @onclick="@(() => NavigateTo("/remote-control"))">
+                        <div class="nav-link">
                             <span class="nav-icon">•</span> Remote Control
-                        </NavLink>
+                        </div>
                     </div>
                 </nav>
             </div>
+
             <main>
                 <article class="content px-4">
                     @Body
@@ -60,3 +59,10 @@
         </div>
     </div>
 </div>
+
+@code {
+    void NavigateTo(string url)
+    {
+        NavigationManager.NavigateTo(url);
+    }
+}

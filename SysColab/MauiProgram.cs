@@ -12,7 +12,7 @@ public static class MauiProgram
             .UseMauiApp<App>()
             .ConfigureFonts(fonts => { fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"); });
 
-        builder.Services.AddSingleton<BluetoothService>();
+        builder.Services.AddSingleton<ConnectivityService>();
         builder.Services.AddScoped<FileService>();
         builder.Services.AddTransient<RemoteInputService>();
         builder.Services.AddMauiBlazorWebView();

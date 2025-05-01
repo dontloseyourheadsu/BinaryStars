@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace SysColab.Services
 {
-    internal class BluetoothService
+    internal class ConnectivityService
     {
     }
 }
