@@ -1,6 +1,7 @@
 @page "/file-transfer"
 @using SysColab.Models
 @using SysColab.Services
+@using SysColab.Shared
 @inject FileService FileService
 
 
@@ -69,11 +70,6 @@
     protected override void OnInitialized()
     {
         // Mock devices for the dropdown
-        Devices = new List<DeviceInfo>
-        {
-            new DeviceInfo("Device A", "00:11:22:33:AA:BB", true),
-            new DeviceInfo("Device B", "00:11:22:33:CC:DD", true)
-        };
     }
 
     private async Task OnInputFileChanged(InputFileChangeEventArgs e)

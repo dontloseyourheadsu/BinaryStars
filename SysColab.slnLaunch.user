@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "Nuevo perfil",
+    "Projects": [
+      {
+        "Path": "SysColab\\SysColab.csproj",
+        "Action": "Start",
+        "DebugTarget": "Windows Machine"
+      },
+      {
+        "Path": "SysColabServer\\SysColabServer.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      }
+    ]
+  }
+]

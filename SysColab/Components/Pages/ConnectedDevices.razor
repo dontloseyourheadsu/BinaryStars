@@ -1,6 +1,7 @@
 @page "/connected-devices"
 @using SysColab.Models
 @using SysColab.Services
+@using SysColab.Shared
 @inject ConnectivityService ConnectivityService
 @inject NavigationManager Navigation
 
@@ -41,11 +42,6 @@
     protected override void OnInitialized()
     {
         // Mock connected devices
-        ConnectedDevicesList = new List<DeviceInfo>
-        {
-            new DeviceInfo("Device B", "00:11:22:33:CC:DD", true),
-            new DeviceInfo("Device D", "00:11:22:33:77:88", true)
-        };
     }
 
     private void RefreshList()
@@ -57,12 +53,11 @@
     private void Disconnect(DeviceInfo device)
     {
         // Simulate disconnect logic
-        device.IsPaired = false;
         ConnectedDevicesList.Remove(device);
     }
 
     private void NavigateToMonitor(DeviceInfo device)
     {
-        Navigation.NavigateTo($"monitor?device={Uri.EscapeDataString(device.Address)}");
+        //Navigation.NavigateTo($"monitor?device={Uri.EscapeDataString(device.Address)}");
     }
 }

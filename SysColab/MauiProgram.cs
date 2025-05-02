@@ -12,9 +12,11 @@ public static class MauiProgram
             .UseMauiApp<App>()
             .ConfigureFonts(fonts => { fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"); });
 
+        builder.Services.AddScoped<PairedDevicesService>();
+        builder.Services.AddScoped<DeviceMappingService>();
         builder.Services.AddSingleton<ConnectivityService>();
         builder.Services.AddScoped<FileService>();
-        builder.Services.AddTransient<RemoteInputService>();
+        builder.Services.AddScoped<RemoteInputService>();
         builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG

@@ -1,8 +1,15 @@
 @page "/device-discovery"
-@using SysColab.Services
+@using System.Net.NetworkInformation
+@using System.Text.Json
+@using SysColab.Constants
+@using SysColab.Helpers
 @using SysColab.Models
+@using SysColab.Services
+@using SysColab.Shared
 @inject NavigationManager Navigation
 @inject ConnectivityService ConnectivityService
+@inject PairedDevicesService PairedDevicesService
+@inject DeviceMappingService DeviceMappingService
 
 <article>
     <h1 class="page-title">Device Discovery</h1>
@@ -41,20 +48,91 @@
 
     protected override async Task OnInitializedAsync()
     {
-        
+        try
+        {        
+            // Initialize the device info
+            var deviceMacAddress = DeviceHelpers.GetMacAddress();
+            var deviceId = await DeviceMappingService.GetIdByMacAsync(deviceMacAddress);
+            var deviceName = DeviceHelpers.GetDeviceName();
+            var deviceInfo = new DeviceInfo
+            {
+                Id = deviceId,
+                Name = deviceName,
+                Address = deviceMacAddress,
+            };
+
+            // Register the device with the server
+            var httpClient = new HttpClient();
+            var response = await httpClient.PostAsJsonAsync($"{ServerConstants.ServerBaseUrl}/api/register", deviceInfo);
+
+            // Check if the response is successful
+            var serverUri = $"ws://{ServerConstants.ServerDomain}/ws?uuid={deviceId}";
+            await ConnectivityService.ConnectAsync(serverUri);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing device: {ex.Message}");
+        }
     }
 
-    private void ScanDevices()
+    private async Task ScanDevices()
     {
+        // Clear previous devices
         Devices.Clear();
         StateHasChanged();
 
-        //var scannedDevices = ConnectivityService.ScanForDevices();
+        try
+        {        
+            // Scan for devices on the network
+            var httpClient = new HttpClient();
+            var response = await httpClient.GetAsync($"{ServerConstants.ServerBaseUrl}/api/connected-devices");
 
-        //foreach (var device in scannedDevices)
-        //{
-        //    Devices.Add(new DeviceInfo(device.Name ?? "Unknown", device.Uuid, device.Status == Shiny.BluetoothLE.ConnectionState.Connected));
-        //}
+            // Check if the response is successful
+            if (response.IsSuccessStatusCode)
+            {
+                // Read the response content as a stream
+                var stringContent = await response.Content.ReadAsStringAsync();
+                var devices = JsonSerializer.Deserialize<List<DeviceInfo>>(stringContent);
+                
+                // Get the current device's MAC address and ID
+                var currentDeviceMacAddress = DeviceHelpers.GetMacAddress();
+                var currentDeviceId = await DeviceMappingService.GetIdByMacAsync(currentDeviceMacAddress);
+
+                // Get paired devices for the current device
+                var pairedDevices = await PairedDevicesService.GetPairedDevicesForId(currentDeviceId.ToString());
+
+                // Check if the devices are paired
+                if (devices != null)
+                {
+                    // Iterate through the devices and check if they are paired
+                    foreach (var device in devices)
+                    {
+                        // Skip if the device is the current device
+                        if (device.Address == currentDeviceMacAddress)
+                        {
+                            continue;
+                        }
+
+                        // Check if the device is the current device and set paired status
+                        var deviceId = device.Id.ToString();
+                        var isPaired = pairedDevices.Any(pd => pd.IdA == deviceId || pd.IdB == deviceId);
+                        device.IsPaired = isPaired;
+
+                        // Add the device to the list
+                        Devices.Add(device);
+                    }
+                }
+            }
+            else
+            {
+                // Handle error
+                Console.WriteLine("Error scanning devices.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error scanning devices: {ex.Message}");
+        }
 
         StateHasChanged();
     }

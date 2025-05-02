@@ -1,6 +1,7 @@
 ﻿@page "/remote-control"
 @using SysColab.Models
 @using SysColab.Services
+@using SysColab.Shared
 @inject RemoteInputService RemoteInputService
 
 <article>
@@ -10,9 +11,9 @@
     <div class="mb-3">
         <label for="deviceSelect" class="form-label">Select Device</label>
         <select id="deviceSelect"
-                class="form-control"
-                @bind="SelectedDeviceAddress"
-                @bind:event="onchange">
+        class="form-control"
+        @bind="SelectedDeviceAddress"
+        @bind:event="onchange">
             <option value="">-- Select a Device --</option>
             @foreach (var d in AvailableDevices)
             {
@@ -25,24 +26,24 @@
         <label class="form-label">Input Type</label>
         <div class="form-check">
             <input class="form-check-input"
-                   type="radio"
-                   name="inputType"
-                   id="keyboardOption"
-                   value="Keyboard"
-                   checked="@(SelectedInputType == "Keyboard")"
-                   @onchange="@(() => SelectedInputType = " Keyboard")" />
+            type="radio"
+            name="inputType"
+            id="keyboardOption"
+            value="Keyboard"
+            checked="@(SelectedInputType == "Keyboard")"
+            @onchange="@(() => SelectedInputType = " Keyboard")" />
             <label class="form-check-label" for="keyboardOption">
                 Keyboard Input
             </label>
         </div>
         <div class="form-check">
             <input class="form-check-input"
-                   type="radio"
-                   name="inputType"
-                   id="mouseOption"
-                   value="Mouse"
-                   checked="@(SelectedInputType == "Mouse")"
-                   @onchange="@(() => SelectedInputType = " Mouse")" />
+            type="radio"
+            name="inputType"
+            id="mouseOption"
+            value="Mouse"
+            checked="@(SelectedInputType == "Mouse")"
+            @onchange="@(() => SelectedInputType = " Mouse")" />
             <label class="form-check-label" for="mouseOption">
                 Mouse Input
             </label>
@@ -57,22 +58,22 @@
         <div class="mb-3">
             <label for="inputText" class="form-label">Enter Keyboard Input</label>
             <input id="inputText"
-                   type="text"
-                   class="form-control"
-                   @bind="CurrentInput"
-                   @bind:event="oninput" />
+            type="text"
+            class="form-control"
+            @bind="CurrentInput"
+            @bind:event="oninput" />
         </div>
 
         <div class="card-surface mb-3">
             <h2 class="section-title">Input Stream</h2>
             <pre class="p-2" 
-                 style="background-color: var(--panel-bg); color: var(--text-body);">
-@InputStream
+            style="background-color: var(--panel-bg); color: var(--text-body);">
+                @InputStream
             </pre>
         </div>
 
         <button class="btn btn-primary"
-                @onclick="TransmitKeyboardInput">
+        @onclick="TransmitKeyboardInput">
             Send Input
         </button>
     }
@@ -86,11 +87,7 @@
 
 @code {
     // Mock connected devices
-    private List<DeviceInfo> AvailableDevices = new()
-    {
-        new DeviceInfo("Device A", "00:11:22:33:AA:BB", true),
-        new DeviceInfo("Device B", "00:11:22:33:CC:DD", true)
-    };
+    private List<DeviceInfo> AvailableDevices = new();
 
     private string SelectedDeviceAddress { get; set; }
     private string SelectedInputType { get; set; } = "Keyboard";
