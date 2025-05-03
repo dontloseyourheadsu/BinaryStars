@@ -8,7 +8,6 @@ namespace SysColab.Constants
 {
     internal class ServerConstants
     {
-        //public const string ServerIp = "192.168.3.7:5268";
         public const string ServerBaseUrl = "http://192.168.110.97:5268";
         public const string ServerDomain = "192.168.110.97:5268";
     }

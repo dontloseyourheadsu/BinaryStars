@@ -68,6 +68,9 @@
             // Check if the response is successful
             var serverUri = $"ws://{ServerConstants.ServerDomain}/ws?uuid={deviceId}";
             await ConnectivityService.ConnectAsync(serverUri);
+
+            // Scan devices
+            await ScanDevices();
         }
         catch (Exception ex)
         {
@@ -93,7 +96,7 @@
                 // Read the response content as a stream
                 var stringContent = await response.Content.ReadAsStringAsync();
                 var devices = JsonSerializer.Deserialize<List<DeviceInfo>>(stringContent);
-                
+
                 // Get the current device's MAC address and ID
                 var currentDeviceMacAddress = DeviceHelpers.GetMacAddress();
                 var currentDeviceId = await DeviceMappingService.GetIdByMacAsync(currentDeviceMacAddress);
@@ -137,9 +140,25 @@
         StateHasChanged();
     }
 
-    private void Connect(DeviceInfo device)
+    private async Task Connect(DeviceInfo device)
     {
-        // Mock connect/pair logic
+        // Check if the device is already paired
+        if (device.IsPaired)
+        {
+            return;
+        }
+
+        // Get the current device's MAC address and ID
+        var deviceId = device.Id.ToString();
+        var currentDeviceMacAddress = DeviceHelpers.GetMacAddress();
+        var currentDeviceId = await DeviceMappingService.GetIdByMacAsync(currentDeviceMacAddress);
+        
+        // Create a new paired device entry data
+        var idA = currentDeviceId.ToString();
+        var idB = deviceId;
+
+        // Pair the device
         device.IsPaired = true;
+        var pairingResponse = await PairedDevicesService.SavePairedDevicesAsync(idA, idB);
     }
 }
