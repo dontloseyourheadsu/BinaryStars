@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
-
 // Habilitar la configuración de HTTPS en Kestrel
 builder.WebHost.UseKestrelHttpsConfiguration();
 
@@ -79,8 +78,21 @@ app.Map("/ws", async context =>
     {
         // If the UUID is not valid or not found, return an error
         logger.LogWarning("Invalid or unregistered UUID in WebSocket connection: {UUID}", uuidString);
-        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        await context.Response.WriteAsync("Missing or invalid UUID. Must register first.");
+
+        if (webSocket.State == WebSocketState.Open)
+        {
+            var errorBytes = Encoding.UTF8.GetBytes("Invalid or unregistered UUID. Must register first.");
+            await webSocket.SendAsync(
+                new ArraySegment<byte>(errorBytes),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None);
+
+            await webSocket.CloseAsync(
+                WebSocketCloseStatus.PolicyViolation,
+                "Invalid registration",
+                CancellationToken.None);
+        }
         return;
     }
 
@@ -94,66 +106,129 @@ app.Map("/ws", async context =>
         uuid, pendingRegistration.DeviceInfo.Name);
 
     var buffer = new byte[1024 * 4];
+    var messageBuilder = new StringBuilder();
 
     try
     {
-        while (true)
+        while (webSocket.State == WebSocketState.Open)
         {
-            // Receive messages from the WebSocket
-            logger.LogDebug("Waiting for message from device: {DeviceId}", uuid);
-            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+            // Reset the StringBuilder for a new message
+            messageBuilder.Clear();
+            WebSocketReceiveResult result;
+
+            // Read potentially fragmented message
+            do
+            {
+                result = await webSocket.ReceiveAsync(
+                    new ArraySegment<byte>(buffer),
+                    CancellationToken.None);
+
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    var messageFragment = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    messageBuilder.Append(messageFragment);
+                }
+            }
+            while (!result.EndOfMessage);
 
             // Check if the WebSocket is closed
             if (result.MessageType == WebSocketMessageType.Close)
             {
                 connectedDevices.TryRemove(uuid, out _);
-                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                await webSocket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    "Closing",
+                    CancellationToken.None);
                 logger.LogInformation("Device disconnected: {DeviceId}", uuid);
                 break;
             }
 
             // Handle incoming messages
-            var receivedMessage = Encoding.UTF8.GetString(buffer, 0, result.Count);
-            logger.LogDebug("Received message from {DeviceId}: {MessageLength} bytes", uuid, result.Count);
+            var receivedMessage = messageBuilder.ToString();
+            logger.LogDebug("Received message from {DeviceId}: {MessageLength} bytes", uuid, receivedMessage.Length);
 
             try
             {
                 // Deserialize the message to RelayMessage
-                var stream = new MemoryStream(Encoding.UTF8.GetBytes(receivedMessage));
-                var message = await JsonSerializer.DeserializeAsync<RelayMessage>(stream);
+                var message = JsonSerializer.Deserialize<RelayMessage>(receivedMessage);
 
-                if (message == null || string.IsNullOrWhiteSpace(message.TargetId) || string.IsNullOrWhiteSpace(message.SerializedJson))
+                if (message == null || string.IsNullOrWhiteSpace(message.TargetId) ||
+                    string.IsNullOrWhiteSpace(message.SerializedJson) ||
+                    string.IsNullOrWhiteSpace(message.MessageType))
                 {
                     logger.LogWarning("Invalid message format received from {DeviceId}", uuid);
-                    throw new Exception("Invalid message format.");
+                    throw new Exception("Invalid message format. Must include targetId, serializedJson, and messageType.");
                 }
 
                 var targetId = Guid.Parse(message.TargetId);
-                logger.LogDebug("Message relay request from {SourceId} to {TargetId}", uuid, targetId);
+                logger.LogDebug("Message relay request from {SourceId} to {TargetId} of type {MessageType}",
+                    uuid, targetId, message.MessageType);
 
                 // Relay the message to the target device
-                if (connectedDevices.TryGetValue(targetId, out var targetDevice) && targetDevice.WebSocket.State == WebSocketState.Open)
+                if (connectedDevices.TryGetValue(targetId, out var targetDevice) &&
+                    targetDevice.WebSocket.State == WebSocketState.Open)
                 {
-                    // Send the message to the target device
-                    logger.LogDebug("Relaying message from {SourceId} to {TargetId}", uuid, targetId);
-                    var payload = Encoding.UTF8.GetBytes(message.SerializedJson);
-                    await targetDevice.WebSocket.SendAsync(new ArraySegment<byte>(payload), WebSocketMessageType.Text, true, CancellationToken.None);
+                    // Send the message to the target device 
+                    // - keeping the original structure with messageType
+                    logger.LogDebug("Relaying message from {SourceId} to {TargetId} of type {MessageType}",
+                        uuid, targetId, message.MessageType);
+
+                    // We'll send the original message as-is to preserve the messageType
+                    await targetDevice.WebSocket.SendAsync(
+                        new ArraySegment<byte>(Encoding.UTF8.GetBytes(receivedMessage)),
+                        WebSocketMessageType.Text,
+                        true,
+                        CancellationToken.None);
+
                     logger.LogDebug("Message successfully relayed to {TargetId}", targetId);
                 }
                 else // if the target device is not found or offline
                 {
+                    // Create an error message with error messageType
+                    var errorResponse = new RelayMessage
+                    {
+                        TargetId = uuid.ToString(), // Send back to the sender
+                        MessageType = "error",
+                        SerializedJson = JsonSerializer.Serialize(new
+                        {
+                            errorCode = "DEVICE_OFFLINE",
+                            message = $"Target '{message.TargetId}' not found or offline."
+                        })
+                    };
+
                     // Send an error message back to the sender
                     logger.LogWarning("Target device {TargetId} not found or offline", targetId);
-                    var errorMsg = Encoding.UTF8.GetBytes($"Error: Target '{message.TargetId}' not found or offline.");
-                    await webSocket.SendAsync(new ArraySegment<byte>(errorMsg), WebSocketMessageType.Text, true, CancellationToken.None);
+                    var errorMsg = JsonSerializer.Serialize(errorResponse);
+                    await webSocket.SendAsync(
+                        new ArraySegment<byte>(Encoding.UTF8.GetBytes(errorMsg)),
+                        WebSocketMessageType.Text,
+                        true,
+                        CancellationToken.None);
                 }
             }
             catch (Exception ex)
             {
                 // Handle deserialization errors or other exceptions
                 logger.LogError(ex, "Error processing message from {DeviceId}", uuid);
-                var errorMsg = Encoding.UTF8.GetBytes($"Error: {ex.Message}");
-                await webSocket.SendAsync(new ArraySegment<byte>(errorMsg), WebSocketMessageType.Text, true, CancellationToken.None);
+
+                // Create an error message
+                var errorResponse = new RelayMessage
+                {
+                    TargetId = uuid.ToString(), // Send back to the sender
+                    MessageType = "error",
+                    SerializedJson = JsonSerializer.Serialize(new
+                    {
+                        errorCode = "PROCESSING_ERROR",
+                        message = ex.Message
+                    })
+                };
+
+                var errorMsg = JsonSerializer.Serialize(errorResponse);
+                await webSocket.SendAsync(
+                    new ArraySegment<byte>(Encoding.UTF8.GetBytes(errorMsg)),
+                    WebSocketMessageType.Text,
+                    true,
+                    CancellationToken.None);
             }
         }
     }

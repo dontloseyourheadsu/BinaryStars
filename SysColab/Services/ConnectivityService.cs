@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SysColab.Services
@@ -17,6 +18,9 @@ namespace SysColab.Services
         private Task _receiveTask = Task.CompletedTask; // Initialize to a completed task
         private CancellationTokenSource _cancellationTokenSource;
         private readonly ILogger<ConnectivityService> _logger;
+
+        // Event for message received
+        public event EventHandler<MessageReceivedEventArgs> MessageReceived;
 
         // Constructor
         public ConnectivityService(ILogger<ConnectivityService> logger)
@@ -54,16 +58,71 @@ namespace SysColab.Services
         private async Task ReceiveMessagesAsync(CancellationToken cancellationToken)
         {
             var buffer = new byte[4096];
+            var messageBuilder = new StringBuilder();
 
             try
             {
                 while (_clientWebSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
                 {
-                    var result = await _clientWebSocket.ReceiveAsync(
-                        new ArraySegment<byte>(buffer), cancellationToken);
+                    // Reset the StringBuilder for a new message
+                    messageBuilder.Clear();
+                    WebSocketReceiveResult result;
 
-                    // Process message as in my previous example...
-                    // ...
+                    // Read potentially fragmented message
+                    do
+                    {
+                        result = await _clientWebSocket.ReceiveAsync(
+                            new ArraySegment<byte>(buffer), cancellationToken);
+
+                        if (result.MessageType == WebSocketMessageType.Text)
+                        {
+                            var messageFragment = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                            messageBuilder.Append(messageFragment);
+                        }
+                    }
+                    while (!result.EndOfMessage);
+
+                    // Handle different message types
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        _logger.LogInformation("WebSocket server initiated closure");
+                        await _clientWebSocket.CloseAsync(
+                            WebSocketCloseStatus.NormalClosure,
+                            "Acknowledging server close",
+                            CancellationToken.None);
+                        break;
+                    }
+                    else if (result.MessageType == WebSocketMessageType.Text)
+                    {
+                        var messageContent = messageBuilder.ToString();
+                        _logger.LogDebug("Received WebSocket message: {Length} bytes", messageContent.Length);
+
+                        try
+                        {
+                            // Try to parse as RelayMessage first (if it's coming via server relay)
+                            var relayMessage = JsonSerializer.Deserialize<RelayMessage>(messageContent);
+
+                            if (relayMessage != null)
+                            {
+                                _logger.LogDebug("Processed message of type: {MessageType}", relayMessage.MessageType);
+
+                                // Trigger the event with the received message
+                                OnMessageReceived(relayMessage.MessageType, relayMessage.SerializedJson);
+                            }
+                            else
+                            {
+                                // It might be a direct message (error or system message)
+                                _logger.LogWarning("Received message is not a valid RelayMessage: {Message}", messageContent);
+                                OnMessageReceived("system", messageContent);
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            // It's not a valid JSON or RelayMessage
+                            _logger.LogWarning(ex, "Failed to parse received message as JSON");
+                            OnMessageReceived("system", messageContent);
+                        }
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -72,15 +131,22 @@ namespace SysColab.Services
             }
             catch (Exception ex)
             {
-                if (!cancellationToken.IsCancellationRequested)
+                if (!_cancellationTokenSource.IsCancellationRequested)
                 {
                     _logger.LogError(ex, "WebSocket receive error");
+                    OnMessageReceived("error", $"{{\"error\": \"{ex.Message}\"}}");
                 }
             }
         }
 
+        // Helper method to trigger the MessageReceived event
+        private void OnMessageReceived(string messageType, string serializedPayload)
+        {
+            MessageReceived?.Invoke(this, new MessageReceivedEventArgs(messageType, serializedPayload));
+        }
+
         // Method to send messages
-        public async Task SendMessageAsync(string targetId, object payload)
+        public async Task SendMessageAsync(string targetId, string messageType, object payload)
         {
             if (_clientWebSocket?.State != WebSocketState.Open)
             {
@@ -93,6 +159,7 @@ namespace SysColab.Services
                 var relayMessage = new RelayMessage
                 {
                     TargetId = targetId,
+                    MessageType = messageType,
                     SerializedJson = JsonSerializer.Serialize(payload)
                 };
 
@@ -100,7 +167,8 @@ namespace SysColab.Services
                 var messageJson = JsonSerializer.Serialize(relayMessage);
                 var messageBytes = Encoding.UTF8.GetBytes(messageJson);
 
-                _logger.LogDebug("Sending message to {TargetId}: {Length} bytes", targetId, messageBytes.Length);
+                _logger.LogDebug("Sending message to {TargetId} of type {MessageType}: {Length} bytes",
+                    targetId, messageType, messageBytes.Length);
 
                 await _clientWebSocket.SendAsync(
                     new ArraySegment<byte>(messageBytes),
@@ -124,6 +192,9 @@ namespace SysColab.Services
             {
                 try
                 {
+                    // Signal cancelation to stop the receive loop
+                    _cancellationTokenSource?.Cancel();
+
                     // Send close frame
                     await _clientWebSocket.CloseAsync(
                         WebSocketCloseStatus.NormalClosure,
@@ -138,10 +209,26 @@ namespace SysColab.Services
                 }
                 finally
                 {
+                    // Ensure cleanup
                     _clientWebSocket.Dispose();
                     _clientWebSocket = null;
+                    _cancellationTokenSource?.Dispose();
+                    _cancellationTokenSource = null;
                 }
             }
+        }
+    }
+
+    // Event arguments class for received messages
+    public class MessageReceivedEventArgs : EventArgs
+    {
+        public string MessageType { get; }
+        public string SerializedPayload { get; }
+
+        public MessageReceivedEventArgs(string messageType, string serializedPayload)
+        {
+            MessageType = messageType;
+            SerializedPayload = serializedPayload;
         }
     }
 }
