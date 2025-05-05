@@ -21,38 +21,65 @@
 
     @if (!string.IsNullOrEmpty(StatusMessage))
     {
-            <div class="alert @(IsError ? "alert-danger" : "alert-info") mb-3">
+                <div class="alert @(IsError ? "alert-danger" : "alert-info") mb-3">
             @StatusMessage
-            </div>
+                </div>
     }
 
     <div>
         @if (Devices.Any())
         {
-                <ul class="simple-list mb-0">
+                    <ul class="simple-list mb-0">
                 @foreach (var device in Devices)
+                {
+                                    <li class="simple-list-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>@device.Name</strong><br />
+                                            <small>@device.Address</small>
+                            @if (device.IsPaired && IsDeviceOnline(device.Id))
+                            {
+                                                    <span class="badge bg-success ms-2">Online</span>
+                            }
+                            else if (device.IsPaired)
+                            {
+                                                    <span class="badge bg-secondary ms-2">Offline</span>
+                            }
+                                        </div>
+                                        <button class="btn btn-outline-primary btn-sm" @onclick="() => Connect(device)">
+                            @(device.IsPaired ? "Reconnect" : "Pair")
+                                        </button>
+                                    </li>
+                }
+                    </ul>
+        }
+        else
+        {
+                    <p>No devices scanned.</p>
+        }
+    </div>
+
+    @if (OnlinePairedDevices.Any())
+    {
+            <div class="mt-4">
+                <h2>Online Paired Devices</h2>
+                <ul class="simple-list mb-0">
+                @foreach (var device in OnlinePairedDevices)
                 {
                             <li class="simple-list-item d-flex justify-content-between align-items-center">
                                 <div>
                                     <strong>@device.Name</strong><br />
                                     <small>@device.Address</small>
                                 </div>
-                                <button class="btn btn-outline-primary btn-sm" @onclick="() => Connect(device)">
-                            @(device.IsPaired ? "Reconnect" : "Pair")
-                                </button>
                             </li>
                 }
                 </ul>
-        }
-        else
-        {
-                <p>No devices scanned.</p>
-        }
-    </div>
+            </div>
+    }
 </article>
 
 @code {
     private List<DeviceInfo> Devices = new();
+    private List<DeviceInfo> OnlinePairedDevices = new();
     private DeviceInfo CurrentDeviceInfo;
     private string StatusMessage = "";
     private bool IsError = false;
@@ -134,6 +161,45 @@
                         }
                         break;
 
+                    case "device_connected":
+                        var connectedDevice = JsonSerializer.Deserialize<DeviceInfo>(args.SerializedPayload);
+                        if (connectedDevice != null)
+                        {
+                            // Don't add our own device to the list
+                            if (connectedDevice.Id != CurrentDeviceId)
+                            {
+                                // Check if the device is paired with us
+                                var pairedDevices = await PairedDevicesService.GetPairedDevicesForId(CurrentDeviceId.ToString());
+                                var deviceId = connectedDevice.Id.ToString();
+                                var isPaired = pairedDevices.Any(pd => pd.IdA == deviceId || pd.IdB == deviceId);
+
+                                if (isPaired)
+                                {
+                                    // Add the device to the online paired devices list if it's not already there
+                                    if (!OnlinePairedDevices.Any(d => d.Id == connectedDevice.Id))
+                                    {
+                                        OnlinePairedDevices.Add(connectedDevice);
+                                        ShowStatus($"{connectedDevice.Name} is now online");
+                                    }
+                                }
+                            }
+                        }
+                        break;
+
+                    case "device_disconnected":
+                        var disconnectedDevice = JsonSerializer.Deserialize<DeviceInfo>(args.SerializedPayload);
+                        if (disconnectedDevice != null)
+                        {
+                            // Remove the device from the online paired devices list
+                            var deviceToRemove = OnlinePairedDevices.FirstOrDefault(d => d.Id == disconnectedDevice.Id);
+                            if (deviceToRemove != null)
+                            {
+                                OnlinePairedDevices.Remove(deviceToRemove);
+                                ShowStatus($"{disconnectedDevice.Name} is now offline");
+                            }
+                        }
+                        break;
+
                     case "error":
                         var error = JsonSerializer.Deserialize<ErrorResponse>(args.SerializedPayload);
                         ShowError($"Error: {error?.Message ?? args.SerializedPayload}");
@@ -143,6 +209,8 @@
                         Console.WriteLine($"Unknown message type: {args.MessageType}, payload: {args.SerializedPayload}");
                         break;
                 }
+
+                StateHasChanged();
             }
             catch (Exception ex)
             {
@@ -194,6 +262,12 @@
 
                         // Add the device to the list
                         Devices.Add(device);
+
+                        // If the device is paired and online, make sure it's in our OnlinePairedDevices list
+                        if (isPaired && !OnlinePairedDevices.Any(d => d.Id == device.Id))
+                        {
+                            OnlinePairedDevices.Add(device);
+                        }
                     }
 
                     ShowStatus($"Found {Devices.Count} device(s)");
@@ -245,6 +319,12 @@
                         }
                 );
 
+                // Add the device to the online paired devices list if it's not already there
+                if (!OnlinePairedDevices.Any(d => d.Id == device.Id))
+                {
+                    OnlinePairedDevices.Add(device);
+                }
+
                 await ScanDevices(); // Refresh the device list
             }
         }
@@ -264,10 +344,10 @@
 
             // Create a new device mapping for the target device
             var targetDeviceMapping = new DeviceMapping
-            {
-                MacAddress = device.Address,
-                Id = targetDeviceId,
-            };
+                {
+                    MacAddress = device.Address,
+                    Id = targetDeviceId,
+                };
 
             // Pair the devices and save the mapping
             var pairingResponse = await PairedDevicesService.SavePairedDevicesAsync(currentDeviceId, targetDeviceId);
@@ -288,6 +368,11 @@
             ShowError($"Error pairing with device: {ex.Message}");
             return false;
         }
+    }
+
+    private bool IsDeviceOnline(Guid deviceId)
+    {
+        return OnlinePairedDevices.Any(d => d.Id == deviceId);
     }
 
     private void ShowStatus(string message)

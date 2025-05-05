@@ -51,6 +51,54 @@ var connectedDevices = new ConcurrentDictionary<Guid, (DeviceInfo DeviceInfo, We
 // Temporary store for mapping pending connections by token/uuid
 var pendingRegistrations = new ConcurrentDictionary<Guid, (DeviceInfo DeviceInfo, TaskCompletionSource<WebSocket> Tcs)>();
 
+// Helper method to notify all connected devices about a device status change
+async Task NotifyDeviceStatusChangeAsync(DeviceInfo deviceInfo, string messageType)
+{
+    logger.LogDebug("{MessageType} notification for device: {DeviceId}, Name: {DeviceName}",
+        messageType, deviceInfo.Id, deviceInfo.Name);
+
+    // Create a message to broadcast to all connected devices
+    var notificationMessage = new RelayMessage
+    {
+        TargetId = "all", // Special value to indicate broadcasting
+        MessageType = messageType,
+        SerializedJson = JsonSerializer.Serialize(deviceInfo)
+    };
+
+    var notificationJson = JsonSerializer.Serialize(notificationMessage);
+    var notificationBytes = Encoding.UTF8.GetBytes(notificationJson);
+
+    // Broadcast to all connected devices except the one that triggered the event
+    foreach (var device in connectedDevices)
+    {
+        // Skip sending to the device itself that triggered the event
+        if (device.Key == deviceInfo.Id)
+        {
+            continue;
+        }
+
+        try
+        {
+            if (device.Value.WebSocket.State == WebSocketState.Open)
+            {
+                await device.Value.WebSocket.SendAsync(
+                    new ArraySegment<byte>(notificationBytes),
+                    WebSocketMessageType.Text,
+                    true,
+                    CancellationToken.None);
+
+                logger.LogDebug("Sent {MessageType} notification to device: {DeviceId}",
+                    messageType, device.Key);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error sending {MessageType} notification to device: {DeviceId}",
+                messageType, device.Key);
+        }
+    }
+}
+
 // WebSocket endpoint that waits for registration token (UUID)
 app.Map("/ws", async context =>
 {
@@ -105,6 +153,9 @@ app.Map("/ws", async context =>
     logger.LogInformation("Device registered and connected: {DeviceId}, Name: {DeviceName}",
         uuid, pendingRegistration.DeviceInfo.Name);
 
+    // Notify all connected devices about the new device connection
+    await NotifyDeviceStatusChangeAsync(pendingRegistration.DeviceInfo, "device_connected");
+
     var buffer = new byte[1024 * 4];
     var messageBuilder = new StringBuilder();
 
@@ -134,7 +185,12 @@ app.Map("/ws", async context =>
             // Check if the WebSocket is closed
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                connectedDevices.TryRemove(uuid, out _);
+                if (connectedDevices.TryRemove(uuid, out var removedDevice))
+                {
+                    // Notify all connected devices about the device disconnect
+                    await NotifyDeviceStatusChangeAsync(removedDevice.DeviceInfo, "device_disconnected");
+                }
+
                 await webSocket.CloseAsync(
                     WebSocketCloseStatus.NormalClosure,
                     "Closing",
@@ -235,8 +291,16 @@ app.Map("/ws", async context =>
     catch (Exception ex)
     {
         logger.LogError(ex, "Unexpected error in WebSocket connection for {DeviceId}", uuid);
-        // Remove the device from connected devices if an exception occurs
-        connectedDevices.TryRemove(uuid, out _);
+
+        // Get the device info before removing it
+        if (connectedDevices.TryGetValue(uuid, out var deviceBeforeRemoval))
+        {
+            // Remove the device from connected devices if an exception occurs
+            connectedDevices.TryRemove(uuid, out _);
+
+            // Notify all connected devices about the device disconnect
+            await NotifyDeviceStatusChangeAsync(deviceBeforeRemoval.DeviceInfo, "device_disconnected");
+        }
 
         // Attempt to close the WebSocket gracefully if it's still open
         if (webSocket.State == WebSocketState.Open)
