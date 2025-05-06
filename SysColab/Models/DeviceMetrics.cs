@@ -2,10 +2,10 @@
 {
     internal class DeviceMetrics
     {
-        public int CpuUsage { get; set; }
-        public int RamUsage { get; set; }
-        public int StorageUsage { get; set; }
-        public int NetworkUp { get; set; }
-        public int NetworkDown { get; set; }
+        public double CpuUsage { get; set; }
+        public double RamUsage { get; set; }
+        public double StorageUsage { get; set; }
+        public double NetworkUp { get; set; }
+        public double NetworkDown { get; set; }
     }
 }

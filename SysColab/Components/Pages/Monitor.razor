@@ -1,8 +1,9 @@
 @page "/monitor"
+@using SysColab.Components.Shared
 @using SysColab.Models
 @using SysColab.Services
-@using SysColab.Shared
-@inject ConnectivityService ConnectivityService
+@inherits SharedComponent
+@inject IDeviceMetricService DeviceMetricService
 
 <article>
     <h1 class="page-title">Device Monitor</h1>
@@ -11,20 +12,20 @@
     <div class="mb-3">
         <label for="deviceSelect" class="form-label">Select Device</label>
         <select id="deviceSelect"
-                class="form-control"
-                @bind="SelectedDeviceAddress"
-                @bind:event="onchange">
+        class="form-control"
+        @bind="SelectedDeviceId"
+        @bind:event="onchange">
             <option value="">-- Select a Device --</option>
-            @foreach (var d in AvailableDevices)
+            @foreach (var d in OnlinePairedDevices)
             {
-                <option value="@d.Address">
+                <option value="@d.Id">
                     @d.Name (@d.Address)
                 </option>
             }
         </select>
     </div>
 
-    @if (!string.IsNullOrEmpty(SelectedDeviceAddress))
+    @if (SelectedDeviceId != Guid.Empty)
     {
         <div class="row g-4 mt-4 align-items-stretch">
             <!-- CPU Usage -->
@@ -34,11 +35,11 @@
                     <div class="flex-fill d-flex align-items-center">
                         <div class="progress w-100">
                             <div class="progress-bar"
-                                 role="progressbar"
-                                 style="width:@Metrics.CpuUsage%"
-                                 aria-valuenow="@Metrics.CpuUsage"
-                                 aria-valuemin="0"
-                                 aria-valuemax="100">
+                            role="progressbar"
+                            style="width:@Metrics.CpuUsage%"
+                            aria-valuenow="@Metrics.CpuUsage"
+                            aria-valuemin="0"
+                            aria-valuemax="100">
                                 @Metrics.CpuUsage%
                             </div>
                         </div>
@@ -53,11 +54,11 @@
                     <div class="flex-fill d-flex align-items-center">
                         <div class="progress w-100">
                             <div class="progress-bar"
-                                 role="progressbar"
-                                 style="width:@Metrics.RamUsage%"
-                                 aria-valuenow="@Metrics.RamUsage"
-                                 aria-valuemin="0"
-                                 aria-valuemax="100">
+                            role="progressbar"
+                            style="width:@Metrics.RamUsage%"
+                            aria-valuenow="@Metrics.RamUsage"
+                            aria-valuemin="0"
+                            aria-valuemax="100">
                                 @Metrics.RamUsage%
                             </div>
                         </div>
@@ -72,11 +73,11 @@
                     <div class="flex-fill d-flex align-items-center">
                         <div class="progress w-100">
                             <div class="progress-bar"
-                                 role="progressbar"
-                                 style="width:@Metrics.StorageUsage%"
-                                 aria-valuenow="@Metrics.StorageUsage"
-                                 aria-valuemin="0"
-                                 aria-valuemax="100">
+                            role="progressbar"
+                            style="width:@Metrics.StorageUsage%"
+                            aria-valuenow="@Metrics.StorageUsage"
+                            aria-valuemin="0"
+                            aria-valuemax="100">
                                 @Metrics.StorageUsage%
                             </div>
                         </div>
@@ -103,41 +104,36 @@
 </article>
 
 @code {
-    private List<DeviceInfo> AvailableDevices = new();
     private DeviceMetrics Metrics = new DeviceMetrics();
 
-    // Backing field + property so we can react when it changes
-    private string selectedDeviceAddress;
-    public string SelectedDeviceAddress
+    private Guid? selectedDeviceId;
+    public Guid SelectedDeviceId
     {
-        get => selectedDeviceAddress;
+        get => selectedDeviceId ?? Guid.Empty;
         set
         {
-            if (selectedDeviceAddress != value)
+            if (selectedDeviceId != value)
             {
-                selectedDeviceAddress = value;
+                selectedDeviceId = value;
                 LoadMetricsFor(value);
             }
         }
     }
 
-    protected override void OnInitialized()
+    private void LoadMetricsFor(Guid id)
     {
-    }
-
-    private void LoadMetricsFor(string address)
-    {
-        if (!string.IsNullOrEmpty(address))
+        if (id == Guid.Empty)
         {
-            var rnd = new Random();
-            Metrics = new DeviceMetrics
-                {
-                    CpuUsage = rnd.Next(10, 90),
-                    RamUsage = rnd.Next(20, 80),
-                    StorageUsage = rnd.Next(5, 70),
-                    NetworkUp = rnd.Next(50, 500),
-                    NetworkDown = rnd.Next(50, 500)
-                };
+            return;
         }
+
+        Metrics = new DeviceMetrics
+        {
+            CpuUsage = DeviceMetricService.GetCpuUsage(),
+            RamUsage = DeviceMetricService.GetRamUsage(),
+            StorageUsage = DeviceMetricService.GetStorageUsage(),
+            NetworkUp = DeviceMetricService.GetNetworkUploadSpeed(),
+            NetworkDown = DeviceMetricService.GetNetworkDownloadSpeed()
+        };
     }
 }
