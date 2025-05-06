@@ -1,8 +1,10 @@
 ﻿@page "/"
+@using SysColab.Components.Shared
+@inherits SharedComponent
 @inject NavigationManager Navigation
 
 <article>
-    <h1 class="page-title">Welcome to Device Management</h1>
+    <h1 class="page-title">Welcome to SysColab</h1>
     <div class="row g-4 mt-4 align-items-stretch">
         <!-- Quick Actions Card -->
         <div class="col-md-6 d-flex">
@@ -16,38 +18,10 @@
                 </div>
             </div>
         </div>
-        <!-- Recent Activity Card -->
-        <div class="col-md-6 d-flex">
-            <div class="card-surface h-100 flex-fill d-flex flex-column">
-                <h2 class="section-title">Recent Activity</h2>
-                <div class="flex-fill overflow-auto mt-2">
-                    @if (RecentActivities.Any())
-                    {
-                        <ul class="simple-list mb-0">
-                            @foreach (var activity in RecentActivities)
-                            {
-                                <li class="simple-list-item">@activity</li>
-                            }
-                        </ul>
-                    }
-                    else
-                    {
-                        <p class="mb-0">No recent activity.</p>
-                    }
-                </div>
-            </div>
-        </div>
     </div>
 </article>
 
 @code {
-    private List<string> RecentActivities = new()
-    {
-        "Device A connected",
-        "Report.pdf sent",
-        "Monitoring started for Device B"
-    };
-
     private void NavigateToDeviceDiscovery() => Navigation.NavigateTo("/device-discovery");
     private void NavigateToFileTransfer() => Navigation.NavigateTo("/file-transfer");
     private void NavigateToMonitor() => Navigation.NavigateTo("/monitor");

@@ -19,6 +19,12 @@
     <div id="app">Loading...</div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        window.closeNav = function () {
+            const checkbox = document.getElementById('nav-toggle');
+            if (checkbox) checkbox.checked = false;
+        };
+    </script>
 
 </body>
 

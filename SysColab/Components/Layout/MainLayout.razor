@@ -1,5 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
 <div class="d-flex flex-column vh-100">
     <input id="nav-toggle" class="nav-toggle" type="checkbox" />
@@ -56,8 +57,9 @@
 </div>
 
 @code {
-    void NavigateTo(string url)
+    async Task NavigateTo(string url)
     {
+        await JSRuntime.InvokeVoidAsync("closeNav");
         NavigationManager.NavigateTo(url);
     }
 }
