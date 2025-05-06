@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Net.NetworkInformation;
 
 namespace SysColab.Helpers
 {
@@ -11,13 +6,14 @@ namespace SysColab.Helpers
     {
         public static string GetMacAddress()
         {
-            var macAddress = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
-                              nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .Select(nic => nic.GetPhysicalAddress().ToString())
-                .FirstOrDefault();
+            var nic = NetworkInterface
+                .GetAllNetworkInterfaces()
+                .FirstOrDefault(n =>
+                    n.OperationalStatus == OperationalStatus.Up &&
+                    n.NetworkInterfaceType != NetworkInterfaceType.Loopback
+                );
 
-            return macAddress ?? "No se encontró la dirección MAC";
+            return nic?.GetPhysicalAddress()?.ToString() ?? string.Empty;
         }
 
         public static string GetDeviceName()

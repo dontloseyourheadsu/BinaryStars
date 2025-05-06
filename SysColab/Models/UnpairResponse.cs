@@ -1,7 +1,6 @@
 ﻿namespace SysColab.Models
 {
-    // Class to represent connect response messages
-    public class ConnectResponse
+    public class UnpairResponse
     {
         public bool Success { get; set; }
         public string DeviceId { get; set; }

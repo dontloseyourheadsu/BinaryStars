@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using SysColab.Constants;
 using SysColab.Services;
 
 namespace SysColab;
@@ -23,6 +24,10 @@ public static class MauiProgram
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
 #endif
+
+        builder.Services.AddScoped(sp =>
+            new HttpClient { BaseAddress = new Uri(ServerConstants.ServerBaseUrl) }
+        );
 
         return builder.Build();
     }

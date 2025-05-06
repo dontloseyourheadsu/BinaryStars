@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
 using SysColab.Shared;
-using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 

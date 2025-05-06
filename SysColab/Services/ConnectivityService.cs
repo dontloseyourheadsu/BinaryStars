@@ -1,18 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
-using SysColab.Constants;
 using SysColab.Shared;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace SysColab.Services
 {
-    internal class ConnectivityService
+    public class ConnectivityService
     {
         private ClientWebSocket _clientWebSocket;
         private Task _receiveTask = Task.CompletedTask; // Initialize to a completed task

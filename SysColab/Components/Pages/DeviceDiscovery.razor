@@ -1,15 +1,6 @@
 @page "/device-discovery"
-@using System.Net.NetworkInformation
-@using System.Text.Json
-@using SysColab.Constants
-@using SysColab.Helpers
-@using SysColab.Models
-@using SysColab.Services
-@using SysColab.Shared
-@inject NavigationManager Navigation
-@inject ConnectivityService ConnectivityService
-@inject PairedDevicesService PairedDevicesService
-@inject DeviceMappingService DeviceMappingService
+@using SysColab.Components.Shared
+@inherits SharedComponent
 
 <article>
     <h1 class="page-title">Device Discovery</h1>
@@ -21,377 +12,75 @@
 
     @if (!string.IsNullOrEmpty(StatusMessage))
     {
-                <div class="alert @(IsError ? "alert-danger" : "alert-info") mb-3">
+        <div class="alert @(IsError ? "alert-danger" : "alert-info") mb-3">
             @StatusMessage
-                </div>
+        </div>
     }
 
     <div>
         @if (Devices.Any())
         {
-                    <ul class="simple-list mb-0">
+            <ul class="simple-list mb-0">
                 @foreach (var device in Devices)
                 {
-                                    <li class="simple-list-item d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <strong>@device.Name</strong><br />
-                                            <small>@device.Address</small>
+                    <li class="simple-list-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>@device.Name</strong><br />
+                            <small>@device.Address</small>
                             @if (device.IsPaired && IsDeviceOnline(device.Id))
                             {
-                                                    <span class="badge bg-success ms-2">Online</span>
+                                <span class="badge bg-success ms-2">Online</span>
                             }
                             else if (device.IsPaired)
                             {
-                                                    <span class="badge bg-secondary ms-2">Offline</span>
+                                <span class="badge bg-secondary ms-2">Offline</span>
                             }
-                                        </div>
-                                        <button class="btn btn-outline-primary btn-sm" @onclick="() => Connect(device)">
-                            @(device.IsPaired ? "Reconnect" : "Pair")
-                                        </button>
-                                    </li>
+                        </div>
+                        <div>
+                            @if (device.IsPaired)
+                            {
+                                <button class="btn btn-outline-danger btn-sm me-2" @onclick="() => Unpair(device)">
+                                    Unpair
+                                </button>
+                                <button class="btn btn-outline-primary btn-sm" @onclick="() => Connect(device)">
+                                    Reconnect
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-outline-primary btn-sm" @onclick="() => Connect(device)">
+                                    Pair
+                                </button>
+                            }
+                        </div>
+                    </li>
                 }
-                    </ul>
+            </ul>
         }
         else
         {
-                    <p>No devices scanned.</p>
+            <p>No devices scanned.</p>
         }
     </div>
 
     @if (OnlinePairedDevices.Any())
     {
-            <div class="mt-4">
-                <h2>Online Paired Devices</h2>
-                <ul class="simple-list mb-0">
+        <div class="mt-4">
+            <h2>Online Paired Devices</h2>
+            <ul class="simple-list mb-0">
                 @foreach (var device in OnlinePairedDevices)
                 {
-                            <li class="simple-list-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>@device.Name</strong><br />
-                                    <small>@device.Address</small>
-                                </div>
-                            </li>
+                    <li class="simple-list-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>@device.Name</strong><br />
+                            <small>@device.Address</small>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Unpair(device)">
+                            Unpair
+                        </button>
+                    </li>
                 }
-                </ul>
-            </div>
+            </ul>
+        </div>
     }
 </article>
-
-@code {
-    private List<DeviceInfo> Devices = new();
-    private List<DeviceInfo> OnlinePairedDevices = new();
-    private DeviceInfo CurrentDeviceInfo;
-    private string StatusMessage = "";
-    private bool IsError = false;
-    private Guid CurrentDeviceId;
-
-    protected override async Task OnInitializedAsync()
-    {
-        try
-        {
-            // Initialize the device info
-            var deviceMacAddress = DeviceHelpers.GetMacAddress();
-            CurrentDeviceId = await DeviceMappingService.GetIdByMacAsync(deviceMacAddress);
-            var deviceName = DeviceHelpers.GetDeviceName();
-            CurrentDeviceInfo = new DeviceInfo
-                {
-                    Id = CurrentDeviceId,
-                    Name = deviceName,
-                    Address = deviceMacAddress,
-                };
-
-            // Register the device with the server
-            var httpClient = new HttpClient();
-            var response = await httpClient.PostAsJsonAsync($"{ServerConstants.ServerBaseUrl}/api/register", CurrentDeviceInfo);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                ShowError($"Failed to register device: {response.StatusCode}");
-                return;
-            }
-
-            // Connect to WebSocket server
-            var serverUri = $"ws://{ServerConstants.ServerDomain}/ws?uuid={CurrentDeviceId}";
-            await ConnectivityService.ConnectAsync(serverUri);
-
-            // Subscribe to incoming messages
-            ConnectivityService.MessageReceived += HandleMessageReceived;
-
-            // Scan devices
-            await ScanDevices();
-        }
-        catch (Exception ex)
-        {
-            ShowError($"Error initializing device: {ex.Message}");
-        }
-    }
-
-    private void HandleMessageReceived(object sender, MessageReceivedEventArgs args)
-    {
-        // Make sure to invoke UI updates on the UI thread
-        InvokeAsync(async () =>
-        {
-            try
-            {
-                // Process message based on type
-                switch (args.MessageType)
-                {
-                    case "connect":
-                        var deviceInfo = JsonSerializer.Deserialize<DeviceInfo>(args.SerializedPayload);
-                        if (deviceInfo != null)
-                        {
-                            var success = await ConnectCurrentDevice(deviceInfo);
-                            if (success)
-                            {
-                                ShowStatus($"Successfully paired with {deviceInfo.Name}");
-                                await ScanDevices(); // Refresh the device list
-                            }
-                        }
-                        break;
-
-                    case "connect_response":
-                        var response = JsonSerializer.Deserialize<ConnectResponse>(args.SerializedPayload);
-                        if (response != null && response.Success)
-                        {
-                            ShowStatus($"Successfully connected to {response.DeviceName}");
-                        }
-                        else
-                        {
-                            ShowError($"Failed to connect: {response?.ErrorMessage ?? "Unknown error"}");
-                        }
-                        break;
-
-                    case "device_connected":
-                        var connectedDevice = JsonSerializer.Deserialize<DeviceInfo>(args.SerializedPayload);
-                        if (connectedDevice != null)
-                        {
-                            // Don't add our own device to the list
-                            if (connectedDevice.Id != CurrentDeviceId)
-                            {
-                                // Check if the device is paired with us
-                                var pairedDevices = await PairedDevicesService.GetPairedDevicesForId(CurrentDeviceId.ToString());
-                                var deviceId = connectedDevice.Id.ToString();
-                                var isPaired = pairedDevices.Any(pd => pd.IdA == deviceId || pd.IdB == deviceId);
-
-                                if (isPaired)
-                                {
-                                    // Add the device to the online paired devices list if it's not already there
-                                    if (!OnlinePairedDevices.Any(d => d.Id == connectedDevice.Id))
-                                    {
-                                        OnlinePairedDevices.Add(connectedDevice);
-                                        ShowStatus($"{connectedDevice.Name} is now online");
-                                    }
-                                }
-                            }
-                        }
-                        break;
-
-                    case "device_disconnected":
-                        var disconnectedDevice = JsonSerializer.Deserialize<DeviceInfo>(args.SerializedPayload);
-                        if (disconnectedDevice != null)
-                        {
-                            // Remove the device from the online paired devices list
-                            var deviceToRemove = OnlinePairedDevices.FirstOrDefault(d => d.Id == disconnectedDevice.Id);
-                            if (deviceToRemove != null)
-                            {
-                                OnlinePairedDevices.Remove(deviceToRemove);
-                                ShowStatus($"{disconnectedDevice.Name} is now offline");
-                            }
-                        }
-                        break;
-
-                    case "error":
-                        var error = JsonSerializer.Deserialize<ErrorResponse>(args.SerializedPayload);
-                        ShowError($"Error: {error?.Message ?? args.SerializedPayload}");
-                        break;
-
-                    default:
-                        Console.WriteLine($"Unknown message type: {args.MessageType}, payload: {args.SerializedPayload}");
-                        break;
-                }
-
-                StateHasChanged();
-            }
-            catch (Exception ex)
-            {
-                ShowError($"Error processing message: {ex.Message}");
-            }
-        });
-    }
-
-    private async Task ScanDevices()
-    {
-        // Clear previous devices
-        Devices.Clear();
-        StateHasChanged();
-
-        try
-        {
-            ShowStatus("Scanning for devices...");
-
-            // Scan for devices on the network
-            var httpClient = new HttpClient();
-            var response = await httpClient.GetAsync($"{ServerConstants.ServerBaseUrl}/api/connected-devices");
-
-            // Check if the response is successful
-            if (response.IsSuccessStatusCode)
-            {
-                // Read the response content as a stream
-                var stringContent = await response.Content.ReadAsStringAsync();
-                var devices = JsonSerializer.Deserialize<List<DeviceInfo>>(stringContent);
-
-                // Get paired devices for the current device
-                var pairedDevices = await PairedDevicesService.GetPairedDevicesForId(CurrentDeviceId.ToString());
-
-                // Check if the devices are paired
-                if (devices != null)
-                {
-                    // Iterate through the devices and check if they are paired
-                    foreach (var device in devices)
-                    {
-                        // Skip if the device is the current device
-                        if (device.Id == CurrentDeviceId)
-                        {
-                            continue;
-                        }
-
-                        // Check if the device is paired with the current device
-                        var deviceId = device.Id.ToString();
-                        var isPaired = pairedDevices.Any(pd => pd.IdA == deviceId || pd.IdB == deviceId);
-                        device.IsPaired = isPaired;
-
-                        // Add the device to the list
-                        Devices.Add(device);
-
-                        // If the device is paired and online, make sure it's in our OnlinePairedDevices list
-                        if (isPaired && !OnlinePairedDevices.Any(d => d.Id == device.Id))
-                        {
-                            OnlinePairedDevices.Add(device);
-                        }
-                    }
-
-                    ShowStatus($"Found {Devices.Count} device(s)");
-                }
-                else
-                {
-                    ShowStatus("No devices found");
-                }
-            }
-            else
-            {
-                ShowError($"Error scanning devices: {response.StatusCode}");
-            }
-        }
-        catch (Exception ex)
-        {
-            ShowError($"Error scanning devices: {ex.Message}");
-        }
-
-        StateHasChanged();
-    }
-
-    private async Task Connect(DeviceInfo device)
-    {
-        try
-        {
-            ShowStatus($"Connecting to {device.Name}...");
-
-            // Send connect message to the target device
-            await ConnectivityService.SendMessageAsync(
-                device.Id.ToString(),  // Target device ID
-                "connect",             // Message type
-                CurrentDeviceInfo      // Payload (our device info)
-            );
-
-            // Attempt to connect on our side as well
-            var connected = await ConnectCurrentDevice(device);
-            if (connected)
-            {
-                // Send a response back to confirm connection
-                await ConnectivityService.SendMessageAsync(
-                    device.Id.ToString(),
-                    "connect_response",
-                    new ConnectResponse
-                        {
-                            Success = true,
-                            DeviceId = CurrentDeviceId.ToString(),
-                            DeviceName = CurrentDeviceInfo.Name
-                        }
-                );
-
-                // Add the device to the online paired devices list if it's not already there
-                if (!OnlinePairedDevices.Any(d => d.Id == device.Id))
-                {
-                    OnlinePairedDevices.Add(device);
-                }
-
-                await ScanDevices(); // Refresh the device list
-            }
-        }
-        catch (Exception ex)
-        {
-            ShowError($"Error connecting to device: {ex.Message}");
-        }
-    }
-
-    private async Task<bool> ConnectCurrentDevice(DeviceInfo device)
-    {
-        try
-        {
-            // Get the current device's ID and the target device's ID
-            var currentDeviceId = CurrentDeviceId.ToString();
-            var targetDeviceId = device.Id.ToString();
-
-            // Create a new device mapping for the target device
-            var targetDeviceMapping = new DeviceMapping
-                {
-                    MacAddress = device.Address,
-                    Id = targetDeviceId,
-                };
-
-            // Pair the devices and save the mapping
-            var pairingResponse = await PairedDevicesService.SavePairedDevicesAsync(currentDeviceId, targetDeviceId);
-            var mappingResponse = await DeviceMappingService.SaveMappingAsync(targetDeviceMapping);
-
-            // Update the device's paired status in the UI
-            if (pairingResponse && mappingResponse > 0)
-            {
-                device.IsPaired = true;
-                StateHasChanged();
-                return true;
-            }
-
-            return false;
-        }
-        catch (Exception ex)
-        {
-            ShowError($"Error pairing with device: {ex.Message}");
-            return false;
-        }
-    }
-
-    private bool IsDeviceOnline(Guid deviceId)
-    {
-        return OnlinePairedDevices.Any(d => d.Id == deviceId);
-    }
-
-    private void ShowStatus(string message)
-    {
-        StatusMessage = message;
-        IsError = false;
-        StateHasChanged();
-    }
-
-    private void ShowError(string message)
-    {
-        StatusMessage = message;
-        IsError = true;
-        StateHasChanged();
-    }
-
-    public void Dispose()
-    {
-        // Unsubscribe from the event when the component is disposed
-        ConnectivityService.MessageReceived -= HandleMessageReceived;
-    }
-}
