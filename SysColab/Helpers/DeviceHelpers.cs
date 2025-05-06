@@ -18,8 +18,15 @@ namespace SysColab.Helpers
 
         public static string GetDeviceName()
         {
-            var deviceName = Environment.MachineName;
-            return deviceName ?? "Unknown";
+            try
+            {
+                return DeviceInfo.Current.Name ?? "Unknown";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting device name: {ex.Message}");
+                return "Unknown";
+            }
         }
     }
 }
