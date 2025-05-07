@@ -1,0 +1,80 @@
+﻿@page "/downloads"
+@using Microsoft.Maui.ApplicationModel
+@using Microsoft.Maui.ApplicationModel.DataTransfer
+@using Microsoft.Maui.Storage
+@inject IJSRuntime JS
+@code {
+    private List<FileInfo> Files = new();
+
+    protected override void OnInitialized() => Refresh();
+
+    private void Refresh()
+    {
+        var dir = FileSystem.AppDataDirectory;
+        Files = Directory.GetFiles(dir)
+                         .Select(f => new FileInfo(f))
+                         .Where(f => f.Extension != ".db3")
+                         .OrderByDescending(f => f.LastWriteTimeUtc)
+                         .ToList();
+    }
+
+    private async Task OpenAsync(FileInfo f)
+    {
+        await Launcher.OpenAsync(new OpenFileRequest
+        {
+            File  = new ReadOnlyFile(f.FullName),
+            Title = f.Name
+        });
+    }
+
+    private async Task ShareAsync(FileInfo f)
+    {
+        await Share.RequestAsync(new ShareFileRequest
+        {
+            Title = $"Share {f.Name}",
+            File  = new ShareFile(f.FullName)
+        });
+    }
+
+    private void Delete(FileInfo f)
+    {
+        File.Delete(f.FullName);
+        Refresh();
+    }
+}
+<article class="p-3">
+    <h1 class="text-xl mb-4">Downloads</h1>
+
+    @if (!Files.Any())
+    {
+        <p>No files have been received yet.</p>
+    }
+    else
+    {
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th class="text-end pe-3">Size (KB)</th>
+                    <th class="text-end pe-3">Modified</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var f in Files)
+            {
+                <tr>
+                    <td>@f.Name</td>
+                    <td class="text-end pe-3">@Math.Round(f.Length / 1024.0, 1)</td>
+                    <td class="text-end pe-3">@f.LastWriteTime.ToLocalTime()</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-link" @onclick="() => OpenAsync(f)">Open</button>
+                        <button class="btn btn-sm btn-link" @onclick="() => ShareAsync(f)">Share</button>
+                        <button class="btn btn-sm btn-link text-danger" @onclick="() => Delete(f)">Delete</button>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</article>

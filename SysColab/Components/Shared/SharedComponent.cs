@@ -5,11 +5,12 @@ using SysColab.Constants;
 using SysColab.Helpers;
 using SysColab.Models;
 using SysColab.Services;
+using SysColab.Shared;
 using DeviceInfo = SysColab.Shared.DeviceInfo;
 
 namespace SysColab.Components.Shared
 {
-    public class SharedComponent : ComponentBase, IDisposable
+    public class SharedComponent : ComponentBase, IAsyncDisposable
     {
         [Inject] protected NavigationManager Navigation { get; set; }
         [Inject] protected ConnectivityService ConnectivityService { get; set; }
@@ -17,6 +18,8 @@ namespace SysColab.Components.Shared
         [Inject] protected DeviceMappingService DeviceMappingService { get; set; }
         [Inject] protected HttpClient HttpClient { get; set; }
         [Inject] IDeviceMetricService DeviceMetricService { get; set; }
+        [Inject] protected FileService FileService { get; set; }
+
 
         protected List<DeviceInfo> Devices = new();
         protected DeviceMetrics Metrics = new();
@@ -184,6 +187,13 @@ namespace SysColab.Components.Shared
                             {
                                 Metrics = metricsResponse;
                             }
+                            break;
+
+
+                        case "file_offer":
+                            var offer = JsonSerializer.Deserialize<FileOffer>(args.SerializedPayload);
+                            if (offer is not null)
+                                await ReceiveFileAsync(offer);
                             break;
 
                         case "error":
@@ -455,6 +465,35 @@ namespace SysColab.Components.Shared
             }
         }
 
+        private async Task ReceiveFileAsync(FileOffer offer)
+        {
+            try
+            {
+                // Pull the bytes from the relay API
+                var bytes = await FileService.DownloadAsync(offer.FileId);
+                if (bytes is null)
+                {
+                    ShowError($"Failed to download {offer.Name}");
+                    return;
+                }
+
+                // Choose a local save path – here we drop it in the app-data folder.
+                var savePath = Path.Combine(
+                    FileSystem.AppDataDirectory,                    // MAUI cross-platform folder
+                    offer.Name);
+
+                await File.WriteAllBytesAsync(savePath, bytes);
+
+                // Tiny UX hint – you could fire a toast instead.
+                ShowStatus($"📁 Received {offer.Name} ({offer.Size / 1024} KB)");
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Error saving file: {ex.Message}");
+            }
+        }
+
+
         protected bool IsDeviceOnline(Guid deviceId)
         {
             return OnlinePairedDevices.Any(d => d.Id == deviceId);
@@ -474,7 +513,7 @@ namespace SysColab.Components.Shared
             StateHasChanged();
         }
 
-        public async Task DisposeAsync()
+        async ValueTask IAsyncDisposable.DisposeAsync()
         {
             // Unsubscribe from the event when the component is disposed
             ConnectivityService.MessageReceived -= HandleMessageReceived;

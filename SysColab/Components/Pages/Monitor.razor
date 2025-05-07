@@ -7,6 +7,13 @@
 <article>
     <h1 class="page-title">Device Monitor</h1>
 
+    @if (!string.IsNullOrEmpty(StatusMessage))
+    {
+        <div class="alert @(IsError ? "alert-danger" : "alert-info") mb-3">
+            @StatusMessage
+        </div>
+    }
+
     <!-- Device Selector -->
     <div class="mb-3">
         <label for="deviceSelect" class="form-label">Select Device</label>

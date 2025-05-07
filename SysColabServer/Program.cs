@@ -1,4 +1,4 @@
-using System.Net.WebSockets;
+﻿using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
@@ -6,17 +6,18 @@ using SysColab.Shared;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
-// Habilitar la configuraci�n de HTTPS en Kestrel
+// Habilitar la configuración de HTTPS en Kestrel
 builder.WebHost.UseKestrelHttpsConfiguration();
 
-// Configurar Kestrel para escuchar en HTTP y HTTPS
+// 5 MB hard cap for any request body (particularly file uploads)
+const long FiveMb = 5L * 1024 * 1024;
+
+// Listen on HTTP :5268  and HTTPS :7268 as before.
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(5268); // HTTP
-    options.ListenAnyIP(7268, listenOptions =>
-    {
-        listenOptions.UseHttps(); // HTTPS
-    });
+    options.ListenAnyIP(5268);                                        // HTTP
+    options.ListenAnyIP(7268, o => o.UseHttps());                      // HTTPS
+    options.Limits.MaxRequestBodySize = FiveMb;                        // 🔒 5 MB
 });
 
 // Add logging services
@@ -49,6 +50,10 @@ var connectedDevices = new ConcurrentDictionary<Guid, (DeviceInfo DeviceInfo, We
 
 // Temporary store for mapping pending connections by token/uuid
 var pendingRegistrations = new ConcurrentDictionary<Guid, (DeviceInfo DeviceInfo, TaskCompletionSource<WebSocket> Tcs)>();
+
+// Transient blob store for uploaded files (≤ 5 MB each)
+var files = new ConcurrentDictionary<Guid, (string Name, string ContentType, byte[] Bytes)>();
+
 
 // Helper method to notify all connected devices about a device status change
 async Task NotifyDeviceStatusChangeAsync(DeviceInfo deviceInfo, string messageType)
@@ -328,6 +333,7 @@ app.MapPost("/api/register", (DeviceInfo deviceInfo) =>
     return Results.Ok("Ready to connect WebSocket.");
 });
 
+// GET /api/connected-devices => returns list of connected devices
 app.MapGet("/api/connected-devices", () =>
 {
     logger.LogDebug("Request received for connected devices list");
@@ -341,6 +347,48 @@ app.MapGet("/api/connected-devices", () =>
 
     // Return the list of connected devices
     return Results.Ok(devices);
+});
+
+// File transfer methods
+app.MapPost("/api/file", async (HttpRequest req) =>
+{
+    if (!req.HasFormContentType) return Results.BadRequest("multipart/form-data expected");
+    var form = await req.ReadFormAsync();
+
+    if (!Guid.TryParse(form["targetId"], out var targetId)) return Results.BadRequest("targetId missing");
+    if (!Guid.TryParse(form["senderId"], out var senderId)) return Results.BadRequest("senderId missing");
+
+    var formFile = form.Files["file"];
+    if (formFile is null || formFile.Length == 0) return Results.BadRequest("file field missing");
+    if (formFile.Length > FiveMb) return Results.BadRequest("File exceeds 5 MB");
+
+    await using var ms = new MemoryStream();
+    await formFile.CopyToAsync(ms);
+    var fileId = Guid.NewGuid();
+    files[fileId] = (formFile.FileName, formFile.ContentType, ms.ToArray());
+
+    // Push lightweight offer
+    var offer = new RelayMessage
+    {
+        TargetId = targetId.ToString(),
+        MessageType = "file_offer",
+        SerializedJson = JsonSerializer.Serialize(new FileOffer(fileId, formFile.FileName, formFile.Length, senderId))
+    };
+
+    if (connectedDevices.TryGetValue(targetId, out var target) && target.WebSocket.State == WebSocketState.Open)
+    {
+        await target.WebSocket.SendAsync(
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(offer)),
+            WebSocketMessageType.Text, true, CancellationToken.None);
+    }
+
+    return Results.Ok(new { fileId });
+});
+
+app.MapGet("/api/file/{id:guid}", (Guid id) =>
+{
+    if (!files.TryRemove(id, out var blob)) return Results.NotFound();
+    return Results.File(blob.Bytes, blob.ContentType, blob.Name);
 });
 
 logger.LogInformation("WebSocket server starting up");
