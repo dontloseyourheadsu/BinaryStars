@@ -16,13 +16,16 @@ namespace SysColab.Components.Shared
         [Inject] protected PairedDevicesService PairedDevicesService { get; set; }
         [Inject] protected DeviceMappingService DeviceMappingService { get; set; }
         [Inject] protected HttpClient HttpClient { get; set; }
+        [Inject] IDeviceMetricService DeviceMetricService { get; set; }
 
         protected List<DeviceInfo> Devices = new();
+        protected DeviceMetrics Metrics = new();
         protected List<DeviceInfo> OnlinePairedDevices = new();
         protected DeviceInfo CurrentDeviceInfo;
         protected string StatusMessage = "";
         protected bool IsError = false;
         protected Guid CurrentDeviceId;
+        protected CancellationTokenSource? _cts;
 
         protected override async Task OnInitializedAsync()
         {
@@ -156,6 +159,30 @@ namespace SysColab.Components.Shared
                                     OnlinePairedDevices.Remove(deviceToRemove);
                                     ShowStatus($"{disconnectedDevice.Name} is now offline");
                                 }
+                            }
+                            break;
+
+                        case "device_metrics_request":
+                            var requester = JsonSerializer.Deserialize<DeviceInfo>(args.SerializedPayload);
+
+                            if (requester != null)
+                            {
+                                // Get the metrics for the current device
+                                var metrics = GetDeviceMetrics();
+                                // Send the metrics back to the requester
+                                await ConnectivityService.SendMessageAsync(
+                                    requester.Id.ToString(),
+                                    "device_metrics_response",
+                                    metrics
+                                );
+                            }
+                            break;
+
+                        case "device_metrics_response":
+                            var metricsResponse = JsonSerializer.Deserialize<DeviceMetrics>(args.SerializedPayload);
+                            if (metricsResponse != null)
+                            {
+                                Metrics = metricsResponse;
                             }
                             break;
 
@@ -399,6 +426,35 @@ namespace SysColab.Components.Shared
             }
         }
 
+        protected DeviceMetrics GetDeviceMetrics()
+        {
+            return new DeviceMetrics
+            {
+                CpuUsage = Math.Round(DeviceMetricService.GetCpuUsage(), 2),
+                RamUsage = Math.Round(DeviceMetricService.GetRamUsage(), 2),
+                StorageUsage = Math.Round(DeviceMetricService.GetStorageUsage(), 2),
+                NetworkUp = Math.Round(DeviceMetricService.GetNetworkUploadSpeed(), 2),
+                NetworkDown = Math.Round(DeviceMetricService.GetNetworkDownloadSpeed(), 2)
+            };
+        }
+
+        protected async Task RequestMetricsAsync(DeviceInfo device)
+        {
+            try
+            {
+                // Send a request for metrics to the target device
+                await ConnectivityService.SendMessageAsync(
+                    device.Id.ToString(),
+                    "device_metrics_request",
+                    CurrentDeviceInfo
+                );
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Error requesting metrics: {ex.Message}");
+            }
+        }
+
         protected bool IsDeviceOnline(Guid deviceId)
         {
             return OnlinePairedDevices.Any(d => d.Id == deviceId);
@@ -418,10 +474,13 @@ namespace SysColab.Components.Shared
             StateHasChanged();
         }
 
-        public void Dispose()
+        public async Task DisposeAsync()
         {
             // Unsubscribe from the event when the component is disposed
             ConnectivityService.MessageReceived -= HandleMessageReceived;
+            await ConnectivityService.DisconnectAsync();
+            _cts?.Cancel();
+            _cts?.Dispose();
         }
     }
 }

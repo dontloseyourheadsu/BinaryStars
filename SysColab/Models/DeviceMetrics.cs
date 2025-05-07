@@ -1,6 +1,6 @@
 ﻿namespace SysColab.Models
 {
-    internal class DeviceMetrics
+    public class DeviceMetrics
     {
         public double CpuUsage { get; set; }
         public double RamUsage { get; set; }

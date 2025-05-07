@@ -3,7 +3,6 @@
 @using SysColab.Models
 @using SysColab.Services
 @inherits SharedComponent
-@inject IDeviceMetricService DeviceMetricService
 
 <article>
     <h1 class="page-title">Device Monitor</h1>
@@ -36,11 +35,11 @@
                         <div class="progress w-100">
                             <div class="progress-bar"
                             role="progressbar"
-                            style="width:@Metrics.CpuUsage%"
-                            aria-valuenow="@Metrics.CpuUsage"
+                            style="width:@DeviceMetris.CpuUsage%"
+                                aria-valuenow="@DeviceMetris.CpuUsage"
                             aria-valuemin="0"
                             aria-valuemax="100">
-                                @Metrics.CpuUsage%
+                                @DeviceMetris.CpuUsage%
                             </div>
                         </div>
                     </div>
@@ -55,11 +54,11 @@
                         <div class="progress w-100">
                             <div class="progress-bar"
                             role="progressbar"
-                            style="width:@Metrics.RamUsage%"
-                            aria-valuenow="@Metrics.RamUsage"
+                                style="width:@DeviceMetris.RamUsage%"
+                                aria-valuenow="@DeviceMetris.RamUsage"
                             aria-valuemin="0"
                             aria-valuemax="100">
-                                @Metrics.RamUsage%
+                                @DeviceMetris.RamUsage%
                             </div>
                         </div>
                     </div>
@@ -74,11 +73,11 @@
                         <div class="progress w-100">
                             <div class="progress-bar"
                             role="progressbar"
-                            style="width:@Metrics.StorageUsage%"
-                            aria-valuenow="@Metrics.StorageUsage"
+                                style="width:@DeviceMetris.StorageUsage%"
+                                aria-valuenow="@DeviceMetris.StorageUsage"
                             aria-valuemin="0"
                             aria-valuemax="100">
-                                @Metrics.StorageUsage%
+                                @DeviceMetris.StorageUsage%
                             </div>
                         </div>
                     </div>
@@ -90,8 +89,8 @@
                 <div class="card-surface h-100 flex-fill d-flex flex-column">
                     <h2 class="section-title">Network Throughput</h2>
                     <div class="flex-fill">
-                        <p class="mb-2">Up: @Metrics.NetworkUp KB/s</p>
-                        <p class="mb-0">Down: @Metrics.NetworkDown KB/s</p>
+                            <p class="mb-2">Up: @DeviceMetris.NetworkUp KB/s</p>
+                            <p class="mb-0">Down: @DeviceMetris.NetworkDown KB/s</p>
                     </div>
                 </div>
             </div>
@@ -103,10 +102,15 @@
     }
 </article>
 
-@code {
-    private DeviceMetrics Metrics = new DeviceMetrics();
 
+@code {
+    private Task? _metricsTask;
     private Guid? selectedDeviceId;
+    private DeviceMetrics DeviceMetris
+    {
+        get => Metrics;
+    }
+
     public Guid SelectedDeviceId
     {
         get => selectedDeviceId ?? Guid.Empty;
@@ -115,25 +119,46 @@
             if (selectedDeviceId != value)
             {
                 selectedDeviceId = value;
-                LoadMetricsFor(value);
+                StartMetricsLoop(value);
             }
         }
     }
 
-    private void LoadMetricsFor(Guid id)
+    private void StartMetricsLoop(Guid deviceId)
     {
-        if (id == Guid.Empty)
+        // Cancel the previous task if it exists
+        _cts?.Cancel();
+        _cts?.Dispose();
+
+        if (deviceId == Guid.Empty)
         {
+            Metrics = new DeviceMetrics(); // Reset metrics
             return;
         }
 
-        Metrics = new DeviceMetrics
+        _cts = new CancellationTokenSource();
+        _metricsTask = LoadMetricsPeriodically(deviceId, _cts.Token);
+    }
+
+    private async Task LoadMetricsPeriodically(Guid deviceId, CancellationToken token)
+    {
+        try
         {
-            CpuUsage = DeviceMetricService.GetCpuUsage(),
-            RamUsage = DeviceMetricService.GetRamUsage(),
-            StorageUsage = DeviceMetricService.GetStorageUsage(),
-            NetworkUp = DeviceMetricService.GetNetworkUploadSpeed(),
-            NetworkDown = DeviceMetricService.GetNetworkDownloadSpeed()
-        };
+            var device = OnlinePairedDevices.FirstOrDefault(d => d.Id == deviceId);
+            while (!token.IsCancellationRequested)
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RequestMetricsAsync(device);
+                    StateHasChanged();
+                });
+
+                await Task.Delay(3000, token);
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // Task was canceled, no action needed
+        }
     }
 }
