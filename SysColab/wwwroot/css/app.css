@@ -385,3 +385,7 @@ main {
         background-color: var(--light-primary);
         color: #121019;
     }
+
+.table td, .table th {
+    color: #ffffff;
+}

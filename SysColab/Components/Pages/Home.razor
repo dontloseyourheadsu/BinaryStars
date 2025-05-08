@@ -15,6 +15,7 @@
                     <button class="btn btn-outline-primary" @onclick="NavigateToFileTransfer">Transfer Files</button>
                     <button class="btn btn-outline-primary" @onclick="NavigateToMonitor">Monitor Devices</button>
                     <button class="btn btn-outline-primary" @onclick="NavigateToRemoteControl">Remote Control</button>
+                    <button class="btn btn-outline-primary" @onclick="NavigateToDownloads">Downloads</button>
                 </div>
             </div>
         </div>
@@ -26,4 +27,5 @@
     private void NavigateToFileTransfer() => Navigation.NavigateTo("/file-transfer");
     private void NavigateToMonitor() => Navigation.NavigateTo("/monitor");
     private void NavigateToRemoteControl() => Navigation.NavigateTo("/remote-control");
+    private void NavigateToDownloads() => Navigation.NavigateTo("/downloads");
 }
