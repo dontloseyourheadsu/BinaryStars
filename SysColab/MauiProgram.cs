@@ -22,7 +22,6 @@ public static class MauiProgram
             builder.Services.AddSingleton<IDeviceMetricService, SysColab.Platforms.Windows.Services.DeviceMetricsService>();
         #endif
         builder.Services.AddScoped<FileService>();
-        builder.Services.AddScoped<RemoteInputService>();
         builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG

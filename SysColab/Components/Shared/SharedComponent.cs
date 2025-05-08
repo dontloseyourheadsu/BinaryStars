@@ -5,6 +5,7 @@ using SysColab.Constants;
 using SysColab.Helpers;
 using SysColab.Models;
 using SysColab.Services;
+using WindowsInput;
 using SysColab.Shared;
 using DeviceInfo = SysColab.Shared.DeviceInfo;
 
@@ -19,7 +20,6 @@ namespace SysColab.Components.Shared
         [Inject] protected HttpClient HttpClient { get; set; }
         [Inject] IDeviceMetricService DeviceMetricService { get; set; }
         [Inject] protected FileService FileService { get; set; }
-
 
         protected List<DeviceInfo> Devices = new();
         protected DeviceMetrics Metrics = new();
@@ -194,6 +194,14 @@ namespace SysColab.Components.Shared
                             var offer = JsonSerializer.Deserialize<FileOffer>(args.SerializedPayload);
                             if (offer is not null)
                                 await ReceiveFileAsync(offer);
+                            break;
+
+                        case "remote_input":
+                            var input = JsonSerializer.Deserialize<string>(args.SerializedPayload);
+                            if (!string.IsNullOrEmpty(input))
+                            {
+                                HandleRemoteInput(input);
+                            }
                             break;
 
                         case "error":
@@ -493,6 +501,30 @@ namespace SysColab.Components.Shared
             }
         }
 
+        private void HandleRemoteInput(string newInput)
+        {
+#if WINDOWS
+                var inputSimulator = new InputSimulator();
+
+                switch (newInput)
+                {
+                    case "\n":
+                        inputSimulator.Keyboard.KeyPress(VirtualKeyCode.RETURN);
+                        break;
+                    case "{BACKSPACE}":
+                        inputSimulator.Keyboard.KeyPress(VirtualKeyCode.BACK);
+                        break;
+                    case "{DELETE}":
+                        inputSimulator.Keyboard.KeyPress(VirtualKeyCode.DELETE);
+                        break;
+                    default:
+                        inputSimulator.Keyboard.TextEntry(newInput);
+                        break;
+                }
+#else
+                ShowError("Remote input is not supported on this platform.");
+#endif
+        }
 
         protected bool IsDeviceOnline(Guid deviceId)
         {

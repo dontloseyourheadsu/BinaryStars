@@ -1,23 +1,29 @@
 ﻿@page "/remote-control"
-@using SysColab.Models
+@using SysColab.Components.Shared
 @using SysColab.Services
-@using SysColab.Shared
-@inject RemoteInputService RemoteInputService
+@inherits SharedComponent
 
 <article>
     <h1 class="page-title">Remote Control</h1>
 
-    <!-- Device Selector -->
+    @if (!string.IsNullOrEmpty(StatusMessage))
+    {
+        <div class="alert @(IsError ? "alert-danger" : "alert-info") mb-3">
+            @StatusMessage
+        </div>
+    }
+
+    <!-- Device selector -->
     <div class="mb-3">
         <label for="deviceSelect" class="form-label">Select Device</label>
         <select id="deviceSelect"
-        class="form-control"
-        @bind="SelectedDeviceAddress"
-        @bind:event="onchange">
+                class="form-control"
+                @bind="SelectedDeviceId"
+                @bind:event="onchange">
             <option value="">-- Select a Device --</option>
-            @foreach (var d in AvailableDevices)
+            @foreach (var d in OnlinePairedDevices)
             {
-                <option value="@d.Address">@d.Name (@d.Address)</option>
+                <option value="@d.Id">@d.Name (@d.Address)</option>
             }
         </select>
     </div>
@@ -26,56 +32,40 @@
         <label class="form-label">Input Type</label>
         <div class="form-check">
             <input class="form-check-input"
-            type="radio"
-            name="inputType"
-            id="keyboardOption"
-            value="Keyboard"
-            checked="@(SelectedInputType == "Keyboard")"
-            @onchange="@(() => SelectedInputType = " Keyboard")" />
+                   type="radio"
+                   id="keyboardOption"
+                   name="inputType"
+                   value="Keyboard"
+                   checked="@(SelectedInputType == "Keyboard")"
+                   @onchange="@(() => SelectedInputType = "Keyboard")" />
             <label class="form-check-label" for="keyboardOption">
                 Keyboard Input
             </label>
         </div>
-        <div class="form-check">
-            <input class="form-check-input"
-            type="radio"
-            name="inputType"
-            id="mouseOption"
-            value="Mouse"
-            checked="@(SelectedInputType == "Mouse")"
-            @onchange="@(() => SelectedInputType = " Mouse")" />
-            <label class="form-check-label" for="mouseOption">
-                Mouse Input
-            </label>
-        </div>
     </div>
 
-
-    @* Only show the keyboard input UI once a device is picked and “Keyboard” is active *@
-    @if (!string.IsNullOrEmpty(SelectedDeviceAddress) && SelectedInputType == "Keyboard")
+    @* Keyboard UI appears only when a device is chosen *@
+    @if (!string.IsNullOrWhiteSpace(SelectedDeviceId) && SelectedInputType == "Keyboard")
     {
-        <!-- Input Area -->
         <div class="mb-3">
             <label for="inputText" class="form-label">Enter Keyboard Input</label>
+
+            <!-- main text box -->
             <input id="inputText"
-            type="text"
-            class="form-control"
-            @bind="CurrentInput"
-            @bind:event="oninput" />
-        </div>
+                   type="text"
+                   class="form-control"
+                   @bind="CurrentInput"
+                   @oninput="HandleInput"
+                   @onkeydown="HandleKeyDown"
+                   autocomplete="off" />
 
-        <div class="card-surface mb-3">
-            <h2 class="section-title">Input Stream</h2>
-            <pre class="p-2" 
-            style="background-color: var(--panel-bg); color: var(--text-body);">
-                @InputStream
-            </pre>
+            <!-- mini toolbar -->
+            <div class="btn-group mt-2" role="group" aria-label="Special keys">
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="SendBackspace">⌫</button>
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="SendDelete">Supr</button>
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="SendEnter">↵</button>
+            </div>
         </div>
-
-        <button class="btn btn-primary"
-        @onclick="TransmitKeyboardInput">
-            Send Input
-        </button>
     }
     else
     {
@@ -86,27 +76,52 @@
 </article>
 
 @code {
-    // Mock connected devices
-    private List<DeviceInfo> AvailableDevices = new();
-
-    private string SelectedDeviceAddress { get; set; }
+    /* ------------ state ------------ */
+    private string SelectedDeviceId  { get; set; } = string.Empty;
     private string SelectedInputType { get; set; } = "Keyboard";
-    private string CurrentInput { get; set; } = string.Empty;
-    private string InputStream { get; set; } = string.Empty;
+    private string CurrentInput      { get; set; } = string.Empty;
+    private string _previousInput    = string.Empty;
 
-    private async Task TransmitKeyboardInput()
+    /* ------------ helpers ------------ */
+    private Task SendSpecialKey(string payload) =>
+        ConnectivityService.SendMessageAsync(SelectedDeviceId, "remote_input", payload);
+
+    private Task SendBackspace() => SendSpecialKey("{BACKSPACE}");
+    private Task SendDelete()    => SendSpecialKey("{DELETE}");
+    private Task SendEnter()     => SendSpecialKey("\n");
+
+    /* ------------ input handlers ------------ */
+    // Fires on every value change – covers Android, iOS, desktop
+    private async Task HandleInput(ChangeEventArgs e)
     {
-        // nothing to send?
-        if (string.IsNullOrWhiteSpace(CurrentInput))
-            return;
+        var newValue = e.Value?.ToString() ?? string.Empty;
 
-        // append with newline
-        InputStream += CurrentInput + Environment.NewLine;
+        // chars added -------------------------------------------------------
+        if (newValue.Length > _previousInput.Length)
+        {
+            var added = newValue.Substring(_previousInput.Length);
+            foreach (var c in added)
+            {
+                await ConnectivityService.SendMessageAsync(
+                    SelectedDeviceId, "remote_input",
+                    c == '\n' ? "\n" : c.ToString());
+            }
+        }
+        // backspaces --------------------------------------------------------
+        else if (newValue.Length < _previousInput.Length)
+        {
+            var removed = _previousInput.Length - newValue.Length;
+            for (var i = 0; i < removed; i++)
+                await SendBackspace();
+        }
 
-        // send and await
-        await RemoteInputService.SendKeyboardInputAsync(SelectedDeviceAddress, CurrentInput);
+        _previousInput = newValue;
+    }
 
-        // clear
-        CurrentInput = string.Empty;
+    // Still useful for Enter from a physical keyboard (Android sends it too)
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SendEnter();
     }
 }
