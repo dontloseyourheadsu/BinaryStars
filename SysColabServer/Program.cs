@@ -55,7 +55,11 @@ var pendingRegistrations = new ConcurrentDictionary<Guid, (DeviceInfo DeviceInfo
 var files = new ConcurrentDictionary<Guid, (string Name, string ContentType, byte[] Bytes)>();
 
 
-// Helper method to notify all connected devices about a device status change
+/// <summary>
+/// Notifies all connected devices about a device status change.
+/// </summary>
+/// <param name="deviceInfo">The device information to include in the notification.</param>
+/// <param name="messageType">The type of message to send (e.g., "device_connected", "device_disconnected").</param>
 async Task NotifyDeviceStatusChangeAsync(DeviceInfo deviceInfo, string messageType)
 {
     logger.LogDebug("{MessageType} notification for device: {DeviceId}, Name: {DeviceName}",
@@ -69,6 +73,7 @@ async Task NotifyDeviceStatusChangeAsync(DeviceInfo deviceInfo, string messageTy
         SerializedJson = JsonSerializer.Serialize(deviceInfo)
     };
 
+    // Serialize the message to JSON
     var notificationJson = JsonSerializer.Serialize(notificationMessage);
     var notificationBytes = Encoding.UTF8.GetBytes(notificationJson);
 
@@ -83,8 +88,10 @@ async Task NotifyDeviceStatusChangeAsync(DeviceInfo deviceInfo, string messageTy
 
         try
         {
+            // Check if the WebSocket is open before sending
             if (device.Value.WebSocket.State == WebSocketState.Open)
             {
+                // Send the notification message to the device
                 await device.Value.WebSocket.SendAsync(
                     new ArraySegment<byte>(notificationBytes),
                     WebSocketMessageType.Text,
@@ -120,9 +127,11 @@ app.Map("/ws", async context =>
     logger.LogDebug("Accepting WebSocket connection for a device");
     var webSocket = await context.WebSockets.AcceptWebSocketAsync();
 
+    // Check if the UUID is provided in the query string
     var uuidString = context.Request.Query["uuid"].ToString();
     logger.LogDebug("WebSocket connection with UUID: {UUID}", uuidString);
 
+    // Validate the UUID
     var uuid = Guid.TryParse(uuidString, out var parsedUuid) ? parsedUuid : Guid.Empty;
 
     // Check if the UUID is valid and if the registration is pending
@@ -131,8 +140,10 @@ app.Map("/ws", async context =>
         // If the UUID is not valid or not found, return an error
         logger.LogWarning("Invalid or unregistered UUID in WebSocket connection: {UUID}", uuidString);
 
+        // Send an error message to the WebSocket
         if (webSocket.State == WebSocketState.Open)
         {
+            // Send an error message to the WebSocket
             var errorBytes = Encoding.UTF8.GetBytes("Invalid or unregistered UUID. Must register first.");
             await webSocket.SendAsync(
                 new ArraySegment<byte>(errorBytes),
@@ -140,6 +151,7 @@ app.Map("/ws", async context =>
                 true,
                 CancellationToken.None);
 
+            // Close the WebSocket connection with a policy violation status
             await webSocket.CloseAsync(
                 WebSocketCloseStatus.PolicyViolation,
                 "Invalid registration",
@@ -148,6 +160,7 @@ app.Map("/ws", async context =>
         return;
     }
 
+    // If the UUID is valid and registration is pending, complete the registration
     var tcs = pendingRegistration.Tcs;
     tcs.SetResult(webSocket);
 
@@ -160,11 +173,13 @@ app.Map("/ws", async context =>
     // Notify all connected devices about the new device connection
     await NotifyDeviceStatusChangeAsync(pendingRegistration.DeviceInfo, "device_connected");
 
+    // Start listening for messages from the WebSocket
     var buffer = new byte[1024 * 4];
     var messageBuilder = new StringBuilder();
 
     try
     {
+        // Loop to receive messages from the WebSocket
         while (webSocket.State == WebSocketState.Open)
         {
             // Reset the StringBuilder for a new message
@@ -174,12 +189,15 @@ app.Map("/ws", async context =>
             // Read potentially fragmented message
             do
             {
+                // Receive the message from the WebSocket
                 result = await webSocket.ReceiveAsync(
                     new ArraySegment<byte>(buffer),
                     CancellationToken.None);
 
+                // Check if the message is a text message
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
+                    // Append the received message fragment to the StringBuilder
                     var messageFragment = Encoding.UTF8.GetString(buffer, 0, result.Count);
                     messageBuilder.Append(messageFragment);
                 }
@@ -195,6 +213,7 @@ app.Map("/ws", async context =>
                     await NotifyDeviceStatusChangeAsync(removedDevice.DeviceInfo, "device_disconnected");
                 }
 
+                // Close the WebSocket connection gracefully
                 await webSocket.CloseAsync(
                     WebSocketCloseStatus.NormalClosure,
                     "Closing",
@@ -212,6 +231,7 @@ app.Map("/ws", async context =>
                 // Deserialize the message to RelayMessage
                 var message = JsonSerializer.Deserialize<RelayMessage>(receivedMessage);
 
+                // Check if the message is valid
                 if (message == null || string.IsNullOrWhiteSpace(message.TargetId) ||
                     string.IsNullOrWhiteSpace(message.SerializedJson) ||
                     string.IsNullOrWhiteSpace(message.MessageType))
@@ -220,6 +240,7 @@ app.Map("/ws", async context =>
                     throw new Exception("Invalid message format. Must include targetId, serializedJson, and messageType.");
                 }
 
+                // Parse the targetId from the message
                 var targetId = Guid.Parse(message.TargetId);
                 logger.LogDebug("Message relay request from {SourceId} to {TargetId} of type {MessageType}",
                     uuid, targetId, message.MessageType);
@@ -283,6 +304,7 @@ app.Map("/ws", async context =>
                     })
                 };
 
+                // Send an error message back to the sender
                 var errorMsg = JsonSerializer.Serialize(errorResponse);
                 await webSocket.SendAsync(
                     new ArraySegment<byte>(Encoding.UTF8.GetBytes(errorMsg)),
@@ -322,6 +344,7 @@ app.MapPost("/api/register", (DeviceInfo deviceInfo) =>
 {
     logger.LogDebug("Registration attempt for device: {DeviceId}, Name: {DeviceName}", deviceInfo.Id, deviceInfo.Name);
 
+    // Validate the device info
     var tcs = new TaskCompletionSource<WebSocket>();
     if (!pendingRegistrations.TryAdd(deviceInfo.Id, (deviceInfo, tcs)))
     {
@@ -329,6 +352,7 @@ app.MapPost("/api/register", (DeviceInfo deviceInfo) =>
         return Results.BadRequest("UUID already pending or registered.");
     }
 
+    // Create a new WebSocket connection
     logger.LogInformation("Device registered and pending WebSocket connection: {DeviceId}", deviceInfo.Id);
     return Results.Ok("Ready to connect WebSocket.");
 });
@@ -336,10 +360,12 @@ app.MapPost("/api/register", (DeviceInfo deviceInfo) =>
 // GET /api/connected-devices => returns list of connected devices
 app.MapGet("/api/connected-devices", () =>
 {
+    // Check if there are any connected devices
     logger.LogDebug("Request received for connected devices list");
     var devices = connectedDevices.Values.Select(x => x.DeviceInfo).ToList();
     logger.LogDebug("Returning {Count} connected devices", devices.Count);
 
+    // If no devices are connected, return a 404 Not Found
     if (devices is null or { Count: 0 })
     {
         return Results.NotFound("No connected devices found.");
@@ -349,19 +375,23 @@ app.MapGet("/api/connected-devices", () =>
     return Results.Ok(devices);
 });
 
-// File transfer methods
+// POST /api/file => uploads a file and notifies the target device
 app.MapPost("/api/file", async (HttpRequest req) =>
 {
+    // Check if the request is a multipart/form-data request
     if (!req.HasFormContentType) return Results.BadRequest("multipart/form-data expected");
     var form = await req.ReadFormAsync();
 
+    // Validate the form data
     if (!Guid.TryParse(form["targetId"], out var targetId)) return Results.BadRequest("targetId missing");
     if (!Guid.TryParse(form["senderId"], out var senderId)) return Results.BadRequest("senderId missing");
 
+    // Validate the file upload
     var formFile = form.Files["file"];
     if (formFile is null || formFile.Length == 0) return Results.BadRequest("file field missing");
     if (formFile.Length > FiveMb) return Results.BadRequest("File exceeds 5 MB");
 
+    // Validate the file name and content type
     await using var ms = new MemoryStream();
     await formFile.CopyToAsync(ms);
     var fileId = Guid.NewGuid();
@@ -375,6 +405,7 @@ app.MapPost("/api/file", async (HttpRequest req) =>
         SerializedJson = JsonSerializer.Serialize(new FileOffer(fileId, formFile.FileName, formFile.Length, senderId))
     };
 
+    // Send the offer to the target device
     if (connectedDevices.TryGetValue(targetId, out var target) && target.WebSocket.State == WebSocketState.Open)
     {
         await target.WebSocket.SendAsync(
@@ -382,12 +413,16 @@ app.MapPost("/api/file", async (HttpRequest req) =>
             WebSocketMessageType.Text, true, CancellationToken.None);
     }
 
+    // If the target device is not connected, send an error message back to the sender
     return Results.Ok(new { fileId });
 });
 
+// GET /api/file/{id:guid} => downloads a file
 app.MapGet("/api/file/{id:guid}", (Guid id) =>
 {
+    // Check if the file exists in the temporary store
     if (!files.TryRemove(id, out var blob)) return Results.NotFound();
+    // Check if the file is still in the store
     return Results.File(blob.Bytes, blob.ContentType, blob.Name);
 });
 

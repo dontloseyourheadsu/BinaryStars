@@ -2,8 +2,15 @@
 
 namespace SysColab.Helpers
 {
+    /// <summary>
+    /// Helper class for device-related functionalities.
+    /// </summary>
     internal static class DeviceHelpers
     {
+        /// <summary>
+        /// Get the device's MAC address.
+        /// </summary>
+        /// <returns>Returns the MAC address as a string.</returns>
         public static string GetMacAddress()
         {
             var nic = NetworkInterface
@@ -16,6 +23,10 @@ namespace SysColab.Helpers
             return nic?.GetPhysicalAddress()?.ToString() ?? string.Empty;
         }
 
+        /// <summary>
+        /// Get the device's IP address.
+        /// </summary>
+        /// <returns>Returns the IP address as a string.</returns>
         public static string GetDeviceName()
         {
             try
