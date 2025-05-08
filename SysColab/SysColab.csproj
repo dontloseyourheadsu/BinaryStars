@@ -71,8 +71,4 @@
       </AndroidResource>
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="README-images\" />
-    </ItemGroup>
-
 </Project>

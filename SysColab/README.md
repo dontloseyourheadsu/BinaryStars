@@ -6,7 +6,7 @@ SysColab provides a suite of collaborative and administrative tools, with each p
 
 The landing page offers a dashboard view with a summary of connected devices and shortcuts to key actions.
 
-![Home Screenshot](README-images/home-screenshot.png)
+![Home Screenshot](./README-images/home-screenshot.png)
 
 ---
 
@@ -14,7 +14,7 @@ The landing page offers a dashboard view with a summary of connected devices and
 
 Shows live status and metadata of all devices in the network. Useful for tracking availability and collaboration readiness.
 
-![Monitor Screenshot](README-images/monitor-screenshot.png)
+![Monitor Screenshot](./README-images/monitor-screenshot.png)
 
 ---
 
@@ -22,7 +22,7 @@ Shows live status and metadata of all devices in the network. Useful for trackin
 
 Scans the network to detect and list other SysColab-compatible devices, allowing quick addition for collaborative tasks.
 
-![Device Discovery Screenshot](README-images/device-discovery-screenshot.png)
+![Device Discovery Screenshot](./README-images/device-discovery-screenshot.png)
 
 ---
 
@@ -30,7 +30,7 @@ Scans the network to detect and list other SysColab-compatible devices, allowing
 
 Displays a history of received files, with options to open, clear, or organize them for future use.
 
-![Downloads Screenshot](README-images/downloads-screenshot.png)
+![Downloads Screenshot](./README-images/downloads-screenshot.png)
 
 ---
 
@@ -38,17 +38,15 @@ Displays a history of received files, with options to open, clear, or organize t
 
 A drag-and-drop interface for sharing files across devices. Shows real-time progress and status for each transfer.
 
-![File Transfer Screenshot](README-images/file-transfer-screenshot.png)
+![File Transfer Screenshot](./README-images/file-transfer-screenshot.png)
 
 ---
 
 ### 🎮 Remote Control
 
-Enables remote desktop control, screen sharing, and interactive sessions with connected devices.
+Enables remote desktop control, and interactive sessions with connected devices.
 
-![Remote Control Screenshot](README-images/remote-control-screenshot.png)
-
-Here's a new **SharedComponent.cs** section for your README, describing its role in the SysColab application:
+![Remote Control Screenshot](./README-images/remote-control-screenshot.png)
 
 ---
 
