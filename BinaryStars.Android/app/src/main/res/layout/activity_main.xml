@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_light"
+    tools:context=".MainActivity">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+
+            <!-- Header -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_header_gradient"
+                android:paddingHorizontal="24dp"
+                android:paddingTop="40dp"
+                android:paddingBottom="24dp">
+
+                <TextView
+                    android:id="@+id/tvHeaderTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="My Devices"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/white"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <TextView
+                    android:id="@+id/tvHeaderSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2 devices connected"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/tvHeaderTitle" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- Connected Devices Section -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connected Now"
+                android:textColor="@color/primary_dark"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginHorizontal="24dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="16dp"
+                app:drawableStartCompat="@drawable/ic_bar_indicator"
+                android:drawablePadding="8dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvDevices"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:overScrollMode="never"
+                tools:itemCount="2"
+                tools:listitem="@layout/item_device"/>
+
+            <!-- Quick Actions Section -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Quick Actions"
+                android:textColor="@color/primary_dark"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginHorizontal="24dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="16dp"
+                app:drawableStartCompat="@drawable/ic_bar_indicator"
+                android:drawablePadding="8dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="24dp"
+                android:baselineAligned="false">
+
+                <!-- Sync -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_quick_action"
+                    android:layout_marginVertical="12dp"
+                    android:padding="16dp"
+                    android:layout_marginEnd="8dp"
+                    android:elevation="2dp">
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/ic_sync"
+                        app:tint="@color/white"
+                        android:padding="12dp"
+                        android:background="@drawable/bg_icon_phone"/> <!-- Borrowing existing bg, or make gradient -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Sync All"
+                        android:layout_marginTop="8dp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="12sp"/>
+                </LinearLayout>
+
+                <!-- Share -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_quick_action"
+                    android:layout_marginVertical="12dp"
+                    android:padding="16dp"
+                    android:layout_marginHorizontal="4dp"
+                    android:elevation="2dp">
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/ic_share"
+                        app:tint="@color/white"
+                        android:padding="12dp"
+                        android:background="@drawable/bg_icon_share"/>
+                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Share"
+                        android:layout_marginTop="8dp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="12sp"/>
+                </LinearLayout>
+
+                <!-- Settings -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_quick_action"
+                    android:layout_marginVertical="12dp"
+                    android:padding="16dp"
+                    android:layout_marginStart="8dp"
+                    android:elevation="2dp">
+                     <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/ic_settings"
+                        app:tint="@color/white"
+                        android:padding="12dp"
+                        android:background="@drawable/bg_icon_settings_grad"/>
+                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Settings"
+                        android:layout_marginTop="8dp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="12sp"/>
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:menu="@menu/bottom_nav_menu"
+        android:background="@color/white"
+        app:itemIconTint="@drawable/selector_nav_color"
+        app:itemTextColor="@drawable/selector_nav_color"
+        app:labelVisibilityMode="labeled"/>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
