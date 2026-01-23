@@ -3,8 +3,42 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Device Connectivity UI</title>
+    <title>BinaryStars</title>
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      :root {
+        --primary: #5865f2; /* Discord-ish Blurple */
+        --primary-dark: #4752c4;
+        --bg-app: #f2f3f5;
+        --bg-panel: #ffffff;
+        --text-main: #060607;
+        --text-muted: #4f5660;
+        --border: #e3e5e8;
+        --status-online: #23a559;
+        --status-offline: #80848e;
+
+        --brand-gradient: linear-gradient(135deg, #090040 0%, #471396 100%);
+        --brand-purple: #471396;
+        --brand-accent: #ffcc00;
+      }
+
+      body.dark-mode {
+        --bg-app: #202225; /* Discord Dark */
+        --bg-panel: #2f3136;
+        --text-main: #dcddde;
+        --text-muted: #b9bbbe;
+        --border: #202225;
+      }
+
       * {
         margin: 0;
         padding: 0;
@@ -13,621 +47,710 @@
 
       body {
         font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
-          Cantarell, sans-serif;
-        background: #f5f5f7;
+          "IBM Plex Sans",
+          -apple-system,
+          system-ui,
+          sans-serif;
+        background: #111;
         display: flex;
         justify-content: center;
         align-items: center;
         min-height: 100vh;
-        padding: 20px;
-        transition: background 0.3s ease;
-      }
-
-      body.dark-mode {
-        background: #1a1a1a;
-      }
-
-      .theme-toggle {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        width: 60px;
-        height: 60px;
-        background: white;
-        border-radius: 50%;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        font-size: 28px;
-        transition: all 0.3s ease;
-        z-index: 1000;
-      }
-
-      .theme-toggle:hover {
-        transform: scale(1.1);
-      }
-
-      .theme-toggle:active {
-        transform: scale(0.95);
-      }
-
-      body.dark-mode .theme-toggle {
-        background: #2a2a2a;
-        box-shadow: 0 4px 20px rgba(255, 255, 255, 0.1);
+        color: var(--text-main);
       }
 
       .phone-frame {
-        width: 390px;
-        height: 844px;
-        background: white;
-        border-radius: 40px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        width: 400px;
+        height: 850px;
+        background: var(--bg-app);
+        border-radius: 4px; /* Sharper corners */
         overflow: hidden;
         display: flex;
         flex-direction: column;
         position: relative;
-        transition: all 0.3s ease;
-      }
-
-      body.dark-mode .phone-frame {
-        background: #1c1c1e;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      }
-
-      /* Status Bar */
-      .status-bar {
-        height: 44px;
-        padding: 0 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 14px;
-        color: #090040;
-        font-weight: 500;
-      }
-
-      body.dark-mode .status-bar {
-        color: white;
+        box-shadow: 0 0 0 10px #333;
       }
 
       /* Header */
       .header {
-        padding: 20px 24px;
-        background: linear-gradient(135deg, #090040 0%, #471396 100%);
-        color: white;
+        height: 60px;
+        background: var(--bg-panel);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        justify-content: center; /* Centered title */
+        position: relative;
       }
 
-      .header h1 {
-        font-size: 28px;
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-
-      .header p {
-        font-size: 14px;
-        opacity: 0.9;
-      }
-
-      /* Main Content */
-      .content {
-        flex: 1;
-        overflow-y: auto;
-        padding: 24px;
-        padding-bottom: 100px;
-      }
-
-      body.dark-mode .content {
-        background: #1c1c1e;
-      }
-
-      .section-title {
-        font-size: 18px;
+      .header-title {
         font-weight: 600;
-        color: #090040;
-        margin-bottom: 16px;
+        font-size: 18px;
         display: flex;
         align-items: center;
         gap: 8px;
+        color: var(--text-main);
       }
 
-      body.dark-mode .section-title {
-        color: white;
-      }
-
-      .section-title::before {
-        content: "";
-        width: 4px;
-        height: 20px;
-        background: #b13bff;
-        border-radius: 2px;
-      }
-
-      /* Device Cards */
-      .device-grid {
-        display: grid;
-        gap: 16px;
-        margin-bottom: 32px;
-      }
-
-      .device-card {
-        background: white;
-        border-radius: 20px;
-        padding: 20px;
-        box-shadow: 0 2px 12px rgba(9, 0, 64, 0.08);
-        border: 2px solid transparent;
-        transition: all 0.3s ease;
-      }
-
-      body.dark-mode .device-card {
-        background: #2a2a2c;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-      }
-
-      .device-card.connected {
-        border-color: #ffcc00;
-        background: linear-gradient(135deg, #fffef8 0%, #fffbeb 100%);
-      }
-
-      body.dark-mode .device-card.connected {
-        background: linear-gradient(135deg, #2a2508 0%, #3a3010 100%);
-      }
-
-      .device-card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 12px;
-      }
-
-      .device-icon {
-        width: 56px;
-        height: 56px;
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 28px;
-        margin-bottom: 12px;
-      }
-
-      .device-icon.laptop {
-        background: linear-gradient(135deg, #471396 0%, #b13bff 100%);
-      }
-
-      .device-icon.phone {
-        background: linear-gradient(135deg, #090040 0%, #471396 100%);
-      }
-
-      .device-icon.tablet {
-        background: linear-gradient(135deg, #b13bff 0%, #ffcc00 100%);
-      }
-
-      .device-icon.watch {
-        background: linear-gradient(135deg, #471396 0%, #090040 100%);
-      }
-
-      .device-name {
-        font-size: 16px;
-        font-weight: 600;
-        color: #090040;
-        margin-bottom: 4px;
-      }
-
-      body.dark-mode .device-name {
-        color: white;
-      }
-
-      .device-status {
-        font-size: 13px;
-        color: #666;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      body.dark-mode .device-status {
-        color: #999;
-      }
-
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #ccc;
-      }
-
-      .status-dot.active {
-        background: #ffcc00;
-        box-shadow: 0 0 8px rgba(255, 204, 0, 0.5);
-        animation: pulse 2s infinite;
-      }
-
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
-        }
-      }
-
-      .device-toggle {
-        width: 48px;
-        height: 28px;
-        background: #e0e0e0;
-        border-radius: 14px;
-        position: relative;
+      .header-actions .material-icons {
+        color: var(--text-muted);
         cursor: pointer;
-        transition: all 0.3s ease;
-      }
-
-      .device-toggle.active {
-        background: #ffcc00;
-      }
-
-      .device-toggle::after {
-        content: "";
-        position: absolute;
-        width: 24px;
-        height: 24px;
-        background: white;
-        border-radius: 50%;
-        top: 2px;
-        left: 2px;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      }
-
-      .device-toggle.active::after {
-        left: 22px;
-      }
-
-      .device-info {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid rgba(9, 0, 64, 0.1);
-      }
-
-      body.dark-mode .device-info {
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-      }
-
-      .info-item {
-        font-size: 12px;
-        color: #666;
-      }
-
-      body.dark-mode .info-item {
-        color: #999;
-      }
-
-      .info-value {
-        font-weight: 600;
-        color: #090040;
-        margin-top: 2px;
-      }
-
-      body.dark-mode .info-value {
-        color: white;
-      }
-
-      /* Quick Actions */
-      .quick-actions {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-        margin-bottom: 32px;
-      }
-
-      .action-btn {
-        background: white;
-        border-radius: 16px;
-        padding: 16px;
-        text-align: center;
-        box-shadow: 0 2px 12px rgba(9, 0, 64, 0.08);
-        cursor: pointer;
-        transition: all 0.3s ease;
-      }
-
-      body.dark-mode .action-btn {
-        background: #2a2a2c;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-      }
-
-      .action-btn:active {
-        transform: scale(0.95);
-      }
-
-      .action-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        margin: 0 auto 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
         font-size: 24px;
       }
 
-      .action-icon.sync {
-        background: linear-gradient(135deg, #471396 0%, #b13bff 100%);
+      /* Content Area */
+      .content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0; /* Full bleed for lists */
       }
 
-      .action-icon.share {
-        background: linear-gradient(135deg, #b13bff 0%, #ffcc00 100%);
+      .tab-content {
+        display: none;
+        padding-bottom: 80px;
       }
 
-      .action-icon.settings {
-        background: linear-gradient(135deg, #090040 0%, #471396 100%);
+      .tab-content.active {
+        display: block;
       }
 
-      .action-label {
+      /* Section Headers */
+      .section-header {
+        padding: 16px 16px 8px;
         font-size: 12px;
-        font-weight: 500;
-        color: #090040;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--text-muted);
+        letter-spacing: 0.5px;
       }
 
-      body.dark-mode .action-label {
+      /* List Items (Discord/Carbon Style) */
+      .list-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--bg-panel);
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+
+      .list-item:hover {
+        background: rgba(0, 0, 0, 0.02);
+      }
+
+      body.dark-mode .list-item:hover {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .list-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%; /* Rounded avatars like Discord */
+        background: var(--bg-app);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+        position: relative;
+        color: var(--text-muted);
+      }
+
+      .list-icon.brand {
+        background: var(--brand-purple);
         color: white;
       }
 
-      /* Bottom Navigation */
-      .bottom-nav {
+      .list-content {
+        flex: 1;
+      }
+
+      .list-title {
+        font-weight: 500;
+        font-size: 16px;
+        margin-bottom: 2px;
+        color: var(--text-main);
+      }
+
+      .list-subtitle {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      .list-action {
+        color: var(--text-muted);
+      }
+
+      /* Status Indicators */
+      .status-indicator {
         position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 84px;
-        background: white;
-        border-top: 1px solid rgba(9, 0, 64, 0.1);
+        bottom: -2px;
+        right: -2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 3px solid var(--bg-panel);
+        background: var(--status-offline);
+      }
+
+      .status-indicator.online {
+        background: var(--status-online);
+      }
+
+      /* Map Tab */
+      .map-container {
+        height: 300px;
+        background: #e0e0e0;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #888;
+        font-family: monospace;
+      }
+
+      body.dark-mode .map-container {
+        background: #1a1a1a;
+        color: #444;
+      }
+
+      .selector-bar {
+        padding: 12px 16px;
+        background: var(--bg-panel);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        gap: 8px;
+      }
+
+      select {
+        flex: 1;
+        padding: 8px;
+        background: var(--bg-app);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-main);
+        font-family: inherit;
+      }
+
+      /* Bottom Nav */
+      .bottom-nav {
+        height: 56px;
+        background: var(--bg-panel);
+        border-top: 1px solid var(--border);
         display: flex;
         justify-content: space-around;
         align-items: center;
-        padding: 0 24px 20px;
-      }
-
-      body.dark-mode .bottom-nav {
-        background: #1c1c1e;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        position: absolute;
+        bottom: 0;
+        width: 100%;
       }
 
       .nav-item {
+        flex: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 6px;
+        justify-content: center;
+        height: 100%;
+        color: var(--text-muted);
+        gap: 4px;
         cursor: pointer;
-        transition: all 0.3s ease;
-        opacity: 0.5;
       }
 
       .nav-item.active {
-        opacity: 1;
+        color: var(--brand-purple);
       }
 
-      .nav-icon {
-        width: 28px;
-        height: 28px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      body.dark-mode .nav-item.active {
+        color: #8d4eff;
+      }
+
+      .nav-item span {
         font-size: 24px;
       }
 
-      .nav-item.active .nav-icon {
-        filter: drop-shadow(0 2px 8px rgba(177, 59, 255, 0.3));
+      .nav-item div {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
       }
 
-      .nav-label {
-        font-size: 11px;
-        font-weight: 500;
-        color: #090040;
+      /* Detail View Overlay (Simulated) */
+      .detail-view {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--bg-app);
+        z-index: 100;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        flex-direction: column;
       }
 
-      body.dark-mode .nav-label {
-        color: white;
+      .detail-view.visible {
+        transform: translateX(0);
       }
 
-      /* Scrollbar */
-      .content::-webkit-scrollbar {
-        width: 4px;
+      .detail-header {
+        background: var(--bg-panel);
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        border-bottom: 1px solid var(--border);
       }
 
-      .content::-webkit-scrollbar-track {
-        background: transparent;
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 16px;
       }
 
-      .content::-webkit-scrollbar-thumb {
-        background: #b13bff;
-        border-radius: 2px;
+      .stat-card {
+        background: var(--bg-panel);
+        padding: 12px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
       }
+
+      .stat-value {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .stat-label {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      /* Tags */
+      .tag {
+        font-size: 10px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        background: #e3e5e8;
+        color: #4f5660;
+        font-weight: 600;
+      }
+
+      .tag.md {
+        background: #fee2e2;
+        color: #991b1b;
+      } /* Red for MD */
+      .tag.txt {
+        background: #dbeafe;
+        color: #1e40af;
+      } /* Blue for TXT */
     </style>
   </head>
-  <body>
-    <!-- Theme Toggle Button -->
-    <div class="theme-toggle" id="themeToggle">🌙</div>
+  <body class="">
+    <!-- Start in light mode, toggle supported -->
 
     <div class="phone-frame">
-      <!-- Status Bar -->
-      <div class="status-bar">
-        <span>9:41</span>
-        <span>⚡📶</span>
-      </div>
-
-      <!-- Header -->
       <div class="header">
-        <h1>My Devices</h1>
-        <p>4 devices connected</p>
+        <div class="header-title">
+          <span class="material-icons" style="color: var(--brand-purple)"
+            >stars</span
+          >
+          BinaryStars
+        </div>
       </div>
 
-      <!-- Main Content -->
       <div class="content">
-        <!-- Connected Devices -->
-        <div class="section-title">Connected Now</div>
-        <div class="device-grid">
-          <div class="device-card connected">
-            <div class="device-card-header">
-              <div>
-                <div class="device-icon laptop">💻</div>
-                <div class="device-name">MacBook Pro</div>
-                <div class="device-status">
-                  <span class="status-dot active"></span>
-                  Connected
-                </div>
-              </div>
-              <div class="device-toggle active"></div>
+        <!-- DEVICES TAB -->
+        <div class="tab-content active" id="devicesTab">
+          <div class="section-header">Online — 3</div>
+
+          <div
+            class="list-item"
+            onclick="showDeviceDetails('Ubuntu Workstation', true)"
+          >
+            <div class="list-icon">
+              <span class="material-icons">computer</span>
+              <div class="status-indicator online"></div>
             </div>
-            <div class="device-info">
-              <div class="info-item">
-                <div>Battery</div>
-                <div class="info-value">87%</div>
-              </div>
-              <div class="info-item">
-                <div>Location</div>
-                <div class="info-value">Home</div>
-              </div>
-              <div class="info-item">
-                <div>Last Sync</div>
-                <div class="info-value">Now</div>
-              </div>
+            <div class="list-content">
+              <div class="list-title">Ubuntu Workstation</div>
+              <div class="list-subtitle">Linux • 192.168.1.10</div>
             </div>
+            <span class="material-icons list-action">chevron_right</span>
           </div>
 
-          <div class="device-card connected">
-            <div class="device-card-header">
-              <div>
-                <div class="device-icon phone">📱</div>
-                <div class="device-name">iPhone 15 Pro</div>
-                <div class="device-status">
-                  <span class="status-dot active"></span>
-                  Connected
-                </div>
-              </div>
-              <div class="device-toggle active"></div>
+          <div
+            class="list-item"
+            onclick="showDeviceDetails('Pixel 7 Pro', true)"
+          >
+            <div class="list-icon brand">
+              <span class="material-icons">smartphone</span>
+              <div class="status-indicator online"></div>
             </div>
-            <div class="device-info">
-              <div class="info-item">
-                <div>Battery</div>
-                <div class="info-value">92%</div>
-              </div>
-              <div class="info-item">
-                <div>Location</div>
-                <div class="info-value">Home</div>
-              </div>
-              <div class="info-item">
-                <div>Last Sync</div>
-                <div class="info-value">2 min</div>
-              </div>
+            <div class="list-content">
+              <div class="list-title">Pixel 7 Pro</div>
+              <div class="list-subtitle">Android • 192.168.1.15</div>
             </div>
+            <span class="material-icons list-action">chevron_right</span>
+          </div>
+
+          <div
+            class="list-item"
+            onclick="showDeviceDetails('Linux Server', true)"
+          >
+            <div class="list-icon">
+              <span class="material-icons">dns</span>
+              <div class="status-indicator online"></div>
+            </div>
+            <div class="list-content">
+              <div class="list-title">Linux Server</div>
+              <div class="list-subtitle">Debian • 192.168.1.200</div>
+            </div>
+            <span class="material-icons list-action">chevron_right</span>
+          </div>
+
+          <div class="section-header">Offline — 2</div>
+
+          <div
+            class="list-item"
+            onclick="showDeviceDetails('Samsung Tablet', false)"
+          >
+            <div class="list-icon">
+              <span class="material-icons">tablet_android</span>
+              <div class="status-indicator"></div>
+            </div>
+            <div class="list-content">
+              <div class="list-title">Samsung Tablet</div>
+              <div class="list-subtitle">Last seen 2h ago</div>
+            </div>
+            <span class="material-icons list-action">chevron_right</span>
           </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="section-title">Quick Actions</div>
-        <div class="quick-actions">
-          <div class="action-btn">
-            <div class="action-icon sync">🔄</div>
-            <div class="action-label">Sync All</div>
+        <!-- FILES TAB -->
+        <div class="tab-content" id="filesTab">
+          <div class="section-header">Actions</div>
+          <div
+            class="list-item"
+            onclick="alert('Open file picker + device selector')"
+          >
+            <div class="list-icon brand">
+              <span class="material-icons">send</span>
+            </div>
+            <div class="list-content">
+              <div class="list-title">Send File</div>
+              <div class="list-subtitle">Choose device to transfer data</div>
+            </div>
           </div>
-          <div class="action-btn">
-            <div class="action-icon share">📤</div>
-            <div class="action-label">Share</div>
+
+          <div class="section-header">Recent Transfers</div>
+          <div class="list-item">
+            <div class="list-icon">
+              <span class="material-icons">description</span>
+            </div>
+            <div class="list-content">
+              <div class="list-title">project_report.pdf</div>
+              <div class="list-subtitle">To: Ubuntu Workstation • 2.4 MB</div>
+            </div>
+            <span
+              class="material-icons list-action"
+              style="color: var(--status-online)"
+              >check_circle</span
+            >
           </div>
-          <div class="action-btn">
-            <div class="action-icon settings">⚙️</div>
-            <div class="action-label">Settings</div>
+          <div class="list-item">
+            <div class="list-icon">
+              <span class="material-icons">image</span>
+            </div>
+            <div class="list-content">
+              <div class="list-title">vacation_photos.zip</div>
+              <div class="list-subtitle">From: Pixel 7 Pro • 156 MB</div>
+            </div>
+            <span
+              class="material-icons list-action"
+              style="color: var(--status-online)"
+              >check_circle</span
+            >
+          </div>
+        </div>
+
+        <!-- NOTES TAB -->
+        <div class="tab-content" id="notesTab">
+          <div class="section-header">My Notes</div>
+
+          <div class="list-item">
+            <div class="list-content">
+              <div class="list-title">Meeting Notes</div>
+              <div class="list-subtitle">Updated today</div>
+            </div>
+            <div class="tag md">MD</div>
+          </div>
+
+          <div class="list-item">
+            <div class="list-content">
+              <div class="list-title">Shopping List</div>
+              <div class="list-subtitle">Updated yesterday</div>
+            </div>
+            <div class="tag txt">TXT</div>
+          </div>
+
+          <div
+            class="list-item"
+            style="
+              color: var(--brand-purple);
+              justify-content: center;
+              font-weight: 600;
+            "
+          >
+            <span class="material-icons" style="margin-right: 8px">add</span>
+            Create New Note
+          </div>
+        </div>
+
+        <!-- MAP TAB (NEW) -->
+        <div class="tab-content" id="mapTab">
+          <div class="selector-bar">
+            <select>
+              <option>Pixel 7 Pro</option>
+              <option>Samsung Tablet</option>
+              <option disabled>Ubuntu Workstation (No GPS)</option>
+            </select>
+            <select style="flex: 0 0 100px">
+              <option>Live</option>
+              <option>1 hr ago</option>
+              <option>24 hrs</option>
+            </select>
+          </div>
+          <div class="map-container">
+            [ Map View Placeholder ]
+            <br />
+            <span
+              class="material-icons"
+              style="font-size: 48px; color: var(--brand-purple)"
+              >location_on</span
+            >
+          </div>
+
+          <div class="section-header">Location History</div>
+          <div class="list-item">
+            <div class="list-content">
+              <div class="list-title">Home</div>
+              <div class="list-subtitle">10:45 AM • 12 mins duration</div>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="list-content">
+              <div class="list-title">Coffee Shop</div>
+              <div class="list-subtitle">09:30 AM • 45 mins duration</div>
+            </div>
+          </div>
+          <div class="section-header">Settings</div>
+          <div class="list-item">
+            <div class="list-content">
+              <div class="list-title">History Retention</div>
+              <div class="list-subtitle">Keep history for 5 minutes</div>
+            </div>
+            <span class="material-icons list-action">edit</span>
+          </div>
+        </div>
+
+        <!-- SETTINGS TAB -->
+        <div class="tab-content" id="settingsTab">
+          <div class="section-header">Account</div>
+          <div class="list-item">
+            <div class="list-icon">
+              <span class="material-icons">person</span>
+            </div>
+            <div class="list-content">
+              <div class="list-title">Free Plan</div>
+              <div class="list-subtitle">3/5 Devices used</div>
+            </div>
+            <button
+              style="
+                padding: 6px 12px;
+                border: none;
+                background: var(--brand-accent);
+                border-radius: 4px;
+                font-weight: 600;
+                cursor: pointer;
+              "
+            >
+              UPGRADE
+            </button>
+          </div>
+
+          <div class="section-header">Appearance</div>
+          <div class="list-item" id="themeSettingItem">
+            <div class="list-content">
+              <div class="list-title">App Theme</div>
+              <div class="list-subtitle" id="themeLabel">Light Mode</div>
+            </div>
+            <span class="material-icons list-action" id="themeIcon"
+              >light_mode</span
+            >
+          </div>
+
+          <div class="section-header">General</div>
+          <div class="list-item">
+            <div class="list-content">
+              <div class="list-title">Location Sharing</div>
+              <div class="list-subtitle">Manage which devices can see you</div>
+            </div>
+            <span class="material-icons list-action">chevron_right</span>
           </div>
         </div>
       </div>
 
       <!-- Bottom Navigation -->
       <div class="bottom-nav">
-        <div class="nav-item active">
-          <div class="nav-icon" style="color: #b13bff">●</div>
-          <div class="nav-label">Devices</div>
+        <div class="nav-item active" onclick="switchTab('devicesTab', this)">
+          <span class="material-icons">devices</span>
+          <div>Devices</div>
         </div>
-        <div class="nav-item">
-          <div class="nav-icon" style="color: #471396">◐</div>
-          <div class="nav-label">Activity</div>
+        <div class="nav-item" onclick="switchTab('filesTab', this)">
+          <span class="material-icons">folder</span>
+          <div>Files</div>
         </div>
-        <div class="nav-item">
-          <div class="nav-icon" style="color: #090040">▲</div>
-          <div class="nav-label">Transfer</div>
+        <div class="nav-item" onclick="switchTab('notesTab', this)">
+          <span class="material-icons">description</span>
+          <div>Notes</div>
         </div>
-        <div class="nav-item">
-          <div class="nav-icon" style="color: #ffcc00">■</div>
-          <div class="nav-label">Settings</div>
+        <div class="nav-item" onclick="switchTab('mapTab', this)">
+          <span class="material-icons">map</span>
+          <div>Map</div>
+        </div>
+        <div class="nav-item" onclick="switchTab('settingsTab', this)">
+          <span class="material-icons">settings</span>
+          <div>Settings</div>
+        </div>
+      </div>
+
+      <!-- Detail View Overlay -->
+      <div class="detail-view" id="deviceDetailView">
+        <div class="detail-header">
+          <span
+            class="material-icons"
+            style="cursor: pointer"
+            onclick="closeDetails()"
+            >arrow_back</span
+          >
+          <h2 style="font-size: 18px; font-weight: 600" id="detailTitle">
+            Device Name
+          </h2>
+        </div>
+
+        <div class="section-header">Status</div>
+        <div class="detail-grid">
+          <div class="stat-card">
+            <div class="stat-label">CPU Load</div>
+            <div class="stat-value">12%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">RAM Usage</div>
+            <div class="stat-value">4.2 GB</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Up Speed</div>
+            <div class="stat-value">1.2 MB/s</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Down Speed</div>
+            <div class="stat-value">5.4 MB/s</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value">4d 2h</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Battery</div>
+            <div class="stat-value">85%</div>
+          </div>
+        </div>
+
+        <div class="section-header">Location</div>
+        <div class="list-item">
+          <div class="list-content">
+            <div class="list-title">Share my location</div>
+            <div class="list-subtitle">Allow this device to see me</div>
+          </div>
+          <div class="material-icons" style="color: var(--brand-purple)">
+            toggle_on
+          </div>
+        </div>
+        <div class="list-item" onclick="viewDeviceOnMap()">
+          <div class="list-content">
+            <div class="list-title">Locate Device</div>
+            <div class="list-subtitle">View on Map tab</div>
+          </div>
+          <span class="material-icons">my_location</span>
         </div>
       </div>
     </div>
 
     <script>
-      // Theme Toggle
-      const themeToggle = document.getElementById("themeToggle");
-      const body = document.body;
+      function switchTab(tabId, element) {
+        // Hide all tabs
+        document
+          .querySelectorAll(".tab-content")
+          .forEach((el) => el.classList.remove("active"));
+        // Show target tab
+        document.getElementById(tabId).classList.add("active");
 
-      // Check for saved theme preference
-      const savedTheme = localStorage.getItem("theme");
-      if (savedTheme === "dark") {
-        body.classList.add("dark-mode");
-        themeToggle.textContent = "☀️";
+        // Update nav state
+        document
+          .querySelectorAll(".nav-item")
+          .forEach((el) => el.classList.remove("active"));
+        element.classList.add("active");
       }
 
-      themeToggle.addEventListener("click", function () {
-        body.classList.toggle("dark-mode");
+      function showDeviceDetails(name, isOnline) {
+        document.getElementById("detailTitle").textContent = name;
+        document.getElementById("deviceDetailView").classList.add("visible");
+      }
 
-        if (body.classList.contains("dark-mode")) {
-          themeToggle.textContent = "☀️";
-          localStorage.setItem("theme", "dark");
+      function closeDetails() {
+        document.getElementById("deviceDetailView").classList.remove("visible");
+      }
+
+      function viewDeviceOnMap() {
+        closeDetails();
+        // Switch to Map tab (4th index, 0-based is 3)
+        const mapTabBtn = document.querySelectorAll(".nav-item")[3];
+        switchTab("mapTab", mapTabBtn);
+      }
+
+      // Theme toggle logic (moved to Settings)
+      const themeItem = document.getElementById("themeSettingItem");
+      const themeLabel = document.getElementById("themeLabel");
+      const themeIcon = document.getElementById("themeIcon");
+
+      function updateThemeUI(isDark) {
+        if (isDark) {
+          document.body.classList.add("dark-mode");
+          themeLabel.textContent = "Dark Mode";
+          themeIcon.textContent = "dark_mode";
         } else {
-          themeToggle.textContent = "🌙";
-          localStorage.setItem("theme", "light");
+          document.body.classList.remove("dark-mode");
+          themeLabel.textContent = "Light Mode";
+          themeIcon.textContent = "light_mode";
         }
+      }
+
+      themeItem.addEventListener("click", () => {
+        const isDark = !document.body.classList.contains("dark-mode");
+        updateThemeUI(isDark);
+        localStorage.setItem("theme", isDark ? "dark" : "light");
       });
 
-      // Toggle switches
-      document.querySelectorAll(".device-toggle").forEach((toggle) => {
-        toggle.addEventListener("click", function () {
-          this.classList.toggle("active");
-          const card = this.closest(".device-card");
-          const statusDot = card.querySelector(".status-dot");
-          const statusText = card.querySelector(".device-status");
-
-          if (this.classList.contains("active")) {
-            card.classList.add("connected");
-            statusDot.classList.add("active");
-            statusText.childNodes[1].textContent = "Connected";
-          } else {
-            card.classList.remove("connected");
-            statusDot.classList.remove("active");
-            statusText.childNodes[1].textContent = "Disconnected";
-          }
-        });
-      });
-
-      // Nav items
-      document.querySelectorAll(".nav-item").forEach((item) => {
-        item.addEventListener("click", function () {
-          document
-            .querySelectorAll(".nav-item")
-            .forEach((i) => i.classList.remove("active"));
-          this.classList.add("active");
-        });
-      });
-
-      // Action buttons
-      document.querySelectorAll(".action-btn").forEach((btn) => {
-        btn.addEventListener("click", function () {
-          const label = this.querySelector(".action-label").textContent;
-          console.log(`${label} clicked`);
-        });
-      });
+      // Init theme
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "dark") {
+        updateThemeUI(true);
+      } else {
+        updateThemeUI(false);
+      }
     </script>
   </body>
 </html>
