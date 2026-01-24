@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/carbon_bg_app"
+    tools:context=".MainActivity">
+
+    <!-- App Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="@color/carbon_bg_panel"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_star" 
+            app:tint="@color/primary_purple"
+            android:layout_marginEnd="8dp"/>
+            <!-- Assuming ic_star exists or using placeholders, if not I will use a different icon or text only -->
+            
+        <TextView
+            android:id="@+id/tvHeaderTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BinaryStars"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/carbon_text_main" />
+            
+    </LinearLayout>
+    
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/carbon_border"/>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+
+            <!-- Online Devices Section -->
+            <TextView
+                android:id="@+id/tvHeaderSubtitle" 
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Online — 3"
+                android:textAllCaps="true"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="8dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvOnlineDevices"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:overScrollMode="never"
+                tools:itemCount="2"
+                tools:listitem="@layout/item_device"/>
+
+            <!-- Offline Devices Section -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Offline — 2"
+                android:textAllCaps="true"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="8dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvOfflineDevices"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:overScrollMode="never"
+                tools:itemCount="2"
+                tools:listitem="@layout/item_device"/>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
