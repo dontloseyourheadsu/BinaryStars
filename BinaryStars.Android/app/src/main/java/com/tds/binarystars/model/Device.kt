@@ -6,10 +6,11 @@ data class Device(
     val type: DeviceType,
     val ipAddress: String,
     val batteryLevel: Int,
-    val isConnected: Boolean,
+    val isOnline: Boolean,
     val isSynced: Boolean,
     val wifiUploadSpeed: String,
-    val wifiDownloadSpeed: String
+    val wifiDownloadSpeed: String,
+    val lastSeen: Long = System.currentTimeMillis()
 )
 
 enum class DeviceType {

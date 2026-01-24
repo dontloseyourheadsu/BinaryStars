@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/carbon_bg_app">
+
+    <!-- App Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="@color/carbon_bg_panel"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_star"
+            app:tint="@color/primary_purple"
+            android:layout_marginEnd="8dp"/>
+            
+        <TextView
+            android:id="@+id/tvHeaderTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BinaryStars"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/carbon_text_main" />
+            
+    </LinearLayout>
+    
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/carbon_border"/>
+        
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+            
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Actions"
+                android:textAllCaps="true"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="8dp"/>
+
+            <!-- Send File Action -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="@color/carbon_bg_panel"
+                android:padding="12dp"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true">
+                
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_share" 
+                    android:background="@drawable/bg_icon_circle"
+                    android:padding="8dp"
+                    app:tint="@color/white"
+                    android:backgroundTint="@color/carbon_primary"/> 
+                
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="12dp">
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Send File"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/carbon_text_main"/>
+                        
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Choose device to transfer data"
+                        android:textSize="12sp"
+                        android:textColor="@color/carbon_text_muted"/>
+                </LinearLayout>
+            </LinearLayout>
+            
+            <View android:background="@color/carbon_border" android:layout_width="match_parent" android:layout_height="1dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Recent Transfers"
+                android:textAllCaps="true"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="8dp"/>
+                
+            <!-- Placeholder for transfers -->
+             <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="@color/carbon_bg_panel"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+                
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_note" 
+                    android:background="@drawable/bg_icon_circle"
+                    android:padding="8dp"
+                    app:tint="@color/carbon_text_muted"/>
+                
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="12dp">
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="project_report.pdf"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/carbon_text_main"/>
+                        
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="To: Ubuntu Workstation • 2.4 MB"
+                        android:textSize="12sp"
+                        android:textColor="@color/carbon_text_muted"/>
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_check_circle"
+                    app:tint="@color/primary_purple"/>
+            </LinearLayout>
+            <View android:background="@color/carbon_border" android:layout_width="match_parent" android:layout_height="1dp"/>
+            
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="@color/carbon_bg_panel"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+                
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_folder" 
+                    android:background="@drawable/bg_icon_circle"
+                    android:padding="8dp"
+                    app:tint="@color/carbon_text_muted"/>
+                
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="12dp">
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="vacation_photos.zip"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/carbon_text_main"/>
+                        
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="From: Pixel 7 Pro • 156 MB"
+                        android:textSize="12sp"
+                        android:textColor="@color/carbon_text_muted"/>
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_check_circle"
+                    app:tint="@color/primary_purple"/>
+            </LinearLayout>
+             <View android:background="@color/carbon_border" android:layout_width="match_parent" android:layout_height="1dp"/>
+            
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

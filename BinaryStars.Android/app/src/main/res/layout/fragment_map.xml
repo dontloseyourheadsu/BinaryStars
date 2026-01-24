@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/carbon_bg_app">
+
+    <!-- Selector Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/carbon_bg_panel"
+        android:padding="12dp"
+        android:gravity="center_vertical">
+        
+        <Spinner
+            android:id="@+id/spinnerDevices"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:background="@color/bg_light" 
+            android:paddingHorizontal="8dp"
+            android:layout_marginEnd="8dp"/>
+            
+        <Spinner
+            android:id="@+id/spinnerTime"
+            android:layout_width="100dp"
+            android:layout_height="40dp"
+            android:background="@color/bg_light"/>
+            
+    </LinearLayout>
+    
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/carbon_border"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+
+            <!-- Map Container -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="300dp"
+                android:background="#e0e0e0">
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="[ Map View Placeholder ]"
+                    android:textColor="#888888"
+                    android:layout_gravity="center"
+                    android:layout_marginBottom="24dp"/>
+                    
+                <ImageView
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@drawable/ic_map"
+                    app:tint="@color/primary_purple"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="24dp"/>
+            </FrameLayout>
+
+            <!-- Location History Header -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Location History"
+                android:textAllCaps="true"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="8dp"/>
+
+            <!-- History Item 1 -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/carbon_bg_panel"
+                android:paddingVertical="12dp"
+                android:paddingHorizontal="16dp">
+                
+                 <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent">
+                    
+                    <TextView
+                        android:text="Home"
+                        android:textSize="16sp"
+                        android:textColor="@color/carbon_text_main"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:text="10:45 AM • 12 mins duration"
+                        android:textSize="13sp"
+                        android:textColor="@color/carbon_text_muted"/>
+                </LinearLayout>
+                
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/carbon_border"
+                    app:layout_constraintBottom_toBottomOf="parent"/>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- History Item 2 -->
+             <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/carbon_bg_panel"
+                android:paddingVertical="12dp"
+                android:paddingHorizontal="16dp">
+                
+                 <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent">
+                    
+                    <TextView
+                        android:text="Coffee Shop"
+                        android:textSize="16sp"
+                        android:textColor="@color/carbon_text_main"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:text="09:30 AM • 45 mins duration"
+                        android:textSize="13sp"
+                        android:textColor="@color/carbon_text_muted"/>
+                </LinearLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- Settings Header -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Settings"
+                android:textAllCaps="true"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="8dp"/>
+                
+            <!-- Setting Item -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/carbon_bg_panel"
+                android:paddingVertical="12dp"
+                android:paddingHorizontal="16dp">
+                
+                 <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/ivEdit"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent">
+                    
+                    <TextView
+                        android:text="History Retention"
+                        android:textSize="16sp"
+                        android:textColor="@color/carbon_text_main"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:text="Keep history for 5 minutes"
+                        android:textSize="13sp"
+                        android:textColor="@color/carbon_text_muted"/>
+                </LinearLayout>
+                
+                <ImageView
+                    android:id="@+id/ivEdit"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_settings"
+                    app:tint="@color/carbon_text_muted"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"/>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+        </LinearLayout>
+    </ScrollView>
+    
+</LinearLayout>
