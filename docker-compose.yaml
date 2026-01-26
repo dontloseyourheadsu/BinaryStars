@@ -1,0 +1,34 @@
+services:
+    binarystars.api:
+        build:
+            context: .
+            dockerfile: BinaryStars.Api/Dockerfile
+        ports:
+        - "5000:80"
+        environment:
+        - ASPNETCORE_ENVIRONMENT=Development
+        - ConnectionStrings__DefaultConnection=Host=binarystars.db;Database=binarystars;Username=admin;Password=abc123=0
+        depends_on:
+        - binarystars.db
+        networks:
+        - binarystars-network
+    
+    binarystars.db:
+        image: postgres:16
+        restart: always
+        environment:
+        - POSTGRES_USER=admin
+        - POSTGRES_PASSWORD=abc123=0
+        - POSTGRES_DB=binarystars
+        ports:
+        - "5432:5432"
+        volumes:
+        - db-data:/var/lib/postgresql/data
+        networks:
+        - binarystars-network
+
+volumes:
+    db-data:
+
+networks:
+    binarystars-network:
