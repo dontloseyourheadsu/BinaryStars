@@ -9,6 +9,7 @@ using BinaryStars.Api.Data;
 using Serilog;
 using Serilog.Sinks.Grafana.Loki;
 using ServiceStack;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,25 +48,45 @@ builder.Services.AddAuthentication()
     });
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddServiceStackOpenApi();
 
 var app = builder.Build();
 
 // Ensure DB created
-using (var scope = app.Services.CreateScope())
+if (app.Environment.IsDevelopment())
 {
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.EnsureCreated();
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        // Simple retry logic for container startup race condition
+        int retries = 5;
+        while (retries > 0)
+        {
+            try
+            {
+                db.Database.EnsureCreated();
+                break;
+            }
+            catch (Exception)
+            {
+                retries--;
+                if (retries == 0) throw;
+                System.Threading.Thread.Sleep(2000);
+            }
+        }
+    }
 }
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 
 // Map Identity endpoints
 app.MapIdentityApi<IdentityUser>();
