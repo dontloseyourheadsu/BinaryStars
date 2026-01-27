@@ -4,7 +4,7 @@ services:
             context: .
             dockerfile: BinaryStars.Api/Dockerfile
         ports:
-        - "5000:8080"
+        - "5004:8080"
         environment:
         - ASPNETCORE_URLS=http://+:8080
         - ASPNETCORE_ENVIRONMENT=Development
