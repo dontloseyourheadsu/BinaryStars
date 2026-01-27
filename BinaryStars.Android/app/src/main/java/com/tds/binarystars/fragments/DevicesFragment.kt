@@ -5,13 +5,17 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tds.binarystars.R
 import com.tds.binarystars.adapter.DevicesAdapter
+import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
+import kotlinx.coroutines.launch
 
 class DevicesFragment : Fragment() {
 
@@ -26,90 +30,46 @@ class DevicesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val devices = listOf(
-            Device(
-                id = "1",
-                name = "Ubuntu Workstation",
-                type = DeviceType.LINUX,
-                ipAddress = "192.168.1.10",
-                batteryLevel = 100,
-                isOnline = true,
-                isSynced = true,
-                wifiUploadSpeed = "12 Kbps",
-                wifiDownloadSpeed = "4.2 Mbps"
-            ),
-            Device(
-                id = "2",
-                name = "Pixel 7 Pro",
-                type = DeviceType.ANDROID,
-                ipAddress = "192.168.1.15",
-                batteryLevel = 87,
-                isOnline = true,
-                isSynced = true,
-                wifiUploadSpeed = "0 Kbps",
-                wifiDownloadSpeed = "2 Kbps"
-            ),
-            Device(
-                id = "3",
-                name = "Linux Server",
-                type = DeviceType.LINUX,
-                ipAddress = "192.168.1.200",
-                batteryLevel = 100,
-                isOnline = true,
-                isSynced = true,
-                wifiUploadSpeed = "50 Mbps",
-                wifiDownloadSpeed = "20 Mbps"
-            ),
-            Device(
-                id = "4",
-                name = "Samsung Tablet",
-                type = DeviceType.ANDROID,
-                ipAddress = "192.168.1.25",
-                batteryLevel = 45,
-                isOnline = false,
-                isSynced = false,
-                wifiUploadSpeed = "-",
-                wifiDownloadSpeed = "-"
-            ),
-             Device(
-                id = "5",
-                name = "Arch Linux Laptop",
-                type = DeviceType.LINUX,
-                ipAddress = "192.168.1.101",
-                batteryLevel = 60,
-                isOnline = false,
-                isSynced = false,
-                wifiUploadSpeed = "-",
-                wifiDownloadSpeed = "-"
-            ),
-            Device(
-                id = "6",
-                name = "OnePlus 9",
-                type = DeviceType.ANDROID,
-                ipAddress = "192.168.1.18",
-                batteryLevel = 92,
-                isOnline = true,
-                isSynced = true,
-                wifiUploadSpeed = "10 Kbps",
-                wifiDownloadSpeed = "500 Kbps"
-            )
-        )
+        val rvDevices = view.findViewById<RecyclerView>(R.id.rvDevices)
+        rvDevices.layoutManager = LinearLayoutManager(context)
 
-        val onlineDevices = devices.filter { it.isOnline }
-        val offlineDevices = devices.filter { !it.isOnline }
-        
-        // Update header subtitle
-        val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
-        tvHeaderSubtitle.text = "${onlineDevices.size} devices online"
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.apiService.getDevices()
+                if (response.isSuccessful && response.body() != null) {
+                    val dtos = response.body()!!
+                    val devices = dtos.map { dto ->
+                        Device(
+                            id = dto.id,
+                            name = dto.name,
+                            type = if (dto.type == 0) DeviceType.LINUX else DeviceType.ANDROID,
+                            ipAddress = dto.ipAddress,
+                            batteryLevel = dto.batteryLevel,
+                            isOnline = dto.isOnline,
+                            isSynced = dto.isSynced,
+                            wifiUploadSpeed = dto.wifiUploadSpeed,
+                            wifiDownloadSpeed = dto.wifiDownloadSpeed,
+                            lastSeen = System.currentTimeMillis()
+                        )
+                    }
+                    
+                    val onlineDevices = devices.filter { it.isOnline }
+                    
+                    // Update header subtitle if view exists
+                    val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
+                    if (tvHeaderSubtitle != null) {
+                        tvHeaderSubtitle.text = "${onlineDevices.size} devices online"
+                    }
 
-        // Setup online devices RecyclerView
-        val rvOnlineDevices = view.findViewById<RecyclerView>(R.id.rvOnlineDevices)
-        rvOnlineDevices.layoutManager = LinearLayoutManager(context)
-        rvOnlineDevices.adapter = DevicesAdapter(onlineDevices)
-        
-        // Setup offline devices RecyclerView
-        val rvOfflineDevices = view.findViewById<RecyclerView>(R.id.rvOfflineDevices)
-        rvOfflineDevices.layoutManager = LinearLayoutManager(context)
-        rvOfflineDevices.adapter = DevicesAdapter(offlineDevices)
+                    // Setup RecyclerView
+                    rvDevices.adapter = DevicesAdapter(devices)
+                } else {
+                    Toast.makeText(context, "Failed to load devices: ${response.code()}", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
+            }
+        }
     }
 }
