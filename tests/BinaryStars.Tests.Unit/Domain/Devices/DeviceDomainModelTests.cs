@@ -73,10 +73,10 @@ public class DeviceDomainModelTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() => new Device(
-            id,
-            name,
+            id!,
+            name!,
             type,
-            ipAddress,
+            ipAddress!,
             batteryLevel,
             isOnline,
             isSynced,
