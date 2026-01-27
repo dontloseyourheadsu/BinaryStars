@@ -12,6 +12,9 @@ interface ApiService {
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): Response<Void>
 
+    @POST("auth/login/external")
+    suspend fun externalLogin(@Body request: ExternalAuthRequest): Response<Void>
+
     @GET("devices")
     suspend fun getDevices(): Response<List<DeviceDto>>
 }
