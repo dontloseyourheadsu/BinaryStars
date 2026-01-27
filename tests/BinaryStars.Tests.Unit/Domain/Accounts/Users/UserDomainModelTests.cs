@@ -39,7 +39,7 @@ public class UserDomainModelTests
     {
         // Act & Assert
         var id = Guid.Parse(idString);
-        var exception = Assert.Throws<ArgumentException>(() => new User(id, username, email, role));
+        var exception = Assert.Throws<ArgumentException>(() => new User(id, username!, email!, role));
         Assert.Contains(expectedErrorMessage, exception.Message);
     }
 }

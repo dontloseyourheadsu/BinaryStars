@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BinaryStars.Tests.Unit", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BinaryStars.Api", "BinaryStars.Api\BinaryStars.Api.csproj", "{A8FBEC4E-B923-425C-8572-9DCE395CE217}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BinaryStars.Application", "BinaryStars.Application\BinaryStars.Application.csproj", "{62989621-CD34-432B-8DFB-1163676D54CE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{A8FBEC4E-B923-425C-8572-9DCE395CE217}.Release|x64.Build.0 = Release|Any CPU
 		{A8FBEC4E-B923-425C-8572-9DCE395CE217}.Release|x86.ActiveCfg = Release|Any CPU
 		{A8FBEC4E-B923-425C-8572-9DCE395CE217}.Release|x86.Build.0 = Release|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Debug|x64.Build.0 = Debug|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Debug|x86.Build.0 = Debug|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Release|x64.ActiveCfg = Release|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Release|x64.Build.0 = Release|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Release|x86.ActiveCfg = Release|Any CPU
+		{62989621-CD34-432B-8DFB-1163676D54CE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
