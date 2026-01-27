@@ -1,0 +1,8 @@
+{
+  "client_id": "c727b034-bd56-4e8aa1c73",
+  "authorization_user_agent": "DEFAULT",
+  "redirect_uri": "localhost://auth",
+  "account_mode": "SINGLE",
+  "broker_redirect_uri_registered": false,
+  "authority": "https://login.microsoftonline.com/beef350-9fda5c747bf1"
+}

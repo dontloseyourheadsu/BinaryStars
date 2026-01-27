@@ -39,4 +39,16 @@ public class AuthController : ControllerBase
         }
         return Unauthorized(result.Errors);
     }
+
+    [HttpPost("login/external")]
+    public async Task<IActionResult> ExternalLogin([FromBody] ExternalLoginRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _accountsWriteService.ExternalLoginAsync(request, cancellationToken);
+        if (result.IsSuccess)
+        {
+            return Ok();
+        }
+
+        return Unauthorized(result.Errors);
+    }
 }

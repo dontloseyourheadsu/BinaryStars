@@ -112,13 +112,13 @@ Create a `appsettings.json` (or `appsettings.Development.json` for local dev) in
 
 A visual API reference is available at:
 
-- **URL**: `http://localhost:5000/scalar/v1`
+- **URL**: `http://localhost:5004/scalar/v1`
 
 ### OpenAPI Specification
 
 The raw OpenAPI specification is at:
 
-- **URL**: `http://localhost:5000/openapi/v1.json`
+- **URL**: `http://localhost:5004/openapi/v1.json`
 
 You can import this URL into tools like **Postman** or **Insomnia** to automatically generate client requests.
 

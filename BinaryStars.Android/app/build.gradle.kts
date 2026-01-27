@@ -5,14 +5,12 @@ plugins {
 
 android {
     namespace = "com.tds.binarystars"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.tds.binarystars"
         minSdk = 29
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -59,6 +57,14 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.google.play.services.auth)
+    implementation(libs.microsoft.msal) {
+        exclude(group = "io.opentelemetry")
+        exclude(group = "com.microsoft.device.display", module = "display-mask")
+    }
+    implementation(libs.opentelemetry.api)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

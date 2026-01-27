@@ -11,9 +11,15 @@ data class RegisterRequest(
     val password: String
 )
 
+data class ExternalAuthRequest(
+    val provider: String,
+    val idToken: String,
+    val username: String
+)
+
 data class DeviceDto(
     val id: String,
-    valname: String,
+    val name: String,
     val type: Int, // Enum mapping needed
     val ipAddress: String,
     val batteryLevel: Int,

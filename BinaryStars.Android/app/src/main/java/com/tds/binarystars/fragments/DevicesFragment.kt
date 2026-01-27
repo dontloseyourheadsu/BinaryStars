@@ -30,8 +30,10 @@ class DevicesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val rvDevices = view.findViewById<RecyclerView>(R.id.rvDevices)
-        rvDevices.layoutManager = LinearLayoutManager(context)
+        val rvOnline = view.findViewById<RecyclerView>(R.id.rvOnlineDevices)
+        val rvOffline = view.findViewById<RecyclerView>(R.id.rvOfflineDevices)
+        rvOnline.layoutManager = LinearLayoutManager(context)
+        rvOffline.layoutManager = LinearLayoutManager(context)
 
         lifecycleScope.launch {
             try {
@@ -54,6 +56,7 @@ class DevicesFragment : Fragment() {
                     }
                     
                     val onlineDevices = devices.filter { it.isOnline }
+                    val offlineDevices = devices.filter { !it.isOnline }
                     
                     // Update header subtitle if view exists
                     val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
@@ -61,8 +64,9 @@ class DevicesFragment : Fragment() {
                         tvHeaderSubtitle.text = "${onlineDevices.size} devices online"
                     }
 
-                    // Setup RecyclerView
-                    rvDevices.adapter = DevicesAdapter(devices)
+                    // Setup RecyclerViews for online/offline sections
+                    rvOnline.adapter = DevicesAdapter(onlineDevices)
+                    rvOffline.adapter = DevicesAdapter(offlineDevices)
                 } else {
                     Toast.makeText(context, "Failed to load devices: ${response.code()}", Toast.LENGTH_SHORT).show()
                 }
