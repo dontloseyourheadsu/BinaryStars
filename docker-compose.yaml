@@ -11,6 +11,19 @@ services:
         - ConnectionStrings__DefaultConnection=Host=binarystars.db;Database=binarystars;Username=admin;Password=abc123=0
         depends_on:
         - binarystars.db
+        - binarystars.grafana
+        networks:
+        - binarystars-network
+    
+    binarystars.grafana:
+        image: grafana/grafana:latest
+        ports:
+        - "3100:3000"
+        environment:
+        - GF_SECURITY_ADMIN_USER=admin
+        - GF_SECURITY_ADMIN_PASSWORD=admin
+        depends_on:
+        - binarystars.db
         networks:
         - binarystars-network
     
