@@ -58,7 +58,16 @@ public class AccountsWriteService : IAccountsWriteService
         if (!validationResult.IsSuccess)
             return validationResult;
 
-        var user = await _accountRepository.FindByEmailAsync(request.Email);
+        UserDbModel? user;
+        if (request.Email.Contains('@'))
+        {
+            user = await _accountRepository.FindByEmailAsync(request.Email);
+        }
+        else
+        {
+            user = await _accountRepository.FindByNameAsync(request.Email);
+        }
+
         if (user == null)
             return Result.Failure("Invalid login attempt.");
 
@@ -84,6 +93,12 @@ public class AccountsWriteService : IAccountsWriteService
         var user = await _accountRepository.FindByEmailAsync(externalResult.Email);
         if (user == null)
         {
+            if (string.IsNullOrWhiteSpace(request.Username))
+            {
+                // New user, but username not provided. Client must prompt for username.
+                return Result.Failure("User not found. Registration required.");
+            }
+
             user = new UserDbModel
             {
                 UserName = request.Username,

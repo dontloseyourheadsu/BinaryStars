@@ -47,8 +47,8 @@ public class AuthValidator
         if (string.IsNullOrWhiteSpace(request.IdToken))
             errors.Add("IdToken is required.");
 
-        if (string.IsNullOrWhiteSpace(request.Username))
-            errors.Add("Username is required.");
+        // Username is optional for initial login check, but required for registration.
+        // We will handle the requirement logic in the service.
 
         return errors.Count > 0 ? Result.Failure(errors) : Result.Success();
     }

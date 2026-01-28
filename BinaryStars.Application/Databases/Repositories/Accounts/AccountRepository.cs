@@ -29,6 +29,11 @@ public class AccountRepository : IAccountRepository
         return _userManager.FindByEmailAsync(email);
     }
 
+    public Task<UserDbModel?> FindByNameAsync(string userName)
+    {
+        return _userManager.FindByNameAsync(userName);
+    }
+
     public Task<UserDbModel?> FindByIdAsync(Guid userId)
     {
         return _userManager.FindByIdAsync(userId.ToString());

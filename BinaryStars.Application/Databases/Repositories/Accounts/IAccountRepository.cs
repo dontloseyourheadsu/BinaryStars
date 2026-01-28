@@ -7,6 +7,7 @@ public interface IAccountRepository
 {
     Task<IdentityResult> CreateUserAsync(UserDbModel user, string password);
     Task<UserDbModel?> FindByEmailAsync(string email);
+    Task<UserDbModel?> FindByNameAsync(string userName);
     Task<UserDbModel?> FindByIdAsync(Guid userId);
     Task<SignInResult> CheckPasswordSignInAsync(UserDbModel user, string password);
 }

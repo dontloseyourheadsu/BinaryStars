@@ -17,7 +17,7 @@ public class ExternalIdentityValidator
     {
         _configuration = configuration;
 
-        var tenantId = _configuration["AzureAd:TenantId"] ?? string.Empty;
+        var tenantId = _configuration["Authentication:Microsoft:TenantId"] ?? string.Empty;
         var authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
         _microsoftConfigManager = new ConfigurationManager<OpenIdConnectConfiguration>(
             $"{authority}/.well-known/openid-configuration",
@@ -60,8 +60,8 @@ public class ExternalIdentityValidator
 
     private async Task<ExternalIdentityValidationResult> ValidateMicrosoftAsync(string idToken, CancellationToken cancellationToken)
     {
-        var tenantId = _configuration["AzureAd:TenantId"];
-        var clientId = _configuration["AzureAd:ClientId"];
+        var tenantId = _configuration["Authentication:Microsoft:TenantId"];
+        var clientId = _configuration["Authentication:Microsoft:ClientId"];
         if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(clientId))
             return ExternalIdentityValidationResult.Failure("Microsoft configuration missing");
 
