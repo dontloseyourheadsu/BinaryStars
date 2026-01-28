@@ -17,20 +17,17 @@ Create a `appsettings.json` (or `appsettings.Development.json` for local dev) in
   },
   "Authentication": {
     "Google": {
-      "ClientId": "YOUR_GOOGLE_CLIENT_ID",
+      "ClientId": "YOUR_WEB_CLIENT_ID",
       "ClientSecret": "YOUR_GOOGLE_CLIENT_SECRET"
+    },
+    "Microsoft": {
+      "ClientId": "YOUR_CLIENT_ID",
+      "TenantId": "YOUR_TENANT_ID",
+      "ClientSecret": "YOUR_CLIENT_SECRET"
     }
   },
   "Serilog": {
     "LokiUrl": "http://localhost:3100"
-  },
-  "AzureAd": {
-    "Instance": "https://login.microsoftonline.com/",
-    "Domain": "your-domain.onmicrosoft.com",
-    "TenantId": "YOUR_TENANT_ID",
-    "ClientId": "YOUR_CLIENT_ID",
-    "Scopes": "access_as_user",
-    "CallbackPath": "/signin-oidc"
   },
   "Logging": {
     "LogLevel": {
@@ -45,38 +42,30 @@ Create a `appsettings.json` (or `appsettings.Development.json` for local dev) in
 ### Key Sections:
 
 - **ConnectionStrings:DefaultConnection**: Your PostgreSQL connection string. Ensure you have a running PostgreSQL instance. The app will attempt to create the database schema on startup if it doesn't exist.
-- **Authentication:Google**: Get these credentials from the Google Cloud Console (APIs & Services -> Credentials).
-- **Serilog:LokiUrl**: The URL for your Grafana Loki instance for log aggregation.
-- **AzureAd**: Settings for Microsoft Identity Web if you are using Azure AD auth.
+- **Authentication:Google**:
+  - **Important**: The `ClientId` here MUST MATCH the **Web Client ID** you use in your Android/Web clients.
+  - When the Android app sends an ID Token, it was issued for that specific Web Client ID. The API validates it by checking if the token's audience (`aud`) matches this `ClientId`.
+- **Authentication:Microsoft**: Settings for Microsoft Entra ID (Azure AD).
 
 ## Setting up OAuth Providers
 
-### Google OAuth Setup
+### Google OAuth Setup (Crucial for Client Validation)
 
-1.  Go to the [Google Cloud Console](https://console.cloud.google.com/).
-2.  Create a new project or select an existing one.
-3.  Navigate to **APIs & Services** > **OAuth consent screen**.
-    - Choose **External** (unless you are in a Google Workspace organization).
-    - Fill in the required app information.
-    - Add your developer contact information.
-4.  Navigate to **Credentials**.
-5.  Click **Create Credentials** > **OAuth client ID**.
-6.  For the **Application type**, select **Web application** (for the API backing web/mobile clients).
-    - **Name**: `BinaryStars API`
-    - **Authorized redirect URIs**:
-      - For local development: `https://localhost:5001/signin-google` (or whatever port your API uses).
-      - For Postman/Swagger: You might need specific callback URLs depending on how you test.
-7.  Click **Create**.
-8.  Copy the **Client ID** and **Client Secret**.
-9.  Update `BinaryStars.Api/appsettings.json`:
+For Google Sign-In to work across Android and API:
+
+1.  **Do not create separate Client IDs for the API and the Client App for validation purposes.**
+2.  Use the **Web Client ID** that you created in the Google Cloud Console.
+    - This is the **same ID** you put in the Android `build.gradle` (`GOOGLE_WEB_CLIENT_ID`).
+3.  Update `BinaryStars.Api/appsettings.json`:
     ```json
     "Authentication": {
       "Google": {
-        "ClientId": "YOUR_OBTAINED_CLIENT_ID",
-        "ClientSecret": "YOUR_OBTAINED_CLIENT_SECRET"
+        "ClientId": "YOUR_SHARED_WEB_CLIENT_ID.apps.googleusercontent.com",
+        "ClientSecret": "YOUR_CLIENT_SECRET"
       }
     }
     ```
+    _If these IDs do not match, the API will reject the token with `Invalid audience`._
 
 ### Microsoft OAuth (Azure AD) Setup
 
@@ -93,13 +82,12 @@ Create a `appsettings.json` (or `appsettings.Development.json` for local dev) in
 6.  (Optional for simple auth, but likely needed) Navigate to **Certificates & secrets** > **New client secret**. Copy the **Value** (not the Secret ID).
 7.  Update `BinaryStars.Api/appsettings.json`:
     ```json
-    "AzureAd": {
-      "Instance": "https://login.microsoftonline.com/",
-      "Domain": "your-domain.onmicrosoft.com", // Optional for multi-tenant
-      "TenantId": "YOUR_TENANT_ID", // or "common" for multi-tenant
-      "ClientId": "YOUR_CLIENT_ID",
-      "Scopes": "access_as_user",
-      "CallbackPath": "/signin-oidc"
+    "Authentication": {
+      "Microsoft": {
+        "ClientId": "YOUR_CLIENT_ID",
+        "TenantId": "YOUR_TENANT_ID",
+        "ClientSecret": "YOUR_CLIENT_SECRET"
+      }
     }
     ```
 
