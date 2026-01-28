@@ -59,7 +59,9 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.recyclerview)
-    implementation(libs.google.play.services.auth)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
     implementation(libs.microsoft.msal) {
         exclude(group = "io.opentelemetry")
         exclude(group = "com.microsoft.device.display", module = "display-mask")

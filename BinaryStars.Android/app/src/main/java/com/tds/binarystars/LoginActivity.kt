@@ -7,12 +7,13 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
-import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.material.textfield.TextInputEditText
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAuthenticationResult
@@ -29,30 +30,8 @@ class LoginActivity : AppCompatActivity() {
 
     private val logTag = "BinaryStarsLogin"
 
-    private lateinit var googleSignInClient: GoogleSignInClient
+    private lateinit var credentialManager: CredentialManager
     private var msalApp: ISingleAccountPublicClientApplication? = null
-
-    private val googleSignInLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-        val data = result.data
-        val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            val idToken = account?.idToken
-            val usernameInput = findViewById<TextInputEditText>(R.id.etUsername).text?.toString().orEmpty()
-            val username = if (usernameInput.isNotBlank()) usernameInput else account?.email.orEmpty()
-            if (idToken.isNullOrEmpty()) {
-                toast("Google sign-in failed: missing token")
-                return@registerForActivityResult
-            }
-            if (username.isBlank()) {
-                toast("Username is required for Google sign-in")
-                return@registerForActivityResult
-            }
-            submitExternalLogin("google", idToken, username)
-        } catch (e: Exception) {
-            toast("Google sign-in failed: ${e.message}")
-        }
-    }
 
     // Configuration values are available via BuildConfig
     // BuildConfig.GOOGLE_WEB_CLIENT_ID
@@ -63,10 +42,7 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        googleSignInClient = GoogleSignIn.getClient(this, GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestIdToken(BuildConfig.GOOGLE_WEB_CLIENT_ID)
-            .build())
+        credentialManager = CredentialManager.create(this)
 
         PublicClientApplication.createSingleAccountPublicClientApplication(
             this,
@@ -82,7 +58,6 @@ class LoginActivity : AppCompatActivity() {
             }
         )
 
-        val etUsername = findViewById<TextInputEditText>(R.id.etUsername)
         val etEmail = findViewById<TextInputEditText>(R.id.etEmail)
         val etPassword = findViewById<TextInputEditText>(R.id.etPassword)
         val btnLogin = findViewById<Button>(R.id.btnLogin)
@@ -91,17 +66,17 @@ class LoginActivity : AppCompatActivity() {
         val tvRegister = findViewById<TextView>(R.id.tvRegister)
 
         btnLogin.setOnClickListener {
-            val email = etEmail.text.toString()
+            val emailOrUsername = etEmail.text.toString()
             val password = etPassword.text.toString()
 
-            if (email.isBlank() || password.isBlank()) {
+            if (emailOrUsername.isBlank() || password.isBlank()) {
                 Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             lifecycleScope.launch {
                 try {
-                    val response = ApiClient.apiService.login(LoginRequest(email, password))
+                    val response = ApiClient.apiService.login(LoginRequest(emailOrUsername, password))
                     if (response.isSuccessful) {
                         Toast.makeText(this@LoginActivity, "Login Successful", Toast.LENGTH_SHORT).show()
                         startActivity(Intent(this@LoginActivity, MainActivity::class.java))
@@ -121,15 +96,51 @@ class LoginActivity : AppCompatActivity() {
         }
 
         btnLoginGoogle.setOnClickListener {
-            val intent = googleSignInClient.signInIntent
-            googleSignInLauncher.launch(intent)
+            lifecycleScope.launch {
+                try {
+                    val googleIdOption = GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+                        .setAutoSelectEnabled(false)
+                        .setNonce(null) // Optional: provide a nonce if your server requires it
+                        .build()
+
+                    val request = GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+
+                    val result = credentialManager.getCredential(
+                        request = request,
+                        context = this@LoginActivity
+                    )
+
+                    val credential = result.credential
+                    if (credential is CustomCredential &&
+                        credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                        
+                        val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                        val idToken = googleIdTokenCredential.idToken
+                        val email = googleIdTokenCredential.id // Email is ID in google token credential
+                        
+                        Log.d(logTag, "Google login success: email=$email")
+                        submitExternalLogin("google", idToken)
+                    } else {
+                        Log.e(logTag, "Unexpected credential type: ${credential.type}")
+                        toast("Google sign-in failed: Unexpected credential type")
+                    }
+                } catch (e: GetCredentialException) {
+                    Log.e(logTag, "Google sign-in failed", e)
+                    toast("Google sign-in failed: ${e.message}")
+                } catch (e: Exception) {
+                    Log.e(logTag, "Google sign-in error", e)
+                    toast("Google sign-in error: ${e.message}")
+                }
+            }
         }
 
         btnLoginMicrosoft.setOnClickListener {
-            val usernameInput = etUsername.text?.toString().orEmpty()
-
             val scopes = arrayOf("openid", "profile", "email")
-            Log.d(logTag, "Starting Microsoft sign-in (usernameInput=${usernameInput.isNotBlank()}, scopes=${scopes.joinToString()})")
+            Log.d(logTag, "Starting Microsoft sign-in")
 
             val app = msalApp
             if (app == null) {
@@ -141,25 +152,12 @@ class LoginActivity : AppCompatActivity() {
                 override fun onSuccess(authenticationResult: IAuthenticationResult?) {
                     // MSAL Android exposes the ID token via account claims; extract it directly
                     val idToken = authenticationResult?.account?.claims?.get("id_token") as? String
-                    val claims = authenticationResult?.account?.claims
-                    val derivedUsername = when {
-                        !usernameInput.isBlank() -> usernameInput
-                        claims?.get("preferred_username") is String -> claims["preferred_username"] as String
-                        claims?.get("email") is String -> claims["email"] as String
-                        claims?.get("upn") is String -> claims["upn"] as String
-                        else -> ""
-                    }
-                    Log.d(logTag, "MSAL success: claims keys=${claims?.keys?.joinToString()} idTokenPresent=${!idToken.isNullOrEmpty()}")
-
+                    
                     if (idToken.isNullOrEmpty()) {
                         toast("Microsoft sign-in failed: missing token")
                         return
                     }
-                    if (derivedUsername.isBlank()) {
-                        toast("Username is required for Microsoft sign-in")
-                        return
-                    }
-                    submitExternalLogin("microsoft", idToken, derivedUsername)
+                    submitExternalLogin("microsoft", idToken)
                 }
 
                 override fun onError(exception: MsalException) {
@@ -175,17 +173,31 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun submitExternalLogin(provider: String, idToken: String, username: String) {
+    private fun submitExternalLogin(provider: String, idToken: String) {
         lifecycleScope.launch {
             try {
-                val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, idToken, username))
+                // Initial login with empty username
+                val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, idToken, ""))
                 if (response.isSuccessful) {
                     Log.d(logTag, "External login succeeded for provider=$provider")
                     toast("Login Successful")
                     startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                     finish()
+                } else if (response.code() == 401) {
+                    // Possible registration required
+                    val errorBody = response.errorBody()?.string()
+                    Log.w(logTag, "External login returned 401: $errorBody")
+                    
+                    if (errorBody != null && errorBody.contains("Registration required")) {
+                         val intent = Intent(this@LoginActivity, UsernameInputActivity::class.java)
+                         intent.putExtra("EXTRA_PROVIDER", provider)
+                         intent.putExtra("EXTRA_ID_TOKEN", idToken)
+                         startActivity(intent)
+                    } else {
+                        toast("Login Failed: Authentication rejected")
+                    }
                 } else {
-                    Log.w(logTag, "External login failed for provider=$provider status=${response.code()} body=${response.errorBody()?.string()}")
+                    Log.w(logTag, "External login failed for provider=$provider status=${response.code()}")
                     toast("Login Failed: ${response.code()}")
                 }
             } catch (e: Exception) {
