@@ -28,6 +28,10 @@
             android:exported="false"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".UsernameInputActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".MainActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
