@@ -42,11 +42,28 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
+        // Agrega esto en onCreate para ver el hash real
+        try {
+            val info = packageManager.getPackageInfo(
+                "com.tds.binarystars", // Tu package name
+                android.content.pm.PackageManager.GET_SIGNATURES
+            )
+            for (signature in info.signatures) {
+                val md = java.security.MessageDigest.getInstance("SHA")
+                md.update(signature.toByteArray())
+                val hash = android.util.Base64.encodeToString(md.digest(), android.util.Base64.NO_WRAP)
+                Log.e("MY_HASH", "Hash real de la app: $hash")
+                // ¡Compara este valor con el que tienes en el JSON!
+            }
+        } catch (e: Exception) {
+            Log.e("MY_HASH", "Error obteniendo hash", e)
+        }
+
         credentialManager = CredentialManager.create(this)
 
         PublicClientApplication.createSingleAccountPublicClientApplication(
             this,
-            R.raw.msal_config,
+            R.raw.auth_config_single_account,
             object : IPublicClientApplication.ISingleAccountApplicationCreatedListener {
                 override fun onCreated(application: ISingleAccountPublicClientApplication) {
                     msalApp = application
@@ -139,7 +156,8 @@ class LoginActivity : AppCompatActivity() {
         }
 
         btnLoginMicrosoft.setOnClickListener {
-            val scopes = arrayOf("openid", "profile", "email")
+            // 1. Add 'openid' and 'profile' to ensure you get identity claims
+            val scopes = arrayOf("user.read", "openid", "profile")
             Log.d(logTag, "Starting Microsoft sign-in")
 
             val app = msalApp
@@ -150,24 +168,27 @@ class LoginActivity : AppCompatActivity() {
 
             app.signIn(this, null, scopes, object : AuthenticationCallback {
                 override fun onSuccess(authenticationResult: IAuthenticationResult?) {
-                    // MSAL Android exposes the ID token via account claims; extract it directly
-                    val idToken = authenticationResult?.account?.claims?.get("id_token") as? String
-                    
-                    if (idToken.isNullOrEmpty()) {
+                    // 2. FIX: Use accessToken. The 'claims' map does NOT contain the raw ID token.
+                    // If your backend specifically needs the ID token string, note that MSAL Android
+                    // abstracts it away. Usually, the accessToken is sufficient for backend auth.
+                    val tokenToSend = authenticationResult?.accessToken
+
+                    if (tokenToSend.isNullOrEmpty()) {
                         toast("Microsoft sign-in failed: missing token")
                         return
                     }
-                    submitExternalLogin("microsoft", idToken)
+                    // Send the access token to your backend
+                    submitExternalLogin("microsoft", tokenToSend)
                 }
 
                 override fun onError(exception: MsalException) {
-                    Log.e(logTag, "MSAL error code=${exception.errorCode} message=${exception.message}", exception)
+                    // If this prints "invalid_parameter", check Azure Portal Hash vs Logcat Hash
+                    Log.e(logTag, "MSAL error: ${exception.errorCode} : ${exception.message}", exception)
                     toast("Microsoft sign-in failed: ${exception.errorCode}")
                 }
 
                 override fun onCancel() {
-                    Log.d(logTag, "MSAL sign-in canceled by user")
-                    toast("Microsoft sign-in canceled")
+                    Log.d(logTag, "MSAL sign-in canceled")
                 }
             })
         }
