@@ -25,6 +25,7 @@ builder.Host.UseSerilog((context, configuration) =>
 builder.Services.AddDatabaseServices(builder.Configuration);
 builder.Services.AddApplicationServices();
 
+builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 
 // Add Authentication configuration
