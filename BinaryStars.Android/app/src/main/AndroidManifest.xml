@@ -47,8 +47,9 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="binarystars"
-                    android:host="auth" />
+                    android:scheme="msauth"
+                    android:host="com.tds.binarystars"
+                    android:path="/2XuY=" />
             </intent-filter>
         </activity>
     </application>
