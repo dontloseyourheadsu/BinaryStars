@@ -2,64 +2,139 @@
 
 ## OAuth Setup Instructions
 
-### Step-by-Step
+This project supports authentication via Google and Microsoft. Follow the instructions below to configure the necessary Client IDs and keys in your environment.
 
-**1. Create the Client IDs in Google Cloud Console**
+### 1. Google OAuth Setup
 
-You need **two** Client IDs in the same Google Cloud Project for the integration to work on Android (even though we only use one in the code).
+You need to create **two** Client IDs in the Google Cloud Console for the same project. Although the Android app only explicitly uses the Web Client ID in the code, the Android Client ID is required to associate your app's debug signing key with the project.
 
-**A. Create the Android Client ID (Required for Authorization):**
+#### A. Configure the Android Client ID (Authorization)
 
-1. Go to Google Cloud Console.
-2. Click **Create Credentials** -> **OAuth client ID**.
-3. Select **Android**.
-4. Enter the Package name: `com.tds.binarystars`.
-5. Enter the **SHA-1 certificate fingerprint** of your debug keystore.
-   - Run `./gradlew signingReport` in the `BinaryStars.Android` directory to find this.
-6. Click **Create**.
-   - _Note: You do not use this Client ID string in your code, but it MUST exist to authorize your app._
+1.  Navigate to the [Google Cloud Console](https://console.cloud.google.com/).
+2.  Go to **APIs & Services** > **Credentials**.
+3.  Click **Create Credentials** -> **OAuth client ID**.
+4.  Select **Android** as the application type.
+5.  **Package name**: Enter `com.tds.binarystars`.
+6.  **SHA-1 certificate fingerprint**:
+    -   Run the following command in the project root to get your debug keystore SHA-1:
+        ```bash
+        ./gradlew signingReport
+        ```
+    -   Locate the `SHA1` hash under the `debug` variant configuration.
+7.  Click **Create**.
+    > **Note:** This Client ID is not used in the code directly but authorizes your specific app binary signed with your debug key.
 
-**B. Create the Web Client ID (Required for Token Exchange):**
+#### B. Configure the Web Client ID (Token Exchange)
 
-1. Click **Create Credentials** -> **OAuth client ID**.
-2. Select **Web application**.
-3. Name it "Web Client for Backend".
-4. Click **Create**.
-5. Copy the **Client ID** (ends in `.apps.googleusercontent.com`).
-   - _This IS the Client ID you will use in your `build.gradle`._
+1.  In the same project, click **Create Credentials** -> **OAuth client ID**.
+2.  Select **Web application**.
+3.  Name it something recognizable (e.g., "Web Client for Backend").
+4.  Click **Create**.
+5.  **Copy the Client ID** (it ends in `.apps.googleusercontent.com`).
 
-**2. Update your `build.gradle`**
-Replace the value in your `defaultConfig` with the **Web** Client ID you just created.
+#### C. Apply to Project
 
-```kotlin
-defaultConfig {
-    // ...
-    // REPLACE this with the NEW Web Client ID you just created
-    buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"YOUR_NEW_WEB_CLIENT_ID.apps.googleusercontent.com\"")
-    // ...
-}
+1.  Open `app/build.gradle.kts`.
+2.  Update the `GOOGLE_WEB_CLIENT_ID` field in `defaultConfig`:
+    ```kotlin
+    buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"YOUR_WEB_CLIENT_ID.apps.googleusercontent.com\"")
+    ```
+
+---
+
+### 2. Microsoft OAuth Setup (Azure AD)
+
+To enable Microsoft login, you must register the application in the Microsoft Entra admin center (Azure Portal) and configure the Android platform correctly using your signing key.
+
+#### A. Generate the Signature Hash
+
+Microsoft requires a **Base64-encoded SHA-1 hash** of your signing certificate. This is different from the hex string used by Google.
+
+Run the following command in your terminal (ensure you have `openssl` installed):
+
+```bash
+keytool -exportcert -alias AndroidDebugKey -keystore ~/.android/debug.keystore | openssl sha1 -binary | openssl base64
 ```
+*   **Password**: Default is `android`.
+*   **Alias**: `AndroidDebugKey`.
+*   **Keystore**: Update the path if your keystore is in a different location (e.g., project root or `~/.android/debug.keystore`).
+
+**Copy the output string.** It should look something like `AbCdEfG+H/I=`. This is your **Signature Hash**.
+
+#### B. Configure Application in Azure Portal
+
+1.  Go to the [Azure Portal](https://portal.azure.com/) and navigate to **Microsoft Entra ID** > **App registrations**.
+2.  Select your app (or create a new one).
+3.  Go to **Manage** > **Authentication**.
+4.  Click **Add a platform** and select **Android**.
+5.  **Package name**: Enter `com.tds.binarystars`.
+6.  **Signature hash**: Paste the Base64 string generated in Step A.
+7.  Click **Configure**.
+
+**Important: Redirect URI Configuration**
+Azure automatically generates a Redirect URI in the format `msauth://com.tds.binarystars/<SIGNATURE_HASH>`.
+*   **The Issue**: Azure might URL-encode valid characters in your hash (e.g., `+` becomes `%2B`). The Android MSAL library and Manifest expect the **raw, unencoded** hash.
+*   **The Fix**:
+    1.  Check the Redirect URI generated by Azure. If it contains `%` characters, it is URL-encoded.
+    2.  Add a **new** Redirect URI of type **Mobile and desktop applications**.
+    3.  Enter the URI manually using the **raw** hash: `msauth://com.tds.binarystars/YOUR_RAW_HASH_HERE` (e.g., `msauth://com.tds.binarystars/AbCdEfG+H/I=`).
+    4.  Ensure both files below use this **raw** hash.
+
+#### C. Apply to Project Files
+
+You need to update three files with the Microsoft configuration values.
+
+1.  **`app/build.gradle.kts`**:
+    Update the Client ID and Tenant ID:
+    ```kotlin
+    buildConfigField("String", "MICROSOFT_CLIENT_ID", "\"YOUR_CLIENT_ID\"")
+    buildConfigField("String", "MICROSOFT_TENANT_ID", "\"YOUR_TENANT_ID\"")
+    ```
+
+2.  **`app/src/main/res/raw/auth_config_single_account.json`**:
+    Update `client_id` and the `redirect_uri` using your **raw** Signature Hash:
+    ```json
+    {
+      "client_id": "YOUR_CLIENT_ID",
+      "authorization_user_agent": "DEFAULT",
+      "redirect_uri": "msauth://com.tds.binarystars/YOUR_RAW_SIGNATURE_HASH",
+      "account_mode": "SINGLE",
+      "broker_redirect_uri_registered": false,
+      "authorities": [
+      {
+        "type": "AAD",
+        "audience": {
+          "type": "AzureADandPersonalMicrosoftAccount"
+        }
+      }
+      ]
+    }
+    ```
+
+3.  **`app/src/main/AndroidManifest.xml`**:
+    Find the `BrowserTabActivity` and update the `data` element path. The path must start with `/` followed by your **raw** Signature Hash:
+    ```xml
+    <data
+        android:scheme="msauth"
+        android:host="com.tds.binarystars"
+        android:path="/YOUR_RAW_SIGNATURE_HASH" />
+    ```
+
+---
 
 ## Managing Signing Keys
 
-### View SHA-1 Fingerprint (for existing keystore)
-
-To find the SHA-1 fingerprint required for the Google Cloud Console "Android Client ID":
-
-This command will print the signing details for all variants. Look for the `debug` variant SHA-1.
+### View SHA-1 Fingerprint (Google format)
 
 ```bash
 ./gradlew signingReport
 ```
 
-### Generate a New Debug Keystore
+### Generate New Debug Keystore
 
 If you do not have a debug keystore or need to generate a specific one:
 
 ```bash
-keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias AndroidDebugKey -keypass android -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-- **Password**: `android`
-- **Alias**: `androiddebugkey`
-- **Location**: Typically placed in `~/.android/debug.keystore` or inside your project `app/` folder depending on your configuration.
