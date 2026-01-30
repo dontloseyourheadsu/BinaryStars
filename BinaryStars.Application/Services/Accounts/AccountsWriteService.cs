@@ -8,9 +8,9 @@ namespace BinaryStars.Application.Services.Accounts;
 
 public interface IAccountsWriteService
 {
-    Task<Result> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken);
-    Task<Result> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
-    Task<Result> ExternalLoginAsync(ExternalLoginRequest request, CancellationToken cancellationToken);
+    Task<Result<UserDbModel>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken);
+    Task<Result<UserDbModel>> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
+    Task<Result<UserDbModel>> ExternalLoginAsync(ExternalLoginRequest request, CancellationToken cancellationToken);
 }
 
 public class AccountsWriteService : IAccountsWriteService
@@ -29,11 +29,11 @@ public class AccountsWriteService : IAccountsWriteService
         _identityValidator = identityValidator;
     }
 
-    public async Task<Result> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
+    public async Task<Result<UserDbModel>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
         var validationResult = _validator.ValidateRegister(request);
         if (!validationResult.IsSuccess)
-            return validationResult;
+            return Result<UserDbModel>.Failure(validationResult.Errors);
 
         var user = new UserDbModel
         {
@@ -46,17 +46,17 @@ public class AccountsWriteService : IAccountsWriteService
 
         if (!result.Succeeded)
         {
-            return Result.Failure(result.Errors.Select(e => e.Description).ToList());
+            return Result<UserDbModel>.Failure(result.Errors.Select(e => e.Description).ToList());
         }
 
-        return Result.Success();
+        return Result<UserDbModel>.Success(user);
     }
 
-    public async Task<Result> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
+    public async Task<Result<UserDbModel>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var validationResult = _validator.ValidateLogin(request);
         if (!validationResult.IsSuccess)
-            return validationResult;
+            return Result<UserDbModel>.Failure(validationResult.Errors);
 
         UserDbModel? user;
         if (request.Email.Contains('@'))
@@ -69,26 +69,26 @@ public class AccountsWriteService : IAccountsWriteService
         }
 
         if (user == null)
-            return Result.Failure("Invalid login attempt.");
+            return Result<UserDbModel>.Failure("Invalid login attempt.");
 
         var result = await _accountRepository.CheckPasswordSignInAsync(user, request.Password);
         if (result.Succeeded)
         {
-            return Result.Success();
+            return Result<UserDbModel>.Success(user);
         }
 
-        return Result.Failure("Invalid login attempt.");
+        return Result<UserDbModel>.Failure("Invalid login attempt.");
     }
 
-    public async Task<Result> ExternalLoginAsync(ExternalLoginRequest request, CancellationToken cancellationToken)
+    public async Task<Result<UserDbModel>> ExternalLoginAsync(ExternalLoginRequest request, CancellationToken cancellationToken)
     {
         var validationResult = _validator.ValidateExternal(request);
         if (!validationResult.IsSuccess)
-            return validationResult;
+            return Result<UserDbModel>.Failure(validationResult.Errors);
 
         var externalResult = await _identityValidator.ValidateAsync(request, cancellationToken);
         if (!externalResult.IsSuccess || string.IsNullOrWhiteSpace(externalResult.Email))
-            return Result.Failure(externalResult.Error ?? "External token validation failed.");
+            return Result<UserDbModel>.Failure(externalResult.Error ?? "External token validation failed.");
 
         var user = await _accountRepository.FindByEmailAsync(externalResult.Email);
         if (user == null)
@@ -96,7 +96,7 @@ public class AccountsWriteService : IAccountsWriteService
             if (string.IsNullOrWhiteSpace(request.Username))
             {
                 // New user, but username not provided. Client must prompt for username.
-                return Result.Failure("User not found. Registration required.");
+                return Result<UserDbModel>.Failure("User not found. Registration required.");
             }
 
             user = new UserDbModel
@@ -110,10 +110,10 @@ public class AccountsWriteService : IAccountsWriteService
             var createResult = await _accountRepository.CreateUserAsync(user, tempPassword);
             if (!createResult.Succeeded)
             {
-                return Result.Failure(createResult.Errors.Select(e => e.Description).ToList());
+                return Result<UserDbModel>.Failure(createResult.Errors.Select(e => e.Description).ToList());
             }
         }
 
-        return Result.Success();
+        return Result<UserDbModel>.Success(user);
     }
 }
