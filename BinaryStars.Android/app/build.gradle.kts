@@ -28,6 +28,16 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Usa la ruta absoluta que usaste en la terminal
+            storeFile = file("/home/dontloseyourheadsu/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "AndroidDebugKey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -35,6 +45,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -62,6 +75,7 @@ dependencies {
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
+    implementation(libs.play.services.location)
     implementation(libs.microsoft.msal) {
         exclude(group = "io.opentelemetry")
         exclude(group = "com.microsoft.device.display", module = "display-mask")

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using BinaryStars.Application.Services.Accounts;
 using BinaryStars.Application.Services.Devices;
 using BinaryStars.Application.Validators.Accounts;
+using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 
 namespace BinaryStars.Api.Controllers;
 
@@ -11,11 +13,16 @@ public class AuthController : ControllerBase
 {
     private readonly IAccountsWriteService _accountsWriteService;
     private readonly IAccountsReadService _accountsReadService;
+    private readonly SignInManager<UserDbModel> _signInManager;
 
-    public AuthController(IAccountsWriteService accountsWriteService, IAccountsReadService accountsReadService)
+    public AuthController(
+        IAccountsWriteService accountsWriteService,
+        IAccountsReadService accountsReadService,
+        SignInManager<UserDbModel> signInManager)
     {
         _accountsWriteService = accountsWriteService;
         _accountsReadService = accountsReadService;
+        _signInManager = signInManager;
     }
 
     [HttpPost("register")]
@@ -24,6 +31,7 @@ public class AuthController : ControllerBase
         var result = await _accountsWriteService.RegisterAsync(request, cancellationToken);
         if (result.IsSuccess)
         {
+            await _signInManager.SignInAsync(result.Value, isPersistent: true);
             return Ok();
         }
         return BadRequest(result.Errors);
@@ -35,6 +43,7 @@ public class AuthController : ControllerBase
         var result = await _accountsWriteService.LoginAsync(request, cancellationToken);
         if (result.IsSuccess)
         {
+            await _signInManager.SignInAsync(result.Value, isPersistent: true);
             return Ok();
         }
         return Unauthorized(result.Errors);
@@ -46,6 +55,7 @@ public class AuthController : ControllerBase
         var result = await _accountsWriteService.ExternalLoginAsync(request, cancellationToken);
         if (result.IsSuccess)
         {
+            await _signInManager.SignInAsync(result.Value, isPersistent: true);
             return Ok();
         }
 

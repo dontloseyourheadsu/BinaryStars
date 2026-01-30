@@ -1,9 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Headers;
+using System.Text.Json.Nodes;
 using Google.Apis.Auth;
 using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Validators.Accounts;
 
 namespace BinaryStars.Application.Services.Accounts;
@@ -11,17 +11,14 @@ namespace BinaryStars.Application.Services.Accounts;
 public class ExternalIdentityValidator
 {
     private readonly IConfiguration _configuration;
-    private readonly IConfigurationManager<OpenIdConnectConfiguration> _microsoftConfigManager;
+    private readonly ILogger<ExternalIdentityValidator> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public ExternalIdentityValidator(IConfiguration configuration)
+    public ExternalIdentityValidator(IConfiguration configuration, ILogger<ExternalIdentityValidator> logger, IHttpClientFactory httpClientFactory)
     {
         _configuration = configuration;
-
-        var tenantId = _configuration["Authentication:Microsoft:TenantId"] ?? string.Empty;
-        var authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
-        _microsoftConfigManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-            $"{authority}/.well-known/openid-configuration",
-            new OpenIdConnectConfigurationRetriever());
+        _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<ExternalIdentityValidationResult> ValidateAsync(ExternalLoginRequest request, CancellationToken cancellationToken)
@@ -54,48 +51,46 @@ public class ExternalIdentityValidator
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Google token validation failed");
             return ExternalIdentityValidationResult.Failure($"Google token validation failed: {ex.Message}");
         }
     }
 
-    private async Task<ExternalIdentityValidationResult> ValidateMicrosoftAsync(string idToken, CancellationToken cancellationToken)
+    private async Task<ExternalIdentityValidationResult> ValidateMicrosoftAsync(string token, CancellationToken cancellationToken)
     {
-        var tenantId = _configuration["Authentication:Microsoft:TenantId"];
-        var clientId = _configuration["Authentication:Microsoft:ClientId"];
-        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(clientId))
-            return ExternalIdentityValidationResult.Failure("Microsoft configuration missing");
-
-        var authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
+        // For Microsoft, the Android client is likely sending an Access Token for Graph API (User.Read scope).
+        // Standard JWT validation fails because it's either an encrypted JWT or has a Graph Audience.
+        // We validate it by calling the Microsoft Graph API /me endpoint.
 
         try
         {
-            var config = await _microsoftConfigManager.GetConfigurationAsync(cancellationToken);
-            var validationParameters = new TokenValidationParameters
+            var client = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Get, "https://graph.microsoft.com/v1.0/me");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await client.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
             {
-                ValidIssuer = config.Issuer,
-                ValidAudiences = new[] { clientId },
-                IssuerSigningKeys = config.SigningKeys,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidateAudience = true,
-                ValidateIssuer = true
-            };
+                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Microsoft Graph API call failed with status {StatusCode}: {Content}", response.StatusCode, errorContent);
+                return ExternalIdentityValidationResult.Failure("Microsoft token validation failed (Graph API).");
+            }
 
-            var handler = new JwtSecurityTokenHandler();
-            var principal = handler.ValidateToken(idToken, validationParameters, out _);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            var json = JsonNode.Parse(content);
 
-            var email = principal.FindFirst("preferred_username")?.Value
-                       ?? principal.FindFirst("email")?.Value
-                       ?? principal.FindFirst("upn")?.Value;
+            var email = json?["mail"]?.ToString() ?? json?["userPrincipalName"]?.ToString();
+            var id = json?["id"]?.ToString();
 
             if (string.IsNullOrWhiteSpace(email))
-                return ExternalIdentityValidationResult.Failure("Microsoft token missing email");
+                return ExternalIdentityValidationResult.Failure("Microsoft token valid but missing email");
 
-            var subject = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? string.Empty;
-            return ExternalIdentityValidationResult.Success(email, subject);
+            return ExternalIdentityValidationResult.Success(email, id);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Microsoft token validation failed");
             return ExternalIdentityValidationResult.Failure($"Microsoft token validation failed: {ex.Message}");
         }
     }
