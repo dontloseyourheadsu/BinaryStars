@@ -22,10 +22,7 @@ public class DevicesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetDevices(CancellationToken cancellationToken)
     {
-        // For now, using a mocked UserId since we rely on cookie auth or similar.
-        // In real app, we extract userId from claims.
-        // var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var userId = Guid.NewGuid(); // FIXME: Use real user id
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var result = await _devicesReadService.GetDevicesAsync(userId, cancellationToken);
         if (result.IsSuccess)
@@ -38,7 +35,7 @@ public class DevicesController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> RegisterDevice([FromBody] RegisterDeviceRequest request, CancellationToken cancellationToken)
     {
-        var userId = Guid.NewGuid(); // FIXME: Use real user id from claims
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var result = await _devicesWriteService.RegisterDeviceAsync(userId, request, cancellationToken);
 
         if (result.IsSuccess)
@@ -55,8 +52,9 @@ public class DevicesController : ControllerBase
     [HttpDelete("{deviceId}")]
     public async Task<IActionResult> UnlinkDevice(string deviceId, CancellationToken cancellationToken)
     {
-        var userId = Guid.NewGuid(); // FIXME: Use real user id from claims
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var result = await _devicesWriteService.UnlinkDeviceAsync(userId, deviceId, cancellationToken);
+
 
         if (result.IsSuccess)
             return Ok();
