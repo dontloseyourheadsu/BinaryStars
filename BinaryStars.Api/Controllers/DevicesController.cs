@@ -11,10 +11,12 @@ namespace BinaryStars.Api.Controllers;
 public class DevicesController : ControllerBase
 {
     private readonly IDevicesReadService _devicesReadService;
+    private readonly IDevicesWriteService _devicesWriteService;
 
-    public DevicesController(IDevicesReadService devicesReadService)
+    public DevicesController(IDevicesReadService devicesReadService, IDevicesWriteService devicesWriteService)
     {
         _devicesReadService = devicesReadService;
+        _devicesWriteService = devicesWriteService;
     }
 
     [HttpGet]
@@ -23,13 +25,42 @@ public class DevicesController : ControllerBase
         // For now, using a mocked UserId since we rely on cookie auth or similar.
         // In real app, we extract userId from claims.
         // var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var userId = Guid.NewGuid();
+        var userId = Guid.NewGuid(); // FIXME: Use real user id
 
         var result = await _devicesReadService.GetDevicesAsync(userId, cancellationToken);
         if (result.IsSuccess)
         {
             return Ok(result.Value);
         }
+        return BadRequest(result.Errors);
+    }
+
+    [HttpPost("register")]
+    public async Task<IActionResult> RegisterDevice([FromBody] RegisterDeviceRequest request, CancellationToken cancellationToken)
+    {
+        var userId = Guid.NewGuid(); // FIXME: Use real user id from claims
+        var result = await _devicesWriteService.RegisterDeviceAsync(userId, request, cancellationToken);
+
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        // If failure is due to limit reached, we still return Ok but maybe with a warning?
+        // User asked: "if limit is reached, then this device will only have access to view devices... still leave them a button... if they say no..."
+        // The service returns Failure if limit reached with message "Max device limit reached. This device will have view-only access."
+        // We can treat this specific failure as a specialized response code or just BadRequest
+
+        return BadRequest(result.Errors);
+    }
+
+    [HttpDelete("{deviceId}")]
+    public async Task<IActionResult> UnlinkDevice(string deviceId, CancellationToken cancellationToken)
+    {
+        var userId = Guid.NewGuid(); // FIXME: Use real user id from claims
+        var result = await _devicesWriteService.UnlinkDeviceAsync(userId, deviceId, cancellationToken);
+
+        if (result.IsSuccess)
+            return Ok();
+
         return BadRequest(result.Errors);
     }
 }
