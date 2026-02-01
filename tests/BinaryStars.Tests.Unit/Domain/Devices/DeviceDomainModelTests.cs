@@ -26,6 +26,7 @@ public class DeviceDomainModelTests
             name,
             type,
             ipAddress,
+            null, // ipv6Address
             batteryLevel,
             isOnline,
             isSynced,
@@ -77,6 +78,7 @@ public class DeviceDomainModelTests
             name!,
             type,
             ipAddress!,
+            null, // ipv6Address
             batteryLevel,
             isOnline,
             isSynced,

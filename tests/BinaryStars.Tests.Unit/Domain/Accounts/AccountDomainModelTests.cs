@@ -14,8 +14,8 @@ public class AccountDomainModelTests
         var user = new User(Guid.NewGuid(), "testuser", "test@example.com", UserRole.Free);
         var devices = new List<Device>
         {
-            new Device("d1", "Phone", DeviceType.Android, "10.0.0.1", 100, true, true, "10M", "10M", DateTimeOffset.UtcNow),
-            new Device("d2", "Laptop", DeviceType.Linux, "10.0.0.2", 90, true, true, "50M", "50M", DateTimeOffset.UtcNow)
+            new Device("d1", "Phone", DeviceType.Android, "10.0.0.1", null, 100, true, true, "10M", "10M", DateTimeOffset.UtcNow),
+            new Device("d2", "Laptop", DeviceType.Linux, "10.0.0.2", null, 90, true, true, "50M", "50M", DateTimeOffset.UtcNow)
         };
 
         // Act
