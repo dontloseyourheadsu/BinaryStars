@@ -13,6 +13,7 @@ public class DeviceDbModelConfiguration : IEntityTypeConfiguration<DeviceDbModel
 
         builder.Property(d => d.Name).IsRequired().HasMaxLength(100);
         builder.Property(d => d.IpAddress).IsRequired();
+        builder.Property(d => d.Ipv6Address).IsRequired(false);
 
         builder.HasOne<UserDbModel>()
             .WithMany()

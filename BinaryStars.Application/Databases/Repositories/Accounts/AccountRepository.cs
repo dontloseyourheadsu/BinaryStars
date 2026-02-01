@@ -44,4 +44,14 @@ public class AccountRepository : IAccountRepository
         // LockoutOnFailure: false for now
         return _signInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: false);
     }
+
+    public Task<IList<UserLoginInfo>> GetLoginsAsync(UserDbModel user)
+    {
+        return _userManager.GetLoginsAsync(user);
+    }
+
+    public Task<IdentityResult> AddLoginAsync(UserDbModel user, UserLoginInfo login)
+    {
+        return _userManager.AddLoginAsync(user, login);
+    }
 }

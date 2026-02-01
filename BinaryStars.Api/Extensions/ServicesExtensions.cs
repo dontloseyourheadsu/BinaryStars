@@ -22,6 +22,7 @@ public static class ServicesExtensions
         services.AddScoped<IAccountsWriteService, AccountsWriteService>();
         services.AddScoped<IAccountsReadService, AccountsReadService>();
         services.AddScoped<IDevicesReadService, DevicesReadService>();
+        services.AddScoped<IDevicesWriteService, DevicesWriteService>();
         services.AddScoped<ExternalIdentityValidator>();
 
         // Validators

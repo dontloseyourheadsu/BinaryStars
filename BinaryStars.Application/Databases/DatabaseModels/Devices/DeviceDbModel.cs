@@ -8,6 +8,7 @@ public class DeviceDbModel
     public required string Name { get; set; }
     public DeviceType Type { get; set; }
     public required string IpAddress { get; set; }
+    public string? Ipv6Address { get; set; }
     public int BatteryLevel { get; set; }
     public bool IsOnline { get; set; }
     public bool IsSynced { get; set; }
