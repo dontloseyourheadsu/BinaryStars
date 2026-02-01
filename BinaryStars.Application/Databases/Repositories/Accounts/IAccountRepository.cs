@@ -10,4 +10,6 @@ public interface IAccountRepository
     Task<UserDbModel?> FindByNameAsync(string userName);
     Task<UserDbModel?> FindByIdAsync(Guid userId);
     Task<SignInResult> CheckPasswordSignInAsync(UserDbModel user, string password);
+    Task<IList<UserLoginInfo>> GetLoginsAsync(UserDbModel user);
+    Task<IdentityResult> AddLoginAsync(UserDbModel user, UserLoginInfo login);
 }

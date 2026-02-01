@@ -38,7 +38,6 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
-        <!-- Required for MSAL redirect handling -->
         <activity
             android:name="com.microsoft.identity.client.BrowserTabActivity"
             android:exported="true">

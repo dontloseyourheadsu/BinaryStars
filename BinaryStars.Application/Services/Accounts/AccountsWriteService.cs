@@ -3,6 +3,7 @@ using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Validators.Accounts;
 using BinaryStars.Domain;
 using BinaryStars.Domain.Accounts.Users;
+using Microsoft.AspNetCore.Identity;
 
 namespace BinaryStars.Application.Services.Accounts;
 
@@ -71,6 +72,13 @@ public class AccountsWriteService : IAccountsWriteService
         if (user == null)
             return Result<UserDbModel>.Failure("Invalid login attempt.");
 
+        // Enforce Single Auth Provider: If user has external logins, disallow password login.
+        var logins = await _accountRepository.GetLoginsAsync(user);
+        if (logins.Any())
+        {
+            return Result<UserDbModel>.Failure($"Please login with {logins.First().LoginProvider}.");
+        }
+
         var result = await _accountRepository.CheckPasswordSignInAsync(user, request.Password);
         if (result.Succeeded)
         {
@@ -91,7 +99,24 @@ public class AccountsWriteService : IAccountsWriteService
             return Result<UserDbModel>.Failure(externalResult.Error ?? "External token validation failed.");
 
         var user = await _accountRepository.FindByEmailAsync(externalResult.Email);
-        if (user == null)
+        if (user != null)
+        {
+            // Enforce Single Auth Provider
+            var logins = await _accountRepository.GetLoginsAsync(user);
+            if (logins.Any())
+            {
+                if (!logins.Any(l => l.LoginProvider.Equals(request.Provider, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Result<UserDbModel>.Failure($"Please login with {logins.First().LoginProvider}.");
+                }
+            }
+            else
+            {
+                // User exists but has no external logins -> Password user
+                return Result<UserDbModel>.Failure("Please login with Password.");
+            }
+        }
+        else
         {
             if (string.IsNullOrWhiteSpace(request.Username))
             {
@@ -112,8 +137,19 @@ public class AccountsWriteService : IAccountsWriteService
             {
                 return Result<UserDbModel>.Failure(createResult.Errors.Select(e => e.Description).ToList());
             }
+
+            // Link the external login
+            if (!string.IsNullOrEmpty(externalResult.ProviderSubject))
+            {
+                var addLoginResult = await _accountRepository.AddLoginAsync(user, new UserLoginInfo(request.Provider, externalResult.ProviderSubject, request.Provider));
+                if (!addLoginResult.Succeeded)
+                {
+                    return Result<UserDbModel>.Failure("Failed to link external login.");
+                }
+            }
         }
 
         return Result<UserDbModel>.Success(user);
     }
 }
+
