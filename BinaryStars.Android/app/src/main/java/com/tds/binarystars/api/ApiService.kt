@@ -4,6 +4,8 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.DELETE
+import retrofit2.http.Path
 
 interface ApiService {
     @POST("auth/login")
@@ -17,4 +19,10 @@ interface ApiService {
 
     @GET("devices")
     suspend fun getDevices(): Response<List<DeviceDto>>
+
+    @POST("devices/register")
+    suspend fun registerDevice(@Body request: RegisterDeviceRequest): Response<DeviceDto>
+
+    @DELETE("devices/{id}")
+    suspend fun unlinkDevice(@Path("id") deviceId: String): Response<Void>
 }
