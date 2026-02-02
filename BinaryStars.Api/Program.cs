@@ -1,8 +1,13 @@
 using BinaryStars.Api.Extensions;
+using BinaryStars.Api.Models;
+using BinaryStars.Api.Services;
 using BinaryStars.Application.Databases.DatabaseContexts;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Sinks.Grafana.Loki;
 using Scalar.AspNetCore;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,11 +30,33 @@ builder.Host.UseSerilog((context, configuration) =>
 builder.Services.AddDatabaseServices(builder.Configuration);
 builder.Services.AddApplicationServices();
 
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+builder.Services.AddScoped<JwtTokenService>();
+
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 
 // Add Authentication configuration
-builder.Services.AddAuthentication()
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var jwtSection = builder.Configuration.GetSection("Jwt");
+        var issuer = jwtSection["Issuer"];
+        var audience = jwtSection["Audience"];
+        var signingKey = jwtSection["SigningKey"];
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidateLifetime = true,
+            ValidIssuer = issuer,
+            ValidAudience = audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey ?? string.Empty)),
+            ClockSkew = TimeSpan.FromMinutes(2)
+        };
+    })
     .AddGoogle(options =>
     {
         options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "default_client_id";
