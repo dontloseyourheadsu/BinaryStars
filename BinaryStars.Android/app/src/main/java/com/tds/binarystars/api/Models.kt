@@ -13,8 +13,14 @@ data class RegisterRequest(
 
 data class ExternalAuthRequest(
     val provider: String,
-    val idToken: String,
+    val token: String,
     val username: String
+)
+
+data class AuthResponse(
+    val tokenType: String,
+    val accessToken: String,
+    val expiresIn: Int
 )
 
 data class DeviceDto(

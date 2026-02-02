@@ -23,8 +23,15 @@ Create a `appsettings.json` (or `appsettings.Development.json` for local dev) in
     "Microsoft": {
       "ClientId": "YOUR_CLIENT_ID",
       "TenantId": "YOUR_TENANT_ID",
-      "ClientSecret": "YOUR_CLIENT_SECRET"
+      "ClientSecret": "YOUR_CLIENT_SECRET",
+      "ApiAudience": "api://YOUR_CLIENT_ID"
     }
+  },
+  "Jwt": {
+    "Issuer": "BinaryStars.Api",
+    "Audience": "BinaryStars.Api",
+    "SigningKey": "YOUR_LONG_RANDOM_SECRET",
+    "ExpiresInMinutes": 120
   },
   "Serilog": {
     "LokiUrl": "http://localhost:3100"
@@ -46,6 +53,7 @@ Create a `appsettings.json` (or `appsettings.Development.json` for local dev) in
   - **Important**: The `ClientId` here MUST MATCH the **Web Client ID** you use in your Android/Web clients.
   - When the Android app sends an ID Token, it was issued for that specific Web Client ID. The API validates it by checking if the token's audience (`aud`) matches this `ClientId`.
 - **Authentication:Microsoft**: Settings for Microsoft Entra ID (Azure AD).
+- **Jwt**: Settings for the BinaryStars API access token that the server issues after login.
 
 ## Setting up OAuth Providers
 
@@ -67,6 +75,8 @@ For Google Sign-In to work across Android and API:
     ```
     _If these IDs do not match, the API will reject the token with `Invalid audience`._
 
+**Token flow:** Android obtains a **Google ID token** using the Web Client ID. The API validates that ID token and then issues a **BinaryStars API JWT** for app access.
+
 ### Microsoft OAuth (Azure AD) Setup
 
 1.  Go to the [Azure Portal](https://portal.azure.com/).
@@ -80,16 +90,23 @@ For Google Sign-In to work across Android and API:
     - **Application (client) ID** -> This is your `ClientId`.
     - **Directory (tenant) ID** -> This is your `TenantId`.
 6.  (Optional for simple auth, but likely needed) Navigate to **Certificates & secrets** > **New client secret**. Copy the **Value** (not the Secret ID).
-7.  Update `BinaryStars.Api/appsettings.json`:
+7.  **Expose an API** for your backend:
+    - Go to **Expose an API**.
+    - Set the **Application ID URI** to `api://<YOUR_CLIENT_ID>`.
+    - Add a scope named `access_as_user`.
+8.  Update `BinaryStars.Api/appsettings.json`:
     ```json
     "Authentication": {
       "Microsoft": {
         "ClientId": "YOUR_CLIENT_ID",
         "TenantId": "YOUR_TENANT_ID",
-        "ClientSecret": "YOUR_CLIENT_SECRET"
+        "ClientSecret": "YOUR_CLIENT_SECRET",
+        "ApiAudience": "api://YOUR_CLIENT_ID"
       }
     }
     ```
+
+**Token flow:** Android requests an **access token** for the API scope `api://<YOUR_CLIENT_ID>/access_as_user`. The API validates that access token and then issues a **BinaryStars API JWT** for app access.
 
 ## Running the API
 
@@ -116,7 +133,7 @@ The API currently exposes **Identity** endpoints for user management and authent
 
 ### Authentication Endpoints
 
-These endpoints are provided by ASP.NET Core Identity.
+These endpoints return a **BinaryStars API JWT** after a successful login or registration.
 
 #### 1. Register a new user
 
@@ -148,8 +165,7 @@ Obtain a Bearer token to access protected resources.
   {
     "tokenType": "Bearer",
     "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-    "expiresIn": 3600,
-    "refreshToken": "..."
+    "expiresIn": 7200
   }
   ```
 
@@ -168,6 +184,51 @@ Obtain a Bearer token to access protected resources.
 
 To access protected endpoints (once they are created), include the `accessToken` in the `Authorization` header:
 
+````
+Authorization: Bearer <your-api-access-token>
+
+**Azure: Expose an API (Add a scope)**
+
+When you open the **Expose an API** blade for your backend app in the Azure Portal, click **Add a scope** and fill the form as follows:
+
+- **Scope name**: `access_as_user`
+- **Who can consent?**: `Admins and users`
+- **Admin consent display name**: `Access BinaryStars API`
+- **Admin consent description**: `Allows the app to access the BinaryStars API on behalf of the signed-in user.`
+- **User consent display name**: `Access BinaryStars API`
+- **User consent description**: `Allow this app to access the BinaryStars API on your behalf.`
+- **State**: `Enabled`
+
+After creating the scope:
+
+- Note the full scope string you will request from clients: `api://c727b034-bd56-4e8a-a749-5ea51a9a1c73/access_as_user` (replace the GUID with your Application (client) ID if different).
+- Optionally click **Add a client application** to authorize your Android/Web client applications directly.
+- If you want tenant-wide consent, use **Grant admin consent** in **API permissions** or the Enterprise Applications blade to approve the permission for all users.
+
+Update `BinaryStars.Api/appsettings.json`:
+
+```json
+  "Authentication": {
+    "Microsoft": {
+      "ClientId": "<YOUR_CLIENT_ID>",
+      "TenantId": "<YOUR_TENANT_ID>",
+      "ApiAudience": "api://<YOUR_CLIENT_ID>"
+    }
+  },
+  "Jwt": {
+    "Issuer": "BinaryStars.Api",
+    "Audience": "BinaryStars.Api",
+    "SigningKey": "<ADD_LONG_RANDOM_SIGNING_KEY>",
+    "ExpiresInMinutes": 120
+  }
+````
+
+Notes:
+
+- Android should request the scope `api://<YOUR_CLIENT_ID>/access_as_user` when signing in (see the Android README and `LoginActivity.kt`).
+- Make sure your Android app's MSAL config includes the correct redirect URI (raw, unencoded signature hash) and the app registration contains the Android platform entry with that signature hash.
+- The API will validate incoming Microsoft tokens against the `ApiAudience` and issuer configured in the `ExternalIdentityValidator` logic.
+
 ```
-Authorization: Bearer <your-access-token>
+
 ```

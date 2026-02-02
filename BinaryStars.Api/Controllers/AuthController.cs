@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Identity;
 using BinaryStars.Application.Services.Accounts;
-using BinaryStars.Application.Services.Devices;
 using BinaryStars.Application.Validators.Accounts;
-using BinaryStars.Application.Databases.DatabaseModels.Accounts;
+using BinaryStars.Api.Services;
+using Microsoft.Extensions.Logging;
 
 namespace BinaryStars.Api.Controllers;
 
@@ -12,17 +11,17 @@ namespace BinaryStars.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAccountsWriteService _accountsWriteService;
-    private readonly IAccountsReadService _accountsReadService;
-    private readonly SignInManager<UserDbModel> _signInManager;
+    private readonly JwtTokenService _tokenService;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAccountsWriteService accountsWriteService,
-        IAccountsReadService accountsReadService,
-        SignInManager<UserDbModel> signInManager)
+        JwtTokenService tokenService,
+        ILogger<AuthController> logger)
     {
         _accountsWriteService = accountsWriteService;
-        _accountsReadService = accountsReadService;
-        _signInManager = signInManager;
+        _tokenService = tokenService;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -31,8 +30,8 @@ public class AuthController : ControllerBase
         var result = await _accountsWriteService.RegisterAsync(request, cancellationToken);
         if (result.IsSuccess)
         {
-            await _signInManager.SignInAsync(result.Value, isPersistent: true);
-            return Ok();
+            var authResponse = _tokenService.CreateToken(result.Value);
+            return Ok(authResponse);
         }
         return BadRequest(result.Errors);
     }
@@ -43,8 +42,8 @@ public class AuthController : ControllerBase
         var result = await _accountsWriteService.LoginAsync(request, cancellationToken);
         if (result.IsSuccess)
         {
-            await _signInManager.SignInAsync(result.Value, isPersistent: true);
-            return Ok();
+            var authResponse = _tokenService.CreateToken(result.Value);
+            return Ok(authResponse);
         }
         return Unauthorized(result.Errors);
     }
@@ -55,8 +54,14 @@ public class AuthController : ControllerBase
         var result = await _accountsWriteService.ExternalLoginAsync(request, cancellationToken);
         if (result.IsSuccess)
         {
-            await _signInManager.SignInAsync(result.Value, isPersistent: true);
-            return Ok();
+            var authResponse = _tokenService.CreateToken(result.Value);
+            return Ok(authResponse);
+        }
+
+        // Log the failure reasons to help debug token validation / provider issues
+        if (result.Errors != null && result.Errors.Any())
+        {
+            _logger.LogWarning("External login failed for provider={Provider}: {Errors}", request.Provider, string.Join("; ", result.Errors));
         }
 
         return Unauthorized(result.Errors);

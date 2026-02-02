@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.RegisterRequest
 import kotlinx.coroutines.launch
 
@@ -37,6 +38,7 @@ class RegisterActivity : AppCompatActivity() {
                 try {
                     val response = ApiClient.apiService.register(RegisterRequest(username, email, password))
                     if (response.isSuccessful) {
+                        response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
                         Toast.makeText(this@RegisterActivity, "Registration Successful", Toast.LENGTH_SHORT).show()
                         finish() // Go back to Login
                     } else {

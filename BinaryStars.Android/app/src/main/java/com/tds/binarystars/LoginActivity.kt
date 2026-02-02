@@ -22,6 +22,7 @@ import com.microsoft.identity.client.ISingleAccountPublicClientApplication
 import com.microsoft.identity.client.PublicClientApplication
 import com.microsoft.identity.client.exception.MsalException
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.ExternalAuthRequest
 import com.tds.binarystars.api.LoginRequest
 import kotlinx.coroutines.launch
@@ -95,6 +96,7 @@ class LoginActivity : AppCompatActivity() {
                 try {
                     val response = ApiClient.apiService.login(LoginRequest(emailOrUsername, password))
                     if (response.isSuccessful) {
+                        response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
                         Toast.makeText(this@LoginActivity, "Login Successful", Toast.LENGTH_SHORT).show()
                         startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                         finish()
@@ -156,8 +158,9 @@ class LoginActivity : AppCompatActivity() {
         }
 
         btnLoginMicrosoft.setOnClickListener {
-            // 1. Add 'openid' and 'profile' to ensure you get identity claims
-            val scopes = arrayOf("user.read", "openid", "profile")
+            // Request access token for the BinaryStars API scope
+            val apiScope = "api://${BuildConfig.MICROSOFT_CLIENT_ID}/access_as_user"
+            val scopes = arrayOf(apiScope, "openid", "profile")
             Log.d(logTag, "Starting Microsoft sign-in")
 
             val app = msalApp
@@ -194,12 +197,13 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun submitExternalLogin(provider: String, idToken: String) {
+    private fun submitExternalLogin(provider: String, token: String) {
         lifecycleScope.launch {
             try {
                 // Initial login with empty username
-                val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, idToken, ""))
+                val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, token, ""))
                 if (response.isSuccessful) {
+                    response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
                     Log.d(logTag, "External login succeeded for provider=$provider")
                     toast("Login Successful")
                     startActivity(Intent(this@LoginActivity, MainActivity::class.java))
@@ -212,7 +216,7 @@ class LoginActivity : AppCompatActivity() {
                     if (errorBody != null && errorBody.contains("Registration required")) {
                          val intent = Intent(this@LoginActivity, UsernameInputActivity::class.java)
                          intent.putExtra("EXTRA_PROVIDER", provider)
-                         intent.putExtra("EXTRA_ID_TOKEN", idToken)
+                        intent.putExtra("EXTRA_TOKEN", token)
                          startActivity(intent)
                     } else {
                         toast("Login Failed: Authentication rejected")
