@@ -1,9 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
-using System.Net.Http.Headers;
-using System.Text.Json.Nodes;
+using System.Security.Claims;
 using Google.Apis.Auth;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using BinaryStars.Application.Validators.Accounts;
 
 namespace BinaryStars.Application.Services.Accounts;
@@ -12,26 +14,34 @@ public class ExternalIdentityValidator
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<ExternalIdentityValidator> _logger;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfigurationManager<OpenIdConnectConfiguration>? _microsoftConfigManager;
 
-    public ExternalIdentityValidator(IConfiguration configuration, ILogger<ExternalIdentityValidator> logger, IHttpClientFactory httpClientFactory)
+    public ExternalIdentityValidator(IConfiguration configuration, ILogger<ExternalIdentityValidator> logger)
     {
         _configuration = configuration;
         _logger = logger;
-        _httpClientFactory = httpClientFactory;
+
+        var tenantId = _configuration["Authentication:Microsoft:TenantId"];
+        if (!string.IsNullOrWhiteSpace(tenantId))
+        {
+            var metadataAddress = $"https://login.microsoftonline.com/{tenantId}/v2.0/.well-known/openid-configuration";
+            _microsoftConfigManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+                metadataAddress,
+                new OpenIdConnectConfigurationRetriever());
+        }
     }
 
     public async Task<ExternalIdentityValidationResult> ValidateAsync(ExternalLoginRequest request, CancellationToken cancellationToken)
     {
         return request.Provider.ToLowerInvariant() switch
         {
-            "google" => await ValidateGoogleAsync(request.IdToken, cancellationToken),
-            "microsoft" => await ValidateMicrosoftAsync(request.IdToken, cancellationToken),
+            "google" => await ValidateGoogleAsync(request.Token, cancellationToken),
+            "microsoft" => await ValidateMicrosoftAsync(request.Token, cancellationToken),
             _ => ExternalIdentityValidationResult.Failure("Unsupported provider")
         };
     }
 
-    private async Task<ExternalIdentityValidationResult> ValidateGoogleAsync(string idToken, CancellationToken cancellationToken)
+    private async Task<ExternalIdentityValidationResult> ValidateGoogleAsync(string token, CancellationToken cancellationToken)
     {
         var clientId = _configuration["Authentication:Google:ClientId"];
         if (string.IsNullOrWhiteSpace(clientId))
@@ -39,7 +49,7 @@ public class ExternalIdentityValidator
 
         try
         {
-            var payload = await GoogleJsonWebSignature.ValidateAsync(idToken, new GoogleJsonWebSignature.ValidationSettings
+            var payload = await GoogleJsonWebSignature.ValidateAsync(token, new GoogleJsonWebSignature.ValidationSettings
             {
                 Audience = new List<string> { clientId }
             });
@@ -58,35 +68,58 @@ public class ExternalIdentityValidator
 
     private async Task<ExternalIdentityValidationResult> ValidateMicrosoftAsync(string token, CancellationToken cancellationToken)
     {
-        // For Microsoft, the Android client is likely sending an Access Token for Graph API (User.Read scope).
-        // Standard JWT validation fails because it's either an encrypted JWT or has a Graph Audience.
-        // We validate it by calling the Microsoft Graph API /me endpoint.
-
         try
         {
-            var client = _httpClientFactory.CreateClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://graph.microsoft.com/v1.0/me");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            if (_microsoftConfigManager == null)
+                return ExternalIdentityValidationResult.Failure("Microsoft tenant id missing");
 
-            var response = await client.SendAsync(request, cancellationToken);
+            var tenantId = _configuration["Authentication:Microsoft:TenantId"];
+            var clientId = _configuration["Authentication:Microsoft:ClientId"];
+            var apiAudience = _configuration["Authentication:Microsoft:ApiAudience"];
 
-            if (!response.IsSuccessStatusCode)
+            var audiences = new List<string>();
+            if (!string.IsNullOrWhiteSpace(apiAudience))
+                audiences.Add(apiAudience);
+            if (!string.IsNullOrWhiteSpace(clientId))
             {
-                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("Microsoft Graph API call failed with status {StatusCode}: {Content}", response.StatusCode, errorContent);
-                return ExternalIdentityValidationResult.Failure("Microsoft token validation failed (Graph API).");
+                audiences.Add(clientId);
+                audiences.Add($"api://{clientId}");
             }
 
-            var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var json = JsonNode.Parse(content);
+            if (audiences.Count == 0)
+                return ExternalIdentityValidationResult.Failure("Microsoft API audience not configured");
 
-            var email = json?["mail"]?.ToString() ?? json?["userPrincipalName"]?.ToString();
-            var id = json?["id"]?.ToString();
+            var config = await _microsoftConfigManager.GetConfigurationAsync(cancellationToken);
+            var validationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuers = new[]
+                {
+                    $"https://login.microsoftonline.com/{tenantId}/v2.0",
+                    $"https://sts.windows.net/{tenantId}/"
+                },
+                ValidateAudience = true,
+                ValidAudiences = audiences,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys = config.SigningKeys,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(2)
+            };
+
+            var handler = new JwtSecurityTokenHandler();
+            var principal = handler.ValidateToken(token, validationParameters, out _);
+
+            var email = principal.FindFirstValue(ClaimTypes.Email)
+                        ?? principal.FindFirstValue("preferred_username")
+                        ?? principal.FindFirstValue("upn");
+            var subject = principal.FindFirstValue("oid")
+                          ?? principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                          ?? principal.FindFirstValue("sub");
 
             if (string.IsNullOrWhiteSpace(email))
-                return ExternalIdentityValidationResult.Failure("Microsoft token valid but missing email");
+                return ExternalIdentityValidationResult.Failure("Microsoft token valid but missing email/username claim");
 
-            return ExternalIdentityValidationResult.Success(email, id);
+            return ExternalIdentityValidationResult.Success(email, subject);
         }
         catch (Exception ex)
         {
