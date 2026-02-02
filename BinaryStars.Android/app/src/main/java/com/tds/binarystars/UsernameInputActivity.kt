@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.ExternalAuthRequest
 import kotlinx.coroutines.launch
 
@@ -21,9 +22,9 @@ class UsernameInputActivity : AppCompatActivity() {
         setContentView(R.layout.activity_username_input)
 
         val provider = intent.getStringExtra("EXTRA_PROVIDER")
-        val idToken = intent.getStringExtra("EXTRA_ID_TOKEN")
+        val token = intent.getStringExtra("EXTRA_TOKEN")
 
-        if (provider == null || idToken == null) {
+        if (provider == null || token == null) {
             Toast.makeText(this, "Error: Missing auth data", Toast.LENGTH_SHORT).show()
             finish()
             return
@@ -41,8 +42,9 @@ class UsernameInputActivity : AppCompatActivity() {
 
             lifecycleScope.launch {
                 try {
-                    val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, idToken, username))
+                    val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, token, username))
                     if (response.isSuccessful) {
+                        response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
                         Toast.makeText(this@UsernameInputActivity, "Registration Successful", Toast.LENGTH_SHORT).show()
                         val intent = Intent(this@UsernameInputActivity, MainActivity::class.java)
                         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)

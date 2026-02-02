@@ -9,13 +9,13 @@ import retrofit2.http.Path
 
 interface ApiService {
     @POST("auth/login")
-    suspend fun login(@Body request: LoginRequest): Response<Void>
+    suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
 
     @POST("auth/register")
-    suspend fun register(@Body request: RegisterRequest): Response<Void>
+    suspend fun register(@Body request: RegisterRequest): Response<AuthResponse>
 
     @POST("auth/login/external")
-    suspend fun externalLogin(@Body request: ExternalAuthRequest): Response<Void>
+    suspend fun externalLogin(@Body request: ExternalAuthRequest): Response<AuthResponse>
 
     @GET("devices")
     suspend fun getDevices(): Response<List<DeviceDto>>
