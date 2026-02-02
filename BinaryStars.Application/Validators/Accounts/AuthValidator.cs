@@ -4,7 +4,7 @@ namespace BinaryStars.Application.Validators.Accounts;
 
 public record RegisterRequest(string Username, string Email, string Password);
 public record LoginRequest(string Email, string Password);
-public record ExternalLoginRequest(string Provider, string IdToken, string Username);
+public record ExternalLoginRequest(string Provider, string Token, string Username);
 
 public class AuthValidator
 {
@@ -44,8 +44,8 @@ public class AuthValidator
         if (string.IsNullOrWhiteSpace(request.Provider))
             errors.Add("Provider is required.");
 
-        if (string.IsNullOrWhiteSpace(request.IdToken))
-            errors.Add("IdToken is required.");
+        if (string.IsNullOrWhiteSpace(request.Token))
+            errors.Add("Token is required.");
 
         // Username is optional for initial login check, but required for registration.
         // We will handle the requirement logic in the service.
