@@ -17,8 +17,8 @@ import com.tds.binarystars.activities.CreateNoteActivity
 import com.tds.binarystars.adapter.NotesAdapter
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.NoteResponse
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -68,37 +68,33 @@ class NotesFragment : Fragment() {
     }
 
     private fun loadNotes() {
-        GlobalScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
+            progressBar.visibility = View.VISIBLE
             try {
-                progressBar.visibility = View.VISIBLE
-                val response = ApiClient.apiService.getNotes()
+                val response = withContext(Dispatchers.IO) { ApiClient.apiService.getNotes() }
 
-                withContext(Dispatchers.Main) {
-                    progressBar.visibility = View.GONE
+                progressBar.visibility = View.GONE
 
-                    if (response.isSuccessful && response.body() != null) {
-                        notes.clear()
-                        notes.addAll(response.body()!!)
-                        adapter.notifyDataSetChanged()
+                if (response.isSuccessful && response.body() != null) {
+                    notes.clear()
+                    notes.addAll(response.body()!!)
+                    adapter.notifyDataSetChanged()
 
-                        if (notes.isEmpty()) {
-                            emptyStateText.visibility = View.VISIBLE
-                            recyclerView.visibility = View.GONE
-                        } else {
-                            emptyStateText.visibility = View.GONE
-                            recyclerView.visibility = View.VISIBLE
-                        }
-                    } else {
-                        emptyStateText.text = "Failed to load notes"
+                    if (notes.isEmpty()) {
                         emptyStateText.visibility = View.VISIBLE
+                        recyclerView.visibility = View.GONE
+                    } else {
+                        emptyStateText.visibility = View.GONE
+                        recyclerView.visibility = View.VISIBLE
                     }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    progressBar.visibility = View.GONE
-                    emptyStateText.text = "Error: ${e.message}"
+                } else {
+                    emptyStateText.text = "Failed to load notes"
                     emptyStateText.visibility = View.VISIBLE
                 }
+            } catch (e: Exception) {
+                progressBar.visibility = View.GONE
+                emptyStateText.text = "Error: ${e.message}"
+                emptyStateText.visibility = View.VISIBLE
             }
         }
     }

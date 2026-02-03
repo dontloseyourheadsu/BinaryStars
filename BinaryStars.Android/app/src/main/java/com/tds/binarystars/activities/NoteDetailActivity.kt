@@ -5,15 +5,15 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.widget.addTextChangedListener
+import androidx.lifecycle.lifecycleScope
 import com.tds.binarystars.R
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.NoteType
 import com.tds.binarystars.api.UpdateNoteRequestDto
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -35,8 +35,18 @@ class NoteDetailActivity : AppCompatActivity() {
     private var content: String = ""
     private var createdAt: String = ""
     private var updatedAt: String = ""
-    private var isEditing = false
-    private var isEdited = false
+
+    private val editContentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val updatedContent = result.data?.getStringExtra(ContentEditorActivity.EXTRA_CONTENT) ?: ""
+            if (updatedContent != content) {
+                contentDisplay.setText(updatedContent)
+                saveNote(updatedContent)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,102 +80,71 @@ class NoteDetailActivity : AppCompatActivity() {
         contentDisplay.setText(content)
         contentDisplay.isEnabled = false
 
-        contentDisplay.addTextChangedListener {
-            if (isEditing) isEdited = true
-        }
-
         val createdFormatted = formatDate(createdAt)
         val updatedFormatted = formatDate(updatedAt)
         tvTimestamps.text = "Created: $createdFormatted\nUpdated: $updatedFormatted"
 
-        // Add toolbar
         setSupportActionBar(findViewById(R.id.toolbar))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = noteName
 
-        btnEdit.setOnClickListener { toggleEditMode() }
+        btnEdit.setOnClickListener { openEditor() }
         btnEditDevice.setOnClickListener { changeDevice() }
     }
 
-    private fun toggleEditMode() {
-        if (!isEditing) {
-            isEditing = true
-            contentDisplay.isEnabled = true
-            contentDisplay.requestFocus()
-            btnEdit.text = "Save"
-        } else {
-            saveNote()
-        }
+    private fun openEditor() {
+        val intent = ContentEditorActivity.newIntent(
+            context = this,
+            contentType = contentType,
+            initialContent = content
+        )
+        editContentLauncher.launch(intent)
     }
 
-    private fun saveNote() {
-        val updatedContent = contentDisplay.text.toString()
-        if (updatedContent == content && !isEdited) {
-            isEditing = false
-            contentDisplay.isEnabled = false
-            btnEdit.text = "Edit"
-            return
-        }
-
+    private fun saveNote(updatedContent: String) {
         val request = UpdateNoteRequestDto(noteName, updatedContent)
 
-        GlobalScope.launch {
+        lifecycleScope.launch {
             try {
                 progressBar.visibility = View.VISIBLE
-                val response = ApiClient.apiService.updateNote(noteId, request)
+                val response = withContext(Dispatchers.IO) { ApiClient.apiService.updateNote(noteId, request) }
+                progressBar.visibility = View.GONE
 
-                withContext(Dispatchers.Main) {
-                    progressBar.visibility = View.GONE
-
-                    if (response.isSuccessful) {
-                        content = updatedContent
-                        isEdited = false
-                        isEditing = false
-                        contentDisplay.isEnabled = false
-                        btnEdit.text = "Edit"
-                        Toast.makeText(this@NoteDetailActivity, "Note saved successfully", Toast.LENGTH_SHORT).show()
-                        // Update timestamp
-                        val currentTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).format(Date())
-                        updatedAt = currentTime
-                        tvTimestamps.text = "Created: ${formatDate(createdAt)}\nUpdated: ${formatDate(currentTime)}"
-                    } else {
-                        Toast.makeText(this@NoteDetailActivity, "Failed to save note", Toast.LENGTH_SHORT).show()
-                    }
+                if (response.isSuccessful) {
+                    content = updatedContent
+                    Toast.makeText(this@NoteDetailActivity, "Note saved successfully", Toast.LENGTH_SHORT).show()
+                    val currentTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).format(Date())
+                    updatedAt = currentTime
+                    tvTimestamps.text = "Created: ${formatDate(createdAt)}\nUpdated: ${formatDate(currentTime)}"
+                } else {
+                    Toast.makeText(this@NoteDetailActivity, "Failed to save note", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    progressBar.visibility = View.GONE
-                    Toast.makeText(this@NoteDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+                progressBar.visibility = View.GONE
+                Toast.makeText(this@NoteDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun changeDevice() {
-        // Load available devices and let user select one to re-sign the note
-        GlobalScope.launch {
+        lifecycleScope.launch {
             try {
-                val response = ApiClient.apiService.getDevices()
-                withContext(Dispatchers.Main) {
-                    if (response.isSuccessful && response.body() != null) {
-                        val devices = response.body()!!
-                        val deviceNames = devices.map { it.name }.toTypedArray()
+                val response = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
+                if (response.isSuccessful && response.body() != null) {
+                    val devices = response.body()!!
+                    val deviceNames = devices.map { it.name }.toTypedArray()
 
-                        AlertDialog.Builder(this@NoteDetailActivity)
-                            .setTitle("Select Device to Sign Note")
-                            .setItems(deviceNames) { _, which ->
-                                deviceId = devices[which].id
-                                tvDeviceInfo.text = "Signed by Device: $deviceId"
-                                // In a real app, you'd re-sign the note with the new device
-                                Toast.makeText(this@NoteDetailActivity, "Note re-signed with ${devices[which].name}", Toast.LENGTH_SHORT).show()
-                            }
-                            .show()
-                    }
+                    AlertDialog.Builder(this@NoteDetailActivity)
+                        .setTitle("Select Device to Sign Note")
+                        .setItems(deviceNames) { _, which ->
+                            deviceId = devices[which].id
+                            tvDeviceInfo.text = "Signed by Device: $deviceId"
+                            Toast.makeText(this@NoteDetailActivity, "Note re-signed with ${devices[which].name}", Toast.LENGTH_SHORT).show()
+                        }
+                        .show()
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@NoteDetailActivity, "Error loading devices", Toast.LENGTH_SHORT).show()
-                }
+                Toast.makeText(this@NoteDetailActivity, "Error loading devices", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -189,7 +168,7 @@ class NoteDetailActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             android.R.id.home -> {
-                handleBackPress()
+                finish()
                 true
             }
             R.id.action_delete -> {
@@ -197,13 +176,11 @@ class NoteDetailActivity : AppCompatActivity() {
                 true
             }
             R.id.action_undo -> {
-                // TODO: Implement undo with history
-                Toast.makeText(this, "Undo functionality coming soon", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Undo is available in the editor", Toast.LENGTH_SHORT).show()
                 true
             }
             R.id.action_redo -> {
-                // TODO: Implement redo with history
-                Toast.makeText(this, "Redo functionality coming soon", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Redo is available in the editor", Toast.LENGTH_SHORT).show()
                 true
             }
             R.id.action_font_size -> {
@@ -219,21 +196,17 @@ class NoteDetailActivity : AppCompatActivity() {
             .setTitle("Delete Note?")
             .setMessage("This action cannot be undone.")
             .setPositiveButton("Delete") { _, _ ->
-                GlobalScope.launch {
+                lifecycleScope.launch {
                     try {
-                        val response = ApiClient.apiService.deleteNote(noteId)
-                        withContext(Dispatchers.Main) {
-                            if (response.isSuccessful) {
-                                Toast.makeText(this@NoteDetailActivity, "Note deleted", Toast.LENGTH_SHORT).show()
-                                finish()
-                            } else {
-                                Toast.makeText(this@NoteDetailActivity, "Failed to delete note", Toast.LENGTH_SHORT).show()
-                            }
+                        val response = withContext(Dispatchers.IO) { ApiClient.apiService.deleteNote(noteId) }
+                        if (response.isSuccessful) {
+                            Toast.makeText(this@NoteDetailActivity, "Note deleted", Toast.LENGTH_SHORT).show()
+                            finish()
+                        } else {
+                            Toast.makeText(this@NoteDetailActivity, "Failed to delete note", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@NoteDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
+                        Toast.makeText(this@NoteDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -255,23 +228,5 @@ class NoteDetailActivity : AppCompatActivity() {
                 contentDisplay.textSize = size
             }
             .show()
-    }
-
-    private fun handleBackPress() {
-        if (isEditing && isEdited) {
-            AlertDialog.Builder(this)
-                .setTitle("Save Changes?")
-                .setMessage("You have unsaved changes.")
-                .setPositiveButton("Save") { _, _ -> saveNote() }
-                .setNeutralButton("Discard") { _, _ -> finish() }
-                .setNegativeButton("Keep Editing", null)
-                .show()
-        } else {
-            finish()
-        }
-    }
-
-    override fun onBackPressed() {
-        handleBackPress()
     }
 }
