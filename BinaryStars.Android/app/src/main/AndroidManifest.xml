@@ -50,6 +50,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".activities.ContentEditorActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name="com.microsoft.identity.client.BrowserTabActivity"
             android:exported="true">
             <intent-filter>

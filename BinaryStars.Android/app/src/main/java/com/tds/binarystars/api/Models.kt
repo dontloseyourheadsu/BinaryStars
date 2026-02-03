@@ -23,10 +23,15 @@ data class AuthResponse(
     val expiresIn: Int
 )
 
+enum class DeviceTypeDto {
+    Linux,
+    Android
+}
+
 data class DeviceDto(
     val id: String,
     val name: String,
-    val type: Int, // Enum mapping needed
+    val type: DeviceTypeDto,
     val ipAddress: String,
     val batteryLevel: Int,
     val isOnline: Boolean,
