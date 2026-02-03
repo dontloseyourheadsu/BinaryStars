@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/carbon_bg_app">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/carbon_bg_panel"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Create Note"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/carbon_text_main" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/carbon_border" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="16dp">
+
+            <!-- Note Name -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Note Name"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingBottom="4dp" />
+
+            <EditText
+                android:id="@+id/etNoteName"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:background="@color/carbon_bg_panel"
+                android:paddingHorizontal="12dp"
+                android:hint="Enter note name"
+                android:textSize="14sp"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted" />
+
+            <!-- Device Selection -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Select Device"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingTop="16dp"
+                android:paddingBottom="4dp" />
+
+            <Spinner
+                android:id="@+id/spinnerDevice"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:background="@color/carbon_bg_panel" />
+
+            <!-- Note Type -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Content Type"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingTop="16dp"
+                android:paddingBottom="4dp" />
+
+            <Spinner
+                android:id="@+id/spinnerNoteType"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:background="@color/carbon_bg_panel" />
+
+            <!-- Content -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Content"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingTop="16dp"
+                android:paddingBottom="4dp" />
+
+            <EditText
+                android:id="@+id/etNoteContent"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="@color/carbon_bg_panel"
+                android:padding="12dp"
+                android:gravity="top"
+                android:hint="Enter note content"
+                android:textSize="14sp"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <Button
+            android:id="@+id/btnCancelNote"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Cancel"
+            android:backgroundTint="@color/carbon_bg_panel"
+            android:textColor="@color/carbon_text_main"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnSaveNote"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Save"
+            android:backgroundTint="@color/primary_purple"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/pbCreatingNote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
+
+</LinearLayout>
