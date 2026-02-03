@@ -6,206 +6,60 @@
     android:orientation="vertical"
     android:background="@color/carbon_bg_app">
 
-    <!-- App Header -->
+    <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="56dp"
         android:background="@color/carbon_bg_panel"
-        android:gravity="center"
-        android:orientation="horizontal">
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
 
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_star"
-            app:tint="@color/primary_purple"
-            android:layout_marginEnd="8dp"/>
-            
         <TextView
-            android:id="@+id/tvHeaderTitle"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="BinaryStars"
-            android:textSize="18sp"
+            android:layout_weight="1"
+            android:text="Notes"
+            android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@color/carbon_text_main" />
-            
+
+        <Button
+            android:id="@+id/btnCreateNote"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+ New"
+            android:backgroundTint="@color/primary_purple"
+            android:textColor="@android:color/white" />
     </LinearLayout>
-    
+
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/carbon_border"/>
-        
-    <ScrollView
+
+    <!-- Progress Bar -->
+    <ProgressBar
+        android:id="@+id/pbLoading"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-        
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="24dp">
-            
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Your Notes"
-                android:textAllCaps="true"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="@color/carbon_text_muted"
-                android:paddingHorizontal="16dp"
-                android:paddingTop="24dp"
-                android:paddingBottom="8dp"/>
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
 
-            <!-- Note 1 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:background="@color/carbon_bg_panel"
-                android:padding="12dp"
-                android:gravity="center_vertical">
-                
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Meeting Agenda"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/carbon_text_main"/>
-                        
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Discuss Q3 roadmap, marketing strategy..."
-                        android:textSize="12sp"
-                        android:textColor="@color/carbon_text_muted"
-                        android:maxLines="1"
-                        android:ellipsize="end"/>
-                        
-                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Last edited: 2 hours ago"
-                        android:textSize="10sp"
-                        android:textColor="@color/carbon_text_muted"
-                        android:paddingTop="4dp"/>
-                </LinearLayout>
-                
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/carbon_text_muted"/>
-            </LinearLayout>
-            <View android:background="@color/carbon_border" android:layout_width="match_parent" android:layout_height="1dp"/>
-            
-            <!-- Note 2 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:background="@color/carbon_bg_panel"
-                android:padding="12dp"
-                android:gravity="center_vertical">
-                
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Grocery List"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/carbon_text_main"/>
-                        
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Milk, Eggs, Bread, Coffee beans, Spinach"
-                        android:textSize="12sp"
-                        android:textColor="@color/carbon_text_muted"
-                        android:maxLines="1"
-                        android:ellipsize="end"/>
-                        
-                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Last edited: Yesterday"
-                        android:textSize="10sp"
-                        android:textColor="@color/carbon_text_muted"
-                        android:paddingTop="4dp"/>
-                </LinearLayout>
+    <!-- Empty State -->
+    <TextView
+        android:id="@+id/tvEmptyState"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:text="No notes yet. Create one to get started!"
+        android:textSize="16sp"
+        android:textColor="@color/carbon_text_muted"
+        android:visibility="gone" />
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/carbon_text_muted"/>
-            </LinearLayout>
-            <View android:background="@color/carbon_border" android:layout_width="match_parent" android:layout_height="1dp"/>
-            
-             <!-- Note 3 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:background="@color/carbon_bg_panel"
-                android:padding="12dp"
-                android:gravity="center_vertical">
-                
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Project Ideas"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/carbon_text_main"/>
-                        
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="New app for tracking star systems..."
-                        android:textSize="12sp"
-                        android:textColor="@color/carbon_text_muted"
-                        android:maxLines="1"
-                        android:ellipsize="end"/>
-                        
-                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Last edited: Oct 24"
-                        android:textSize="10sp"
-                        android:textColor="@color/carbon_text_muted"
-                        android:paddingTop="4dp"/>
-                </LinearLayout>
+    <!-- Notes List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvNotes"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/carbon_text_muted"/>
-            </LinearLayout>
-            <View android:background="@color/carbon_border" android:layout_width="match_parent" android:layout_height="1dp"/>
-            
-        </LinearLayout>
-    </ScrollView>
 </LinearLayout>

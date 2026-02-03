@@ -1,5 +1,6 @@
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using BinaryStars.Application.Databases.Repositories.Devices;
+using BinaryStars.Application.Databases.Repositories.Notes;
 using BinaryStars.Domain;
 using BinaryStars.Domain.Devices;
 using BinaryStars.Domain.Errors.Devices;
@@ -17,11 +18,13 @@ public interface IDevicesWriteService
 public class DevicesWriteService : IDevicesWriteService
 {
     private readonly IDeviceRepository _deviceRepository;
+    private readonly INotesRepository _notesRepository;
     private const int MaxDevices = 5;
 
-    public DevicesWriteService(IDeviceRepository deviceRepository)
+    public DevicesWriteService(IDeviceRepository deviceRepository, INotesRepository notesRepository)
     {
         _deviceRepository = deviceRepository;
+        _notesRepository = notesRepository;
     }
 
     public async Task<Result<Device>> RegisterDeviceAsync(Guid userId, RegisterDeviceRequest request, CancellationToken cancellationToken)
@@ -87,6 +90,9 @@ public class DevicesWriteService : IDevicesWriteService
 
         if (device.UserId != userId)
             return Result.Failure("Unauthorized.");
+
+        // Delete all notes associated with this device
+        await _notesRepository.DeleteByDeviceIdAsync(deviceId, cancellationToken);
 
         await _deviceRepository.DeleteAsync(device, cancellationToken);
         await _deviceRepository.SaveChangesAsync(cancellationToken);

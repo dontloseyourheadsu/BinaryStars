@@ -35,3 +35,31 @@ data class DeviceDto(
     val wifiDownloadSpeed: String,
     val lastSeen: String
 )
+
+// Notes Models
+enum class NoteType {
+    Plaintext,
+    Markdown
+}
+
+data class NoteResponse(
+    val id: String,
+    val name: String,
+    val signedByDeviceId: String,
+    val contentType: NoteType,
+    val content: String,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+data class CreateNoteRequest(
+    val name: String,
+    val deviceId: String,
+    val contentType: NoteType,
+    val content: String
+)
+
+data class UpdateNoteRequestDto(
+    val name: String,
+    val content: String
+)

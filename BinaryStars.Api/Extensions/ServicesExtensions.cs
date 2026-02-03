@@ -2,8 +2,10 @@ using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
+using BinaryStars.Application.Databases.Repositories.Notes;
 using BinaryStars.Application.Services.Accounts;
 using BinaryStars.Application.Services.Devices;
+using BinaryStars.Application.Services.Notes;
 using BinaryStars.Application.Validators.Accounts;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -17,12 +19,15 @@ public static class ServicesExtensions
         // Repositories
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
+        services.AddScoped<INotesRepository, NotesRepository>();
 
         // Services
         services.AddScoped<IAccountsWriteService, AccountsWriteService>();
         services.AddScoped<IAccountsReadService, AccountsReadService>();
         services.AddScoped<IDevicesReadService, DevicesReadService>();
         services.AddScoped<IDevicesWriteService, DevicesWriteService>();
+        services.AddScoped<INotesReadService, NotesReadService>();
+        services.AddScoped<INotesWriteService, NotesWriteService>();
         services.AddScoped<ExternalIdentityValidator>();
 
         // Validators

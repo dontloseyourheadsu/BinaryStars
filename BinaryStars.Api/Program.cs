@@ -3,6 +3,7 @@ using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Sinks.Grafana.Loki;
@@ -78,7 +79,7 @@ builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
-// Ensure DB created
+// Apply EF Core migrations in development
 if (app.Environment.IsDevelopment())
 {
     using (var scope = app.Services.CreateScope())
@@ -90,7 +91,7 @@ if (app.Environment.IsDevelopment())
         {
             try
             {
-                db.Database.EnsureCreated();
+                db.Database.Migrate();
                 break;
             }
             catch (Exception)

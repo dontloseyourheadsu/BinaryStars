@@ -111,3 +111,6 @@ UpgradeLog*.htm
 
 # Windows shortcuts
 *.lnk
+
+
+bin\Debug

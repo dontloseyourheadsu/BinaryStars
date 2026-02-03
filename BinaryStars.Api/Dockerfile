@@ -12,17 +12,18 @@ EXPOSE 8081
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
+ENV MSBuildDisableFileSystemGlobbing=false
 WORKDIR /src
 COPY ["BinaryStars.Api/BinaryStars.Api.csproj", "BinaryStars.Api/"]
 RUN dotnet restore "./BinaryStars.Api/BinaryStars.Api.csproj"
 COPY . .
 WORKDIR "/src/BinaryStars.Api"
-RUN dotnet build "./BinaryStars.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet build "./BinaryStars.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:MSBuildDisableFileSystemGlobbing=false
 
 # This stage is used to publish the service project to be copied to the final stage
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./BinaryStars.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "./BinaryStars.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:MSBuildDisableFileSystemGlobbing=false
 
 # This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
 FROM base AS final
