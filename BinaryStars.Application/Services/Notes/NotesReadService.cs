@@ -3,6 +3,7 @@ using BinaryStars.Application.Mappers.Notes;
 using BinaryStars.Domain;
 using BinaryStars.Domain.Notes;
 using BinaryStars.Domain.Errors.Notes;
+using System.Text.Json;
 
 namespace BinaryStars.Application.Services.Notes;
 
@@ -78,9 +79,32 @@ public class NotesReadService : INotesReadService
             note.Name,
             note.SignedByDeviceId,
             note.ContentType,
-            note.Content,
+            ExtractContentForResponse(note.Content),
             note.CreatedAt,
             note.UpdatedAt
         );
+    }
+
+    private static string ExtractContentForResponse(string storedContent)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(storedContent);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("text", out var textElement))
+            {
+                return textElement.GetString() ?? string.Empty;
+            }
+
+            if (doc.RootElement.ValueKind == JsonValueKind.String)
+            {
+                return doc.RootElement.GetString() ?? string.Empty;
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore parse errors and return raw content
+        }
+
+        return storedContent;
     }
 }
