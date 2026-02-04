@@ -8,6 +8,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tds.binarystars.R
 import com.tds.binarystars.api.NoteResponse
 import java.text.SimpleDateFormat
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 import java.util.*
 
 class NotesAdapter(
@@ -23,16 +25,12 @@ class NotesAdapter(
 
         fun bind(note: NoteResponse) {
             noteName.text = note.name
-            deviceName.text = "Device: ${note.signedByDeviceId}"
+            val deviceLabel = note.signedByDeviceName ?: ""
+            val displayDevice = if (deviceLabel.isNotBlank()) deviceLabel else note.signedByDeviceId
+            deviceName.text = "Device: $displayDevice"
             noteTypeTag.text = note.contentType.name
-            
-            try {
-                val formatter = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-                val date = formatter.format(Date(note.createdAt.toLong()))
-                createdDate.text = date
-            } catch (e: Exception) {
-                createdDate.text = note.createdAt
-            }
+
+            createdDate.text = formatDate(note.createdAt)
 
             itemView.setOnClickListener {
                 onNoteClick(note)
@@ -51,4 +49,18 @@ class NotesAdapter(
     }
 
     override fun getItemCount() = notes.size
+
+    private fun formatDate(isoDate: String): String {
+        return try {
+            val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm", Locale.getDefault())
+            OffsetDateTime.parse(isoDate).format(formatter)
+        } catch (e: Exception) {
+            try {
+                val legacyFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+                legacyFormat.format(Date(isoDate.toLong()))
+            } catch (ignored: Exception) {
+                isoDate
+            }
+        }
+    }
 }

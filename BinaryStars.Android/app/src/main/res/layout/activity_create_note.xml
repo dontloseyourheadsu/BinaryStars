@@ -107,17 +107,24 @@
                 android:paddingTop="16dp"
                 android:paddingBottom="4dp" />
 
-            <EditText
-                android:id="@+id/etNoteContent"
+            <Button
+                android:id="@+id/btnEditContent"
                 android:layout_width="match_parent"
-                android:layout_height="200dp"
+                android:layout_height="wrap_content"
+                android:text="Edit Content"
+                android:backgroundTint="@color/primary_purple"
+                android:textColor="@android:color/white" />
+
+            <TextView
+                android:id="@+id/tvContentPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:background="@color/carbon_bg_panel"
                 android:padding="12dp"
-                android:gravity="top"
-                android:hint="Enter note content"
-                android:textSize="14sp"
-                android:textColor="@color/carbon_text_main"
-                android:textColorHint="@color/carbon_text_muted" />
+                android:text="No content yet"
+                android:textSize="12sp"
+                android:textColor="@color/carbon_text_muted" />
 
         </LinearLayout>
     </ScrollView>

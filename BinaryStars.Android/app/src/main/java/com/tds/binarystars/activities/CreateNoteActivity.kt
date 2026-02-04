@@ -3,16 +3,17 @@ package com.tds.binarystars.activities
 import android.os.Bundle
 import android.view.View
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.addTextChangedListener
+import androidx.lifecycle.lifecycleScope
 import com.tds.binarystars.R
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.CreateNoteRequest
 import com.tds.binarystars.api.DeviceDto
 import com.tds.binarystars.api.NoteType
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -20,7 +21,8 @@ class CreateNoteActivity : AppCompatActivity() {
     private lateinit var etNoteName: EditText
     private lateinit var noteTypeSpinner: Spinner
     private lateinit var deviceSpinner: Spinner
-    private lateinit var contentEditor: EditText
+    private lateinit var btnEditContent: Button
+    private lateinit var tvContentPreview: TextView
     private lateinit var btnSave: Button
     private lateinit var btnCancel: Button
     private lateinit var progressBar: ProgressBar
@@ -28,6 +30,18 @@ class CreateNoteActivity : AppCompatActivity() {
     private var devices: List<DeviceDto> = emptyList()
     private var selectedContentType = NoteType.Plaintext
     private var isEdited = false
+    private var noteContent: String = ""
+
+    private val editContentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val updatedContent = result.data?.getStringExtra(ContentEditorActivity.EXTRA_CONTENT) ?: ""
+            noteContent = updatedContent
+            isEdited = true
+            updateContentPreview()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +50,8 @@ class CreateNoteActivity : AppCompatActivity() {
         etNoteName = findViewById(R.id.etNoteName)
         noteTypeSpinner = findViewById(R.id.spinnerNoteType)
         deviceSpinner = findViewById(R.id.spinnerDevice)
-        contentEditor = findViewById(R.id.etNoteContent)
+        btnEditContent = findViewById(R.id.btnEditContent)
+        tvContentPreview = findViewById(R.id.tvContentPreview)
         btnSave = findViewById(R.id.btnSaveNote)
         btnCancel = findViewById(R.id.btnCancelNote)
         progressBar = findViewById(R.id.pbCreatingNote)
@@ -45,7 +60,8 @@ class CreateNoteActivity : AppCompatActivity() {
         loadDevices()
 
         etNoteName.addTextChangedListener { isEdited = true }
-        contentEditor.addTextChangedListener { isEdited = true }
+
+        btnEditContent.setOnClickListener { openContentEditor() }
 
         btnSave.setOnClickListener { saveNote() }
         btnCancel.setOnClickListener { handleCancel() }
@@ -71,30 +87,26 @@ class CreateNoteActivity : AppCompatActivity() {
     }
 
     private fun updateEditorUI() {
-        // Customize the editor UI based on type
         if (selectedContentType == NoteType.Markdown) {
-            contentEditor.hint = "Enter markdown content here..."
+            btnEditContent.text = "Edit Markdown Content"
         } else {
-            contentEditor.hint = "Enter plaintext content here..."
+            btnEditContent.text = "Edit Plaintext Content"
         }
+        updateContentPreview()
     }
 
     private fun loadDevices() {
-        GlobalScope.launch {
+        lifecycleScope.launch {
             try {
-                val response = ApiClient.apiService.getDevices()
-                withContext(Dispatchers.Main) {
-                    if (response.isSuccessful && response.body() != null) {
-                        devices = response.body()!!
-                        setupDeviceSpinner()
-                    } else {
-                        Toast.makeText(this@CreateNoteActivity, "Failed to load devices", Toast.LENGTH_SHORT).show()
-                    }
+                val response = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
+                if (response.isSuccessful && response.body() != null) {
+                    devices = response.body()!!
+                    setupDeviceSpinner()
+                } else {
+                    Toast.makeText(this@CreateNoteActivity, "Failed to load devices", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@CreateNoteActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+                Toast.makeText(this@CreateNoteActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -111,7 +123,7 @@ class CreateNoteActivity : AppCompatActivity() {
 
     private fun saveNote() {
         val name = etNoteName.text.toString().trim()
-        val content = contentEditor.text.toString()
+        val content = noteContent
 
         if (name.isEmpty()) {
             Toast.makeText(this, "Note name cannot be empty", Toast.LENGTH_SHORT).show()
@@ -131,29 +143,47 @@ class CreateNoteActivity : AppCompatActivity() {
             content = content
         )
 
-        GlobalScope.launch {
+        lifecycleScope.launch {
             try {
                 progressBar.visibility = android.view.View.VISIBLE
-                val response = ApiClient.apiService.createNote(request)
+                val response = withContext(Dispatchers.IO) { ApiClient.apiService.createNote(request) }
+                progressBar.visibility = android.view.View.GONE
 
-                withContext(Dispatchers.Main) {
-                    progressBar.visibility = android.view.View.GONE
-
-                    if (response.isSuccessful) {
-                        Toast.makeText(this@CreateNoteActivity, "Note created successfully", Toast.LENGTH_SHORT).show()
-                        isEdited = false
-                        finish()
-                    } else {
-                        Toast.makeText(this@CreateNoteActivity, "Failed to create note", Toast.LENGTH_SHORT).show()
-                    }
+                if (response.isSuccessful) {
+                    Toast.makeText(this@CreateNoteActivity, "Note created successfully", Toast.LENGTH_SHORT).show()
+                    isEdited = false
+                    finish()
+                } else {
+                    Toast.makeText(this@CreateNoteActivity, "Failed to create note", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    progressBar.visibility = android.view.View.GONE
-                    Toast.makeText(this@CreateNoteActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+                progressBar.visibility = android.view.View.GONE
+                Toast.makeText(this@CreateNoteActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun openContentEditor() {
+        val intent = ContentEditorActivity.newIntent(
+            context = this,
+            contentType = selectedContentType,
+            initialContent = noteContent
+        )
+        editContentLauncher.launch(intent)
+    }
+
+    private fun updateContentPreview() {
+        if (noteContent.isBlank()) {
+            tvContentPreview.text = "No content yet"
+            return
+        }
+
+        val preview = if (noteContent.length > 140) {
+            noteContent.substring(0, 140) + "..."
+        } else {
+            noteContent
+        }
+        tvContentPreview.text = preview
     }
 
     private fun handleCancel() {

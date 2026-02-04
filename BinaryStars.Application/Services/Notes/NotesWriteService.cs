@@ -4,6 +4,7 @@ using BinaryStars.Application.Mappers.Notes;
 using BinaryStars.Domain;
 using BinaryStars.Domain.Notes;
 using BinaryStars.Domain.Errors.Notes;
+using System.Text.Json;
 
 namespace BinaryStars.Application.Services.Notes;
 
@@ -43,7 +44,7 @@ public class NotesWriteService : INotesWriteService
         );
 
         var dbModel = note.ToDb();
-        dbModel.Content = request.Content;
+        dbModel.Content = NormalizeContentForStorage(request.Content);
 
         await _notesRepository.AddAsync(dbModel, cancellationToken);
         await _notesRepository.SaveChangesAsync(cancellationToken);
@@ -52,8 +53,9 @@ public class NotesWriteService : INotesWriteService
             dbModel.Id,
             dbModel.Name,
             dbModel.SignedByDeviceId,
+            device.Name,
             dbModel.ContentType,
-            dbModel.Content,
+            ExtractContentForResponse(dbModel.Content),
             dbModel.CreatedAt,
             dbModel.UpdatedAt
         ));
@@ -70,18 +72,21 @@ public class NotesWriteService : INotesWriteService
             return Result<NoteResponse>.Failure(NoteErrors.NoteNotOwnedByUser);
 
         note.Name = request.Name;
-        note.Content = request.Content;
+        note.Content = NormalizeContentForStorage(request.Content);
         note.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _notesRepository.UpdateAsync(note, cancellationToken);
         await _notesRepository.SaveChangesAsync(cancellationToken);
 
+        var device = await _deviceRepository.GetByIdAsync(note.SignedByDeviceId, cancellationToken);
+        var deviceName = device?.Name ?? "Unknown Device";
         return Result<NoteResponse>.Success(new NoteResponse(
             note.Id,
             note.Name,
             note.SignedByDeviceId,
+            deviceName,
             note.ContentType,
-            note.Content,
+            ExtractContentForResponse(note.Content),
             note.CreatedAt,
             note.UpdatedAt
         ));
@@ -101,5 +106,33 @@ public class NotesWriteService : INotesWriteService
         await _notesRepository.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
+    }
+
+    private static string NormalizeContentForStorage(string content)
+    {
+        return JsonSerializer.Serialize(new { text = content });
+    }
+
+    private static string ExtractContentForResponse(string storedContent)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(storedContent);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("text", out var textElement))
+            {
+                return textElement.GetString() ?? string.Empty;
+            }
+
+            if (doc.RootElement.ValueKind == JsonValueKind.String)
+            {
+                return doc.RootElement.GetString() ?? string.Empty;
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore parse errors and return raw content
+        }
+
+        return storedContent;
     }
 }

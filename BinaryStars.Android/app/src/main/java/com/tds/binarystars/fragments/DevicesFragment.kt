@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tds.binarystars.R
 import com.tds.binarystars.adapter.DevicesAdapter
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 import kotlinx.coroutines.launch
@@ -63,7 +64,10 @@ class DevicesFragment : Fragment() {
                         Device(
                             id = dto.id,
                             name = dto.name,
-                            type = if (dto.type == 0) DeviceType.LINUX else DeviceType.ANDROID,
+                            type = when (dto.type) {
+                                DeviceTypeDto.Linux -> DeviceType.LINUX
+                                DeviceTypeDto.Android -> DeviceType.ANDROID
+                            },
                             ipAddress = dto.ipAddress,
                             batteryLevel = dto.batteryLevel,
                             isOnline = dto.isOnline,

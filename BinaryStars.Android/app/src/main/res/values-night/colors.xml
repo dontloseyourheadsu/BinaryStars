@@ -23,6 +23,10 @@
     <color name="carbon_status_online">#23A559</color>
     <color name="carbon_status_offline">#80848E</color>
 
+    <!-- Editor toolbar colors -->
+    <color name="editor_toolbar_bg">@color/carbon_bg_panel</color>
+    <color name="editor_icon">#E5E7EB</color>
+
     <!-- Legacy / Material backward compatibility -->
     <color name="purple_200">#bb86fc</color>
     <color name="purple_500">#6200ee</color>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Widget.BinaryStars.EditorIconButton" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:minHeight">36dp</item>
+        <item name="android:minWidth">36dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="iconTint">@color/editor_icon</item>
+        <item name="iconSize">20dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="textAllCaps">false</item>
+        <item name="android:textColor">@color/editor_icon</item>
+        <item name="backgroundTint">@color/editor_toolbar_bg</item>
+        <item name="rippleColor">@color/carbon_border</item>
+    </style>
+</resources>

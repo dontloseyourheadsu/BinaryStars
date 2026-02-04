@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/carbon_bg_app">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/carbon_bg_panel"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+
+        <TextView
+            android:id="@+id/tvEditorTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Content Editor"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/carbon_text_main" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/carbon_border" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="16dp">
+
+            <!-- Toolbar -->
+            <HorizontalScrollView
+                android:id="@+id/layoutMarkdownTools"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:paddingTop="4dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnUndo"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:icon="@drawable/ic_undo_24"
+                        android:contentDescription="Undo" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRedo"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_redo_24"
+                        android:contentDescription="Redo" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="0dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnBold"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:icon="@drawable/ic_format_bold_24"
+                        android:contentDescription="Bold" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnItalic"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_format_italic_24"
+                        android:contentDescription="Italic" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnUnderline"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_format_underlined_24"
+                        android:contentDescription="Underline" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnStrike"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_strikethrough_s_24"
+                        android:contentDescription="Strikethrough" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnH1"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_looks_one_24"
+                        android:contentDescription="Heading 1" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnH2"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_looks_two_24"
+                        android:contentDescription="Heading 2" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnH3"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_looks_3_24"
+                        android:contentDescription="Heading 3" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnH4"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_looks_4_24"
+                        android:contentDescription="Heading 4" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnH5"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_looks_5_24"
+                        android:contentDescription="Heading 5" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnH6"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_looks_6_24"
+                        android:contentDescription="Heading 6" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnList"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_format_list_bulleted_24"
+                        android:contentDescription="Bulleted list" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnNumberedList"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_format_list_numbered_24"
+                        android:contentDescription="Numbered list" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTaskList"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_checklist_24"
+                        android:contentDescription="Task list" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTable"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_table_chart_24"
+                        android:contentDescription="Table" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCode"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_code_24"
+                        android:contentDescription="Code block" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnInlineCode"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_data_object_24"
+                        android:contentDescription="Inline code" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnQuote"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_format_quote_24"
+                        android:contentDescription="Quote" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnLink"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_link_24"
+                        android:contentDescription="Link" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnHorizontalRule"
+                        style="@style/Widget.BinaryStars.EditorIconButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        app:icon="@drawable/ic_horizontal_rule_24"
+                        android:contentDescription="Horizontal rule" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <!-- Editor -->
+            <EditText
+                android:id="@+id/etEditorContent"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="@color/carbon_bg_panel"
+                android:padding="12dp"
+                android:gravity="top"
+                android:hint="Start writing..."
+                android:textSize="14sp"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted" />
+
+            <!-- Markdown Preview -->
+            <TextView
+                android:id="@+id/tvPreviewLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Preview"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_muted"
+                android:paddingTop="12dp"
+                android:paddingBottom="4dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvMarkdownPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/carbon_bg_panel"
+                android:padding="12dp"
+                android:textSize="14sp"
+                android:textColor="@color/carbon_text_main"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <Button
+            android:id="@+id/btnCancel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Cancel"
+            android:backgroundTint="@color/carbon_bg_panel"
+            android:textColor="@color/carbon_text_main"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Save"
+            android:backgroundTint="@color/primary_purple"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+</LinearLayout>
