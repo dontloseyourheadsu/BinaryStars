@@ -53,6 +53,7 @@ public class NotesWriteService : INotesWriteService
             dbModel.Id,
             dbModel.Name,
             dbModel.SignedByDeviceId,
+            device.Name,
             dbModel.ContentType,
             ExtractContentForResponse(dbModel.Content),
             dbModel.CreatedAt,
@@ -77,10 +78,13 @@ public class NotesWriteService : INotesWriteService
         await _notesRepository.UpdateAsync(note, cancellationToken);
         await _notesRepository.SaveChangesAsync(cancellationToken);
 
+        var device = await _deviceRepository.GetByIdAsync(note.SignedByDeviceId, cancellationToken);
+        var deviceName = device?.Name ?? "Unknown Device";
         return Result<NoteResponse>.Success(new NoteResponse(
             note.Id,
             note.Name,
             note.SignedByDeviceId,
+            deviceName,
             note.ContentType,
             ExtractContentForResponse(note.Content),
             note.CreatedAt,
