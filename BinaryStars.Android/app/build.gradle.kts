@@ -76,6 +76,11 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.play.services.location)
+    implementation(libs.markwon.core)
+    implementation(libs.markwon.ext.strikethrough)
+    implementation(libs.markwon.ext.tables)
+    implementation(libs.markwon.ext.tasklist)
+    implementation(libs.markwon.html)
     implementation(libs.microsoft.msal) {
         exclude(group = "io.opentelemetry")
         exclude(group = "com.microsoft.device.display", module = "display-mask")

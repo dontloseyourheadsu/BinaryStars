@@ -42,6 +42,10 @@ googleid = { group = "com.google.android.libraries.identity.googleid", name = "g
 microsoft-msal = { group = "com.microsoft.identity.client", name = "msal", version.ref = "msal" }
 opentelemetry-api = { group = "io.opentelemetry", name = "opentelemetry-api", version.ref = "otelApi" }
 markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
+markwon-ext-strikethrough = { group = "io.noties.markwon", name = "ext-strikethrough", version.ref = "markwon" }
+markwon-ext-tables = { group = "io.noties.markwon", name = "ext-tables", version.ref = "markwon" }
+markwon-ext-tasklist = { group = "io.noties.markwon", name = "ext-tasklist", version.ref = "markwon" }
+markwon-html = { group = "io.noties.markwon", name = "html", version.ref = "markwon" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

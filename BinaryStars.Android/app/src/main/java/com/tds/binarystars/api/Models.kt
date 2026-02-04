@@ -51,6 +51,7 @@ data class NoteResponse(
     val id: String,
     val name: String,
     val signedByDeviceId: String,
+    val signedByDeviceName: String?,
     val contentType: NoteType,
     val content: String,
     val createdAt: String,

@@ -9,12 +9,15 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.HorizontalScrollView
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.tds.binarystars.R
 import com.tds.binarystars.api.NoteType
 import io.noties.markwon.Markwon
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.ext.tasklist.TaskListPlugin
+import io.noties.markwon.html.HtmlPlugin
 
 class ContentEditorActivity : AppCompatActivity() {
     private lateinit var editorContent: EditText
@@ -22,7 +25,6 @@ class ContentEditorActivity : AppCompatActivity() {
     private lateinit var btnSave: Button
     private lateinit var btnCancel: Button
 
-    private lateinit var plaintextTools: LinearLayout
     private lateinit var markdownTools: HorizontalScrollView
     private lateinit var previewLabel: TextView
     private lateinit var markdownPreview: TextView
@@ -32,13 +34,23 @@ class ContentEditorActivity : AppCompatActivity() {
 
     private lateinit var btnBold: Button
     private lateinit var btnItalic: Button
+    private lateinit var btnUnderline: Button
+    private lateinit var btnStrike: Button
     private lateinit var btnH1: Button
     private lateinit var btnH2: Button
+    private lateinit var btnH3: Button
+    private lateinit var btnH4: Button
+    private lateinit var btnH5: Button
+    private lateinit var btnH6: Button
     private lateinit var btnList: Button
+    private lateinit var btnNumberedList: Button
+    private lateinit var btnTaskList: Button
     private lateinit var btnTable: Button
     private lateinit var btnCode: Button
+    private lateinit var btnInlineCode: Button
     private lateinit var btnQuote: Button
     private lateinit var btnLink: Button
+    private lateinit var btnHorizontalRule: Button
 
     private var contentType: NoteType = NoteType.Plaintext
     private var history: MutableList<String> = mutableListOf()
@@ -57,7 +69,6 @@ class ContentEditorActivity : AppCompatActivity() {
         btnSave = findViewById(R.id.btnSave)
         btnCancel = findViewById(R.id.btnCancel)
 
-        plaintextTools = findViewById(R.id.layoutPlaintextTools)
         markdownTools = findViewById(R.id.layoutMarkdownTools)
         previewLabel = findViewById(R.id.tvPreviewLabel)
         markdownPreview = findViewById(R.id.tvMarkdownPreview)
@@ -67,13 +78,23 @@ class ContentEditorActivity : AppCompatActivity() {
 
         btnBold = findViewById(R.id.btnBold)
         btnItalic = findViewById(R.id.btnItalic)
+        btnUnderline = findViewById(R.id.btnUnderline)
+        btnStrike = findViewById(R.id.btnStrike)
         btnH1 = findViewById(R.id.btnH1)
         btnH2 = findViewById(R.id.btnH2)
+        btnH3 = findViewById(R.id.btnH3)
+        btnH4 = findViewById(R.id.btnH4)
+        btnH5 = findViewById(R.id.btnH5)
+        btnH6 = findViewById(R.id.btnH6)
         btnList = findViewById(R.id.btnList)
+        btnNumberedList = findViewById(R.id.btnNumberedList)
+        btnTaskList = findViewById(R.id.btnTaskList)
         btnTable = findViewById(R.id.btnTable)
         btnCode = findViewById(R.id.btnCode)
+        btnInlineCode = findViewById(R.id.btnInlineCode)
         btnQuote = findViewById(R.id.btnQuote)
         btnLink = findViewById(R.id.btnLink)
+        btnHorizontalRule = findViewById(R.id.btnHorizontalRule)
 
         val initialContent = intent.getStringExtra(EXTRA_CONTENT) ?: ""
         editorContent.setText(initialContent)
@@ -87,18 +108,23 @@ class ContentEditorActivity : AppCompatActivity() {
     private fun setupEditorUi() {
         if (contentType == NoteType.Markdown) {
             tvEditorTitle.text = "Markdown Editor"
-            plaintextTools.visibility = View.VISIBLE
             markdownTools.visibility = View.VISIBLE
             previewLabel.visibility = View.VISIBLE
             markdownPreview.visibility = View.VISIBLE
-            markwon = Markwon.create(this)
+            markwon = Markwon.builder(this)
+                .usePlugin(StrikethroughPlugin.create())
+                .usePlugin(TablePlugin.create(this))
+                .usePlugin(TaskListPlugin.create(this))
+                .usePlugin(HtmlPlugin.create())
+                .build()
             renderMarkdownPreview(editorContent.text.toString())
+            setMarkdownButtonsVisible(true)
         } else {
             tvEditorTitle.text = "Plaintext Editor"
-            plaintextTools.visibility = View.VISIBLE
-            markdownTools.visibility = View.GONE
+            markdownTools.visibility = View.VISIBLE
             previewLabel.visibility = View.GONE
             markdownPreview.visibility = View.GONE
+            setMarkdownButtonsVisible(false)
         }
     }
 
@@ -117,13 +143,23 @@ class ContentEditorActivity : AppCompatActivity() {
 
         btnBold.setOnClickListener { applySurrounding("**", "**") }
         btnItalic.setOnClickListener { applySurrounding("*", "*") }
-        btnH1.setOnClickListener { insertAtLineStart("# ") }
-        btnH2.setOnClickListener { insertAtLineStart("## ") }
+        btnUnderline.setOnClickListener { applySurrounding("<u>", "</u>") }
+        btnStrike.setOnClickListener { applySurrounding("~~", "~~") }
+        btnH1.setOnClickListener { insertHeading(1) }
+        btnH2.setOnClickListener { insertHeading(2) }
+        btnH3.setOnClickListener { insertHeading(3) }
+        btnH4.setOnClickListener { insertHeading(4) }
+        btnH5.setOnClickListener { insertHeading(5) }
+        btnH6.setOnClickListener { insertHeading(6) }
         btnList.setOnClickListener { insertAtLineStart("- ") }
+        btnNumberedList.setOnClickListener { insertAtLineStart("1. ") }
+        btnTaskList.setOnClickListener { insertAtLineStart("- [ ] ") }
         btnTable.setOnClickListener { insertTable() }
         btnCode.setOnClickListener { insertCodeBlock() }
+        btnInlineCode.setOnClickListener { applySurrounding("`", "`") }
         btnQuote.setOnClickListener { insertAtLineStart("> ") }
         btnLink.setOnClickListener { insertLink() }
+        btnHorizontalRule.setOnClickListener { insertHorizontalRule() }
 
         editorContent.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
@@ -156,10 +192,6 @@ class ContentEditorActivity : AppCompatActivity() {
             history = history.subList(0, historyIndex + 1).toMutableList()
         }
         history.add(text)
-        if (history.size > MAX_HISTORY) {
-            history.removeAt(0)
-        }
-        historyIndex = history.size - 1
     }
 
     private fun undo() {
@@ -205,6 +237,12 @@ class ContentEditorActivity : AppCompatActivity() {
         editorContent.setSelection(start + prefix.length)
     }
 
+    private fun insertHeading(level: Int) {
+        val safeLevel = level.coerceIn(1, 6)
+        val prefix = "#".repeat(safeLevel) + " "
+        insertAtLineStart(prefix)
+    }
+
     private fun insertTable() {
         val template = "| Column 1 | Column 2 |\n| --- | --- |\n| Value 1 | Value 2 |\n"
         insertTextAtCursor(template)
@@ -218,6 +256,34 @@ class ContentEditorActivity : AppCompatActivity() {
     private fun insertLink() {
         val template = "[text](url)"
         insertTextAtCursor(template)
+    }
+
+    private fun insertHorizontalRule() {
+        val template = "\n---\n"
+        insertTextAtCursor(template)
+    }
+
+    private fun setMarkdownButtonsVisible(visible: Boolean) {
+        val visibility = if (visible) View.VISIBLE else View.GONE
+        btnBold.visibility = visibility
+        btnItalic.visibility = visibility
+        btnUnderline.visibility = visibility
+        btnStrike.visibility = visibility
+        btnH1.visibility = visibility
+        btnH2.visibility = visibility
+        btnH3.visibility = visibility
+        btnH4.visibility = visibility
+        btnH5.visibility = visibility
+        btnH6.visibility = visibility
+        btnList.visibility = visibility
+        btnNumberedList.visibility = visibility
+        btnTaskList.visibility = visibility
+        btnTable.visibility = visibility
+        btnCode.visibility = visibility
+        btnInlineCode.visibility = visibility
+        btnQuote.visibility = visibility
+        btnLink.visibility = visibility
+        btnHorizontalRule.visibility = visibility
     }
 
     private fun insertTextAtCursor(textToInsert: String) {

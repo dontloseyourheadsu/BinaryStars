@@ -31,6 +31,7 @@ class NoteDetailActivity : AppCompatActivity() {
     private var noteId: String = ""
     private var noteName: String = ""
     private var deviceId: String = ""
+    private var deviceName: String = ""
     private var contentType: NoteType = NoteType.Plaintext
     private var content: String = ""
     private var createdAt: String = ""
@@ -68,6 +69,7 @@ class NoteDetailActivity : AppCompatActivity() {
         noteId = intent.getStringExtra("noteId") ?: ""
         noteName = intent.getStringExtra("noteName") ?: ""
         deviceId = intent.getStringExtra("deviceId") ?: ""
+        deviceName = intent.getStringExtra("deviceName") ?: ""
         contentType = NoteType.values()[intent.getIntExtra("contentType", 0)]
         content = intent.getStringExtra("content") ?: ""
         createdAt = intent.getStringExtra("createdAt") ?: ""
@@ -76,7 +78,8 @@ class NoteDetailActivity : AppCompatActivity() {
 
     private fun setupUI() {
         tvNoteName.text = noteName
-        tvDeviceInfo.text = "Signed by Device: $deviceId"
+        val displayDevice = if (deviceName.isNotBlank()) deviceName else deviceId
+        tvDeviceInfo.text = "Signed by Device: $displayDevice"
         contentDisplay.setText(content)
         contentDisplay.isEnabled = false
 
@@ -173,14 +176,6 @@ class NoteDetailActivity : AppCompatActivity() {
             }
             R.id.action_delete -> {
                 deleteNote()
-                true
-            }
-            R.id.action_undo -> {
-                Toast.makeText(this, "Undo is available in the editor", Toast.LENGTH_SHORT).show()
-                true
-            }
-            R.id.action_redo -> {
-                Toast.makeText(this, "Redo is available in the editor", Toast.LENGTH_SHORT).show()
                 true
             }
             R.id.action_font_size -> {

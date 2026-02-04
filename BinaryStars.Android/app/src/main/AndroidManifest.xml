@@ -17,6 +17,9 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.BinaryStars">
+        <meta-data
+            android:name="preloaded_fonts"
+            android:resource="@array/preloaded_fonts" />
         <activity
             android:name=".LoginActivity"
             android:exported="true"

@@ -50,6 +50,7 @@ class NotesFragment : Fragment() {
             intent.putExtra("noteId", note.id)
             intent.putExtra("noteName", note.name)
             intent.putExtra("deviceId", note.signedByDeviceId)
+            intent.putExtra("deviceName", note.signedByDeviceName ?: "")
             intent.putExtra("contentType", note.contentType.ordinal)
             intent.putExtra("content", note.content)
             intent.putExtra("createdAt", note.createdAt)
