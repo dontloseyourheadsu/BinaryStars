@@ -12,6 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
+    <PackageReference Include="Hangfire" Version="1.8.15" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.8" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" NoWarn="NU1605" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.MicrosoftAccount" Version="10.0.2" />
@@ -42,12 +45,21 @@
     <Compile Include="Controllers/AuthController.cs" />
     <Compile Include="Controllers/DebugController.cs" />
     <Compile Include="Controllers/DevicesController.cs" />
+    <Compile Include="Controllers/FileTransfersController.cs" />
     <Compile Include="Controllers/NotesController.cs" />
     <Compile Include="Extensions/ServicesExtensions.cs" />
     <Compile Include="Models/AccountProfileResponse.cs" />
     <Compile Include="Models/AuthResponse.cs" />
+    <Compile Include="Models/FileTransferSettings.cs" />
+    <Compile Include="Models/HangfireSettings.cs" />
     <Compile Include="Models/JwtSettings.cs" />
+    <Compile Include="Models/KafkaSettings.cs" />
+    <Compile Include="Services/FileTransferCleanupJob.cs" />
+    <Compile Include="Services/FileTransferJob.cs" />
+    <Compile Include="Services/FileTransferKafkaService.cs" />
     <Compile Include="Services/JwtTokenService.cs" />
+    <Compile Include="Services/KafkaAuthMode.cs" />
+    <Compile Include="Services/KafkaClientFactory.cs" />
   </ItemGroup>
 
   <ItemGroup>
