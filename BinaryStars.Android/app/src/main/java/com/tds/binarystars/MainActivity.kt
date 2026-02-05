@@ -18,6 +18,7 @@ import android.app.AlertDialog
 import android.widget.Toast
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
+import com.tds.binarystars.crypto.CryptoManager
 
 class MainActivity : AppCompatActivity() {
 
@@ -26,6 +27,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         checkDeviceRegistration()
+        checkPendingTransfers()
 
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
 
@@ -105,10 +107,12 @@ class MainActivity : AppCompatActivity() {
          // Need real IP logic here, using placeholders for now as implementing full Net logic is out of scope of single file
          val ipAddress = "127.0.0.1" 
          val ipv6Address = "::1"
+         val publicKey = CryptoManager.getPublicKeyBase64()
+         val publicKeyAlgorithm = CryptoManager.getPublicKeyAlgorithm()
 
          lifecycleScope.launch {
             try {
-                val req = RegisterDeviceRequest(deviceId, deviceName, ipAddress, ipv6Address)
+                val req = RegisterDeviceRequest(deviceId, deviceName, ipAddress, ipv6Address, publicKey, publicKeyAlgorithm)
                 val response = ApiClient.apiService.registerDevice(req)
                 if (response.isSuccessful) {
                     Toast.makeText(this@MainActivity, "Device Linked Successfully", Toast.LENGTH_SHORT).show()
@@ -141,6 +145,29 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch(e: Exception) {
                 Toast.makeText(this@MainActivity, "Error unlinking device", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun checkPendingTransfers() {
+        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.apiService.getPendingTransfers(deviceId)
+                if (response.isSuccessful && !response.body().isNullOrEmpty()) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("New Files")
+                        .setMessage("You have files ready to download.")
+                        .setPositiveButton("Open") { _, _ ->
+                            val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
+                            bottomNav.selectedItemId = R.id.nav_files
+                        }
+                        .setNegativeButton("Later", null)
+                        .show()
+                }
+            } catch (_: Exception) {
+                // Ignore network errors
             }
         }
     }

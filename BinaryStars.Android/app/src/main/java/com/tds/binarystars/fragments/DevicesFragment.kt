@@ -69,6 +69,8 @@ class DevicesFragment : Fragment() {
                                 DeviceTypeDto.Android -> DeviceType.ANDROID
                             },
                             ipAddress = dto.ipAddress,
+                            publicKey = dto.publicKey,
+                            publicKeyAlgorithm = dto.publicKeyAlgorithm,
                             batteryLevel = dto.batteryLevel,
                             isOnline = dto.isOnline,
                             isSynced = dto.isSynced,

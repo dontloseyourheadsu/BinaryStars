@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/carbon_bg_panel"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp">
+
+    <ImageView
+        android:id="@+id/ivTransferIcon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_icon_circle"
+        android:padding="8dp"
+        android:src="@drawable/ic_folder"
+        app:tint="@color/carbon_text_muted"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/tvTransferFileName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@color/carbon_text_main"
+        app:layout_constraintStart_toEndOf="@id/ivTransferIcon"
+        app:layout_constraintTop_toTopOf="@id/ivTransferIcon"
+        app:layout_constraintEnd_toStartOf="@id/ivStatusIcon"
+        android:layout_marginStart="12dp" />
+
+    <TextView
+        android:id="@+id/tvTransferMeta"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="@color/carbon_text_muted"
+        app:layout_constraintStart_toStartOf="@id/tvTransferFileName"
+        app:layout_constraintTop_toBottomOf="@id/tvTransferFileName"
+        app:layout_constraintEnd_toEndOf="@id/tvTransferFileName" />
+
+    <TextView
+        android:id="@+id/tvTransferStatus"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="@color/carbon_text_muted"
+        app:layout_constraintStart_toStartOf="@id/tvTransferFileName"
+        app:layout_constraintTop_toBottomOf="@id/tvTransferMeta"
+        app:layout_constraintEnd_toEndOf="@id/tvTransferFileName" />
+
+    <ImageView
+        android:id="@+id/ivStatusIcon"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@drawable/ic_check_circle"
+        android:visibility="gone"
+        app:tint="@color/primary_purple"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ProgressBar
+        android:id="@+id/pbTransfer"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/layoutTransferActions"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        app:layout_constraintTop_toBottomOf="@id/tvTransferStatus"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@id/tvTransferFileName"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnPrimaryAction"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Action"
+            android:textSize="12sp"
+            android:backgroundTint="@color/primary_purple"
+            android:textColor="@android:color/white" />
+
+        <Button
+            android:id="@+id/btnSecondaryAction"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="More"
+            android:textSize="12sp"
+            android:backgroundTint="@color/carbon_bg_panel"
+            android:textColor="@color/carbon_text_main"
+            android:layout_marginStart="8dp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/carbon_border"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
