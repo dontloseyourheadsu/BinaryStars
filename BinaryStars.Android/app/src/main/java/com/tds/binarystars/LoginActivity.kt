@@ -41,6 +41,14 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Auto-login if a valid token is stored
+        if (!AuthTokenStore.getToken().isNullOrBlank()) {
+            startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_login)
 
         // Agrega esto en onCreate para ver el hash real
@@ -96,7 +104,7 @@ class LoginActivity : AppCompatActivity() {
                 try {
                     val response = ApiClient.apiService.login(LoginRequest(emailOrUsername, password))
                     if (response.isSuccessful) {
-                        response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
+                        response.body()?.let { AuthTokenStore.setToken(it.accessToken, it.expiresIn) }
                         Toast.makeText(this@LoginActivity, "Login Successful", Toast.LENGTH_SHORT).show()
                         startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                         finish()
@@ -203,7 +211,7 @@ class LoginActivity : AppCompatActivity() {
                 // Initial login with empty username
                 val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, token, ""))
                 if (response.isSuccessful) {
-                    response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
+                    response.body()?.let { AuthTokenStore.setToken(it.accessToken, it.expiresIn) }
                     Log.d(logTag, "External login succeeded for provider=$provider")
                     toast("Login Successful")
                     startActivity(Intent(this@LoginActivity, MainActivity::class.java))

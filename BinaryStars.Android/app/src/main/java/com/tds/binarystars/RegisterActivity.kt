@@ -38,7 +38,7 @@ class RegisterActivity : AppCompatActivity() {
                 try {
                     val response = ApiClient.apiService.register(RegisterRequest(username, email, password))
                     if (response.isSuccessful) {
-                        response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
+                        response.body()?.let { AuthTokenStore.setToken(it.accessToken, it.expiresIn) }
                         Toast.makeText(this@RegisterActivity, "Registration Successful", Toast.LENGTH_SHORT).show()
                         finish() // Go back to Login
                     } else {

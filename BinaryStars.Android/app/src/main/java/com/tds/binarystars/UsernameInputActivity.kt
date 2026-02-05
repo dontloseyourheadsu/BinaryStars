@@ -44,7 +44,7 @@ class UsernameInputActivity : AppCompatActivity() {
                 try {
                     val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, token, username))
                     if (response.isSuccessful) {
-                        response.body()?.accessToken?.let { AuthTokenStore.setToken(it) }
+                            response.body()?.let { AuthTokenStore.setToken(it.accessToken, it.expiresIn) }
                         Toast.makeText(this@UsernameInputActivity, "Registration Successful", Toast.LENGTH_SHORT).show()
                         val intent = Intent(this@UsernameInputActivity, MainActivity::class.java)
                         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)

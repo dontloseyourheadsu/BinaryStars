@@ -37,11 +37,14 @@
 
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="Middleware/TokenRefreshMiddleware.cs" />
+    <Compile Include="Controllers/AccountsController.cs" />
     <Compile Include="Controllers/AuthController.cs" />
     <Compile Include="Controllers/DebugController.cs" />
     <Compile Include="Controllers/DevicesController.cs" />
     <Compile Include="Controllers/NotesController.cs" />
     <Compile Include="Extensions/ServicesExtensions.cs" />
+    <Compile Include="Models/AccountProfileResponse.cs" />
     <Compile Include="Models/AuthResponse.cs" />
     <Compile Include="Models/JwtSettings.cs" />
     <Compile Include="Services/JwtTokenService.cs" />

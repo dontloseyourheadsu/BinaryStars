@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit
 object ApiClient {
     // Emulator creates a loopback at 10.0.2.2 pointing to host's localhost
     private const val BASE_URL = "http://10.0.2.2:5004/api/"
+    private const val HEADER_ACCESS_TOKEN = "X-Access-Token"
+    private const val HEADER_ACCESS_TOKEN_EXPIRES = "X-Access-Token-ExpiresIn"
     
     private val client = OkHttpClient.Builder()
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
@@ -21,7 +23,13 @@ object ApiClient {
             } else {
                 chain.request()
             }
-            chain.proceed(request)
+            val response = chain.proceed(request)
+            val refreshedToken = response.header(HEADER_ACCESS_TOKEN)
+            val refreshedExpires = response.header(HEADER_ACCESS_TOKEN_EXPIRES)?.toIntOrNull()
+            if (!refreshedToken.isNullOrBlank() && refreshedExpires != null && refreshedExpires > 0) {
+                AuthTokenStore.setToken(refreshedToken, refreshedExpires)
+            }
+            response
         }
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
