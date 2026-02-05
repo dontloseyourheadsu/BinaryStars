@@ -33,6 +33,21 @@ public readonly record struct Device
     public string? Ipv6Address { get; init; }
 
     /// <summary>
+    /// Gets the public key for end-to-end encryption.
+    /// </summary>
+    public string? PublicKey { get; init; }
+
+    /// <summary>
+    /// Gets the algorithm for the public key.
+    /// </summary>
+    public string? PublicKeyAlgorithm { get; init; }
+
+    /// <summary>
+    /// Gets the timestamp the public key was last set.
+    /// </summary>
+    public DateTimeOffset? PublicKeyCreatedAt { get; init; }
+
+    /// <summary>
     /// Gets the current battery level of the device (0-100).
     /// </summary>
     public int BatteryLevel { get; init; }
@@ -87,7 +102,10 @@ public readonly record struct Device
         bool isSynced,
         string wifiUploadSpeed,
         string wifiDownloadSpeed,
-        DateTimeOffset lastSeen)
+        DateTimeOffset lastSeen,
+        string? publicKey = null,
+        string? publicKeyAlgorithm = null,
+        DateTimeOffset? publicKeyCreatedAt = null)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException(DeviceErrors.IdCannotBeNullOrWhitespace, nameof(id));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException(DeviceErrors.NameCannotBeNullOrWhitespace, nameof(name));
@@ -98,6 +116,9 @@ public readonly record struct Device
         Type = type;
         IpAddress = ipAddress;
         Ipv6Address = ipv6Address;
+        PublicKey = publicKey;
+        PublicKeyAlgorithm = publicKeyAlgorithm;
+        PublicKeyCreatedAt = publicKeyCreatedAt;
         BatteryLevel = batteryLevel;
         IsOnline = isOnline;
         IsSynced = isSynced;

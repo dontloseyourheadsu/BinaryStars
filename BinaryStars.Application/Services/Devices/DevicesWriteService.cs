@@ -1,13 +1,20 @@
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Notes;
+using BinaryStars.Application.Databases.Repositories.Transfers;
 using BinaryStars.Domain;
 using BinaryStars.Domain.Devices;
 using BinaryStars.Domain.Errors.Devices;
 
 namespace BinaryStars.Application.Services.Devices;
 
-public record RegisterDeviceRequest(string Id, string Name, string IpAddress, string? Ipv6Address);
+public record RegisterDeviceRequest(
+    string Id,
+    string Name,
+    string IpAddress,
+    string? Ipv6Address,
+    string? PublicKey,
+    string? PublicKeyAlgorithm);
 
 public interface IDevicesWriteService
 {
@@ -19,12 +26,17 @@ public class DevicesWriteService : IDevicesWriteService
 {
     private readonly IDeviceRepository _deviceRepository;
     private readonly INotesRepository _notesRepository;
+    private readonly IFileTransferRepository _fileTransferRepository;
     private const int MaxDevices = 5;
 
-    public DevicesWriteService(IDeviceRepository deviceRepository, INotesRepository notesRepository)
+    public DevicesWriteService(
+        IDeviceRepository deviceRepository,
+        INotesRepository notesRepository,
+        IFileTransferRepository fileTransferRepository)
     {
         _deviceRepository = deviceRepository;
         _notesRepository = notesRepository;
+        _fileTransferRepository = fileTransferRepository;
     }
 
     public async Task<Result<Device>> RegisterDeviceAsync(Guid userId, RegisterDeviceRequest request, CancellationToken cancellationToken)
@@ -41,6 +53,12 @@ public class DevicesWriteService : IDevicesWriteService
                 existingDevice.Name = request.Name;
                 existingDevice.IpAddress = request.IpAddress;
                 existingDevice.Ipv6Address = request.Ipv6Address;
+                existingDevice.PublicKey = request.PublicKey ?? existingDevice.PublicKey;
+                existingDevice.PublicKeyAlgorithm = request.PublicKeyAlgorithm ?? existingDevice.PublicKeyAlgorithm;
+                if (!string.IsNullOrWhiteSpace(request.PublicKey))
+                {
+                    existingDevice.PublicKeyCreatedAt = DateTimeOffset.UtcNow;
+                }
                 existingDevice.LastSeen = DateTimeOffset.UtcNow;
 
                 await _deviceRepository.SaveChangesAsync(cancellationToken);
@@ -66,6 +84,9 @@ public class DevicesWriteService : IDevicesWriteService
             Name = request.Name,
             IpAddress = request.IpAddress,
             Ipv6Address = request.Ipv6Address,
+            PublicKey = request.PublicKey,
+            PublicKeyAlgorithm = request.PublicKeyAlgorithm,
+            PublicKeyCreatedAt = string.IsNullOrWhiteSpace(request.PublicKey) ? null : DateTimeOffset.UtcNow,
             UserId = userId,
             BatteryLevel = 0,
             IsOnline = true,
@@ -91,6 +112,10 @@ public class DevicesWriteService : IDevicesWriteService
         if (device.UserId != userId)
             return Result.Failure("Unauthorized.");
 
+        var hasPendingTransfers = await _fileTransferRepository.HasPendingForDeviceAsync(deviceId, cancellationToken);
+        if (hasPendingTransfers)
+            return Result.Failure("Device has pending transfers and cannot be unlinked.");
+
         // Delete all notes associated with this device
         await _notesRepository.DeleteByDeviceIdAsync(deviceId, cancellationToken);
 
@@ -113,7 +138,10 @@ public class DevicesWriteService : IDevicesWriteService
             dbModel.IsSynced,
             dbModel.WifiUploadSpeed,
             dbModel.WifiDownloadSpeed,
-            dbModel.LastSeen
+            dbModel.LastSeen,
+            dbModel.PublicKey,
+            dbModel.PublicKeyAlgorithm,
+            dbModel.PublicKeyCreatedAt
         );
     }
 }
