@@ -10,6 +10,7 @@ using Serilog.Sinks.Grafana.Loki;
 using Scalar.AspNetCore;
 using System.Text;
 using System.Text.Json.Serialization;
+using BinaryStars.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -118,6 +119,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<TokenRefreshMiddleware>();
 
 app.MapControllers();
 
