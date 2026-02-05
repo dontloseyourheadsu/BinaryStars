@@ -18,6 +18,9 @@ interface ApiService {
     @POST("auth/login/external")
     suspend fun externalLogin(@Body request: ExternalAuthRequest): Response<AuthResponse>
 
+    @GET("accounts/me")
+    suspend fun getProfile(): Response<AccountProfileDto>
+
     @GET("devices")
     suspend fun getDevices(): Response<List<DeviceDto>>
 

@@ -23,6 +23,19 @@ data class AuthResponse(
     val expiresIn: Int
 )
 
+enum class UserRoleDto {
+    Disabled,
+    Free,
+    Premium
+}
+
+data class AccountProfileDto(
+    val id: String,
+    val username: String,
+    val email: String,
+    val role: UserRoleDto
+)
+
 enum class DeviceTypeDto {
     Linux,
     Android
