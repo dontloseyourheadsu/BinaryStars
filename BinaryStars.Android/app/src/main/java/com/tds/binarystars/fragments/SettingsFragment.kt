@@ -18,6 +18,7 @@ import com.tds.binarystars.LoginActivity
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.UserRoleDto
+import com.tds.binarystars.storage.SettingsStorage
 import kotlinx.coroutines.launch
 
 class SettingsFragment : Fragment() {
@@ -41,8 +42,8 @@ class SettingsFragment : Fragment() {
         val btnSignOut = view.findViewById<Button>(R.id.btnSignOut)
         
         // Initialize state
-        val currentMode = AppCompatDelegate.getDefaultNightMode()
-        switchTheme.isChecked = currentMode == AppCompatDelegate.MODE_NIGHT_YES
+        val isDarkModeEnabled = SettingsStorage.isDarkModeEnabled(false)
+        switchTheme.isChecked = isDarkModeEnabled
         
         switchTheme.setOnCheckedChangeListener { _, isChecked ->
              if (isChecked) {
@@ -50,6 +51,7 @@ class SettingsFragment : Fragment() {
              } else {
                  AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
              }
+            SettingsStorage.setDarkModeEnabled(isChecked)
         }
 
         btnUpgradePlan.setOnClickListener {
