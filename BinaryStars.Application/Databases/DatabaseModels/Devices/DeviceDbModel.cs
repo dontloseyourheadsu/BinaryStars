@@ -9,6 +9,9 @@ public class DeviceDbModel
     public DeviceType Type { get; set; }
     public required string IpAddress { get; set; }
     public string? Ipv6Address { get; set; }
+    public string? PublicKey { get; set; }
+    public string? PublicKeyAlgorithm { get; set; }
+    public DateTimeOffset? PublicKeyCreatedAt { get; set; }
     public int BatteryLevel { get; set; }
     public bool IsOnline { get; set; }
     public bool IsSynced { get; set; }

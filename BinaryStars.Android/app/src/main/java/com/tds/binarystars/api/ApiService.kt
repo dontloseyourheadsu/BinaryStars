@@ -7,6 +7,10 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.DELETE
 import retrofit2.http.Path
+import retrofit2.http.Query
+import retrofit2.http.Streaming
+import okhttp3.RequestBody
+import okhttp3.ResponseBody
 
 interface ApiService {
     @POST("auth/login")
@@ -48,4 +52,24 @@ interface ApiService {
 
     @DELETE("notes/{noteId}")
     suspend fun deleteNote(@Path("noteId") noteId: String): Response<Void>
+
+    // File transfers
+    @GET("files/transfers")
+    suspend fun getFileTransfers(): Response<List<FileTransferSummaryDto>>
+
+    @GET("files/transfers/pending")
+    suspend fun getPendingTransfers(@Query("deviceId") deviceId: String): Response<List<FileTransferSummaryDto>>
+
+    @POST("files/transfers")
+    suspend fun createFileTransfer(@Body request: CreateFileTransferRequestDto): Response<FileTransferDetailDto>
+
+    @PUT("files/transfers/{transferId}/upload")
+    suspend fun uploadFileTransfer(@Path("transferId") transferId: String, @Body body: RequestBody): Response<Void>
+
+    @Streaming
+    @GET("files/transfers/{transferId}/download")
+    suspend fun downloadFileTransfer(@Path("transferId") transferId: String, @Query("deviceId") deviceId: String): Response<ResponseBody>
+
+    @POST("files/transfers/{transferId}/reject")
+    suspend fun rejectFileTransfer(@Path("transferId") transferId: String, @Query("deviceId") deviceId: String): Response<Void>
 }

@@ -1,6 +1,8 @@
 using BinaryStars.Api.Extensions;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
+using Hangfire;
+using Hangfire.PostgreSql;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +34,27 @@ builder.Host.UseSerilog((context, configuration) =>
 // Add services to the container.
 builder.Services.AddDatabaseServices(builder.Configuration);
 builder.Services.AddApplicationServices();
+
+builder.Services.Configure<KafkaSettings>(builder.Configuration.GetSection(KafkaSettings.SectionName));
+builder.Services.Configure<HangfireSettings>(builder.Configuration.GetSection(HangfireSettings.SectionName));
+builder.Services.Configure<FileTransferSettings>(builder.Configuration.GetSection(FileTransferSettings.SectionName));
+builder.Services.AddSingleton<KafkaClientFactory>();
+builder.Services.AddSingleton<FileTransferKafkaService>();
+builder.Services.AddScoped<FileTransferJob>();
+builder.Services.AddScoped<FileTransferCleanupJob>();
+
+if (!builder.Environment.IsEnvironment("Test"))
+{
+    var hangfireSettings = builder.Configuration.GetSection(HangfireSettings.SectionName).Get<HangfireSettings>() ?? new HangfireSettings();
+    builder.Services.AddHangfire(config =>
+        config.UsePostgreSqlStorage(
+            options => options.UseNpgsqlConnection(hangfireSettings.ConnectionString),
+            new PostgreSqlStorageOptions
+            {
+                SchemaName = hangfireSettings.Schema
+            }));
+    builder.Services.AddHangfireServer();
+}
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<JwtTokenService>();
@@ -115,6 +138,7 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+    app.UseHangfireDashboard("/hangfire");
 }
 
 app.UseAuthentication();
@@ -123,4 +147,16 @@ app.UseMiddleware<TokenRefreshMiddleware>();
 
 app.MapControllers();
 
+if (!app.Environment.IsEnvironment("Test"))
+{
+    RecurringJob.AddOrUpdate<FileTransferCleanupJob>(
+        "cleanup-expired-transfers",
+        job => job.CleanupExpiredAsync(),
+        "*/5 * * * *");
+}
+
 app.Run();
+
+public partial class Program
+{
+}

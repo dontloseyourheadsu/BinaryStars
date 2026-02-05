@@ -1,6 +1,7 @@
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using BinaryStars.Application.Databases.DatabaseModels.Notes;
+using BinaryStars.Application.Databases.DatabaseModels.Transfers;
 using BinaryStars.Application.Databases.DatabaseRules;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -12,6 +13,7 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
 {
     public DbSet<DeviceDbModel> Devices { get; set; }
     public DbSet<NoteDbModel> Notes { get; set; }
+    public DbSet<FileTransferDbModel> FileTransfers { get; set; }
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -25,5 +27,6 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
         builder.ApplyConfiguration(new UserDbModelConfiguration());
         builder.ApplyConfiguration(new DeviceDbModelConfiguration());
         builder.ApplyConfiguration(new NoteDbModelConfiguration());
+        builder.ApplyConfiguration(new FileTransferDbModelConfiguration());
     }
 }

@@ -129,7 +129,7 @@ You can import this URL into tools like **Postman** or **Insomnia** to automatic
 
 ## API Usage
 
-The API currently exposes **Identity** endpoints for user management and authentication.
+All routes are prefixed with `/api`. Authenticated routes require a Bearer token.
 
 ### Authentication Endpoints
 
@@ -137,11 +137,12 @@ These endpoints return a **BinaryStars API JWT** after a successful login or reg
 
 #### 1. Register a new user
 
-- **URL**: `/register`
+- **URL**: `/api/auth/register`
 - **Method**: `POST`
 - **Body**:
   ```json
   {
+    "username": "your_username",
     "email": "user@example.com",
     "password": "StrongPassword123!"
   }
@@ -151,7 +152,7 @@ These endpoints return a **BinaryStars API JWT** after a successful login or reg
 
 Obtain a Bearer token to access protected resources.
 
-- **URL**: `/login`
+- **URL**: `/api/auth/login`
 - **Method**: `POST`
 - **Body**:
   ```json
@@ -169,20 +170,171 @@ Obtain a Bearer token to access protected resources.
   }
   ```
 
-#### 3. Refresh Token
+#### 3. External Login
 
-- **URL**: `/refresh`
+- **URL**: `/api/auth/login/external`
 - **Method**: `POST`
 - **Body**:
   ```json
   {
-    "refreshToken": "..."
+    "provider": "Google",
+    "token": "<provider-id-token>",
+    "username": "optional_username"
+  }
+  ```
+
+### Accounts Endpoints (Authenticated)
+
+#### 1. Get current user profile
+
+- **URL**: `/api/accounts/me`
+- **Method**: `GET`
+
+### Devices Endpoints (Authenticated)
+
+#### 1. List devices
+
+- **URL**: `/api/devices`
+- **Method**: `GET`
+
+#### 2. Register device
+
+- **URL**: `/api/devices/register`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "id": "<device-id>",
+    "name": "<device-name>",
+    "ipAddress": "192.168.1.10",
+    "ipv6Address": "fe80::1",
+    "publicKey": "<base64-public-key>",
+    "publicKeyAlgorithm": "RSA"
+  }
+  ```
+
+#### 3. Unlink device
+
+- **URL**: `/api/devices/{deviceId}`
+- **Method**: `DELETE`
+
+### Notes Endpoints (Authenticated)
+
+#### 1. List notes
+
+- **URL**: `/api/notes`
+- **Method**: `GET`
+
+#### 2. List notes for a device
+
+- **URL**: `/api/notes/device/{deviceId}`
+- **Method**: `GET`
+
+#### 3. Get note by id
+
+- **URL**: `/api/notes/{noteId}`
+- **Method**: `GET`
+
+#### 4. Create note
+
+- **URL**: `/api/notes`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "name": "<note-title>",
+    "deviceId": "<device-id>",
+    "contentType": "Text",
+    "content": "<note-body>"
+  }
+  ```
+
+#### 5. Update note
+
+- **URL**: `/api/notes/{noteId}`
+- **Method**: `PUT`
+- **Body**:
+  ```json
+  {
+    "name": "<note-title>",
+    "content": "<note-body>"
+  }
+  ```
+
+#### 6. Delete note
+
+- **URL**: `/api/notes/{noteId}`
+- **Method**: `DELETE`
+
+### File Transfer Endpoints (Authenticated)
+
+#### 1. List transfers
+
+- **URL**: `/api/files/transfers`
+- **Method**: `GET`
+
+#### 2. List pending transfers for a device
+
+- **URL**: `/api/files/transfers/pending?deviceId={deviceId}`
+- **Method**: `GET`
+
+#### 3. Get transfer by id
+
+- **URL**: `/api/files/transfers/{transferId}`
+- **Method**: `GET`
+
+#### 4. Create transfer
+
+- **URL**: `/api/files/transfers`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "fileName": "example.bin",
+    "contentType": "application/octet-stream",
+    "sizeBytes": 123456,
+    "senderDeviceId": "<device-id>",
+    "targetDeviceId": "<device-id>",
+    "encryptionEnvelope": "<optional-envelope>"
+  }
+  ```
+
+#### 5. Upload file bytes
+
+- **URL**: `/api/files/transfers/{transferId}/upload`
+- **Method**: `PUT`
+- **Body**: Raw file bytes in the request body.
+
+#### 6. Download file bytes
+
+- **URL**: `/api/files/transfers/{transferId}/download?deviceId={deviceId}`
+- **Method**: `GET`
+- **Response headers**:
+  - `Content-Disposition`: includes original filename.
+  - `X-Transfer-Envelope`: base64-encoded envelope when present.
+  - `X-Transfer-ChunkSize`: chunk size used during streaming.
+
+#### 7. Reject transfer
+
+- **URL**: `/api/files/transfers/{transferId}/reject?deviceId={deviceId}`
+- **Method**: `POST`
+
+### Debug Endpoints (Development Only)
+
+#### 1. Decode a JWT (no validation)
+
+- **URL**: `/api/debug/token`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "token": "<jwt>"
   }
   ```
 
 ### Using the Token
 
-To access protected endpoints (once they are created), include the `accessToken` in the `Authorization` header:
+To access protected endpoints, include the `accessToken` in the `Authorization` header:
 
 ````
 Authorization: Bearer <your-api-access-token>

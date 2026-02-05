@@ -14,6 +14,9 @@ public class DeviceDbModelConfiguration : IEntityTypeConfiguration<DeviceDbModel
         builder.Property(d => d.Name).IsRequired().HasMaxLength(100);
         builder.Property(d => d.IpAddress).IsRequired();
         builder.Property(d => d.Ipv6Address).IsRequired(false);
+        builder.Property(d => d.PublicKey).IsRequired(false).HasMaxLength(4096);
+        builder.Property(d => d.PublicKeyAlgorithm).IsRequired(false).HasMaxLength(100);
+        builder.Property(d => d.PublicKeyCreatedAt).IsRequired(false);
 
         builder.HasOne<UserDbModel>()
             .WithMany()

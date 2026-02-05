@@ -105,6 +105,17 @@ namespace BinaryStars.Application.Databases.Migrations
                     b.Property<string>("Ipv6Address")
                         .HasColumnType("text");
 
+                    b.Property<string>("PublicKey")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)");
+
+                    b.Property<string>("PublicKeyAlgorithm")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("PublicKeyCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsOnline")
                         .HasColumnType("boolean");
 
@@ -185,6 +196,99 @@ namespace BinaryStars.Application.Databases.Migrations
                     b.HasIndex("UserId", "CreatedAt");
 
                     b.ToTable("Notes");
+                });
+
+            modelBuilder.Entity("BinaryStars.Application.Databases.DatabaseModels.Transfers.FileTransferDbModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ChunkSizeBytes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptionEnvelope")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("KafkaAuthMode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long?>("KafkaEndOffset")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("KafkaPartition")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("KafkaStartOffset")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("KafkaTopic")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("PacketCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SenderDeviceId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("SenderUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetDeviceId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TargetUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("SenderUserId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TargetDeviceId");
+
+                    b.HasIndex("TargetUserId");
+
+                    b.ToTable("FileTransfers");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>

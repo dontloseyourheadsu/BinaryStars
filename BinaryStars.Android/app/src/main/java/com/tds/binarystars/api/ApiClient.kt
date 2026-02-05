@@ -32,7 +32,8 @@ object ApiClient {
             response
         }
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.MINUTES)
+        .writeTimeout(5, TimeUnit.MINUTES)
         .build()
 
     val apiService: ApiService by lazy {

@@ -18,7 +18,10 @@ public static class DeviceMapper
             model.IsSynced,
             model.WifiUploadSpeed,
             model.WifiDownloadSpeed,
-            model.LastSeen
+            model.LastSeen,
+            model.PublicKey,
+            model.PublicKeyAlgorithm,
+            model.PublicKeyCreatedAt
         );
     }
 
@@ -31,6 +34,9 @@ public static class DeviceMapper
             Type = domain.Type,
             IpAddress = domain.IpAddress,
             Ipv6Address = domain.Ipv6Address,
+            PublicKey = domain.PublicKey,
+            PublicKeyAlgorithm = domain.PublicKeyAlgorithm,
+            PublicKeyCreatedAt = domain.PublicKeyCreatedAt,
             BatteryLevel = domain.BatteryLevel,
             IsOnline = domain.IsOnline,
             IsSynced = domain.IsSynced,

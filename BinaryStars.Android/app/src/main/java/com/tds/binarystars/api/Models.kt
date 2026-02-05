@@ -46,12 +46,69 @@ data class DeviceDto(
     val name: String,
     val type: DeviceTypeDto,
     val ipAddress: String,
+    val publicKey: String?,
+    val publicKeyAlgorithm: String?,
     val batteryLevel: Int,
     val isOnline: Boolean,
     val isSynced: Boolean,
     val wifiUploadSpeed: String,
     val wifiDownloadSpeed: String,
     val lastSeen: String
+)
+
+enum class FileTransferStatusDto {
+    Queued,
+    Uploading,
+    Available,
+    Downloaded,
+    Failed,
+    Expired,
+    Rejected
+}
+
+data class FileTransferSummaryDto(
+    val id: String,
+    val fileName: String,
+    val contentType: String,
+    val sizeBytes: Long,
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val status: FileTransferStatusDto,
+    val createdAt: String,
+    val expiresAt: String,
+    val isSender: Boolean
+)
+
+data class FileTransferDetailDto(
+    val id: String,
+    val fileName: String,
+    val contentType: String,
+    val sizeBytes: Long,
+    val senderUserId: String,
+    val targetUserId: String,
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val status: FileTransferStatusDto,
+    val encryptionEnvelope: String?,
+    val chunkSizeBytes: Int,
+    val packetCount: Int,
+    val kafkaTopic: String,
+    val kafkaPartition: Int?,
+    val kafkaStartOffset: Long?,
+    val kafkaEndOffset: Long?,
+    val kafkaAuthMode: String,
+    val createdAt: String,
+    val expiresAt: String,
+    val completedAt: String?
+)
+
+data class CreateFileTransferRequestDto(
+    val fileName: String,
+    val contentType: String,
+    val sizeBytes: Long,
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val encryptionEnvelope: String
 )
 
 // Notes Models

@@ -5,6 +5,8 @@ data class Device(
     val name: String,
     val type: DeviceType,
     val ipAddress: String,
+    val publicKey: String? = null,
+    val publicKeyAlgorithm: String? = null,
     val batteryLevel: Int,
     val isOnline: Boolean,
     val isSynced: Boolean,
