@@ -27,6 +27,14 @@ render.experimental.xml
 *.jks
 *.keystore
 
+# Kafka secrets (dev-only)
+kafka/secrets/*.key
+kafka/secrets/*.pem
+kafka/secrets/*.srl
+kafka/secrets/*.csr
+kafka/secrets/kafka_client.properties
+kafka/secrets/kafka_jaas.conf
+
 # Google Services (e.g. APIs or Firebase)
 google-services.json
 

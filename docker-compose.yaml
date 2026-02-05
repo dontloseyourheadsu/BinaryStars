@@ -5,12 +5,17 @@ services:
             dockerfile: BinaryStars.Api/Dockerfile
         ports:
         - "5004:8080"
+        volumes:
+        - ./kafka/secrets:/app/kafka/secrets:ro
         environment:
         - ASPNETCORE_URLS=http://+:8080
         - ASPNETCORE_ENVIRONMENT=Development
         - ConnectionStrings__DefaultConnection=Host=binarystars.db;Database=binarystars;Username=admin;Password=abc123=0
+        - Hangfire__ConnectionString=Host=binarystars.hangfire;Database=binarystars_hangfire;Username=admin;Password=abc123=0
         depends_on:
         - binarystars.db
+        - binarystars.hangfire
+        - binarystars.kafka
         - binarystars.grafana
         networks:
         - binarystars-network
@@ -41,8 +46,62 @@ services:
         networks:
         - binarystars-network
 
+    binarystars.hangfire:
+        image: postgres:16
+        restart: always
+        environment:
+        - POSTGRES_USER=admin
+        - POSTGRES_PASSWORD=abc123=0
+        - POSTGRES_DB=binarystars_hangfire
+        ports:
+        - "5433:5432"
+        volumes:
+        - hangfire-data:/var/lib/postgresql/data
+        networks:
+        - binarystars-network
+
+    binarystars.zookeeper:
+        image: confluentinc/cp-zookeeper:7.6.1
+        environment:
+        - ZOOKEEPER_CLIENT_PORT=2181
+        - ZOOKEEPER_TICK_TIME=2000
+        networks:
+        - binarystars-network
+
+    binarystars.kafka:
+        image: confluentinc/cp-kafka:7.6.1
+        depends_on:
+        - binarystars.zookeeper
+        ports:
+        - "9094:9094"
+        environment:
+        - KAFKA_BROKER_ID=1
+        - KAFKA_ZOOKEEPER_CONNECT=binarystars.zookeeper:2181
+        - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:SASL_SSL,EXTERNAL:SASL_SSL
+        - KAFKA_LISTENERS=INTERNAL://:9093,EXTERNAL://:9094
+        - KAFKA_ADVERTISED_LISTENERS=INTERNAL://binarystars.kafka:9093,EXTERNAL://localhost:9094
+        - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
+        - KAFKA_SSL_KEYSTORE_TYPE=PEM
+        - KAFKA_SSL_KEYSTORE_CERTIFICATE_CHAIN=/etc/kafka/secrets/broker.pem
+        - KAFKA_SSL_KEYSTORE_KEY=/etc/kafka/secrets/broker.key
+        - KAFKA_SSL_TRUSTSTORE_TYPE=PEM
+        - KAFKA_SSL_TRUSTSTORE_CERTIFICATES=/etc/kafka/secrets/ca.pem
+        - KAFKA_SSL_CLIENT_AUTH=required
+        - KAFKA_SASL_ENABLED_MECHANISMS=SCRAM-SHA-512,OAUTHBEARER
+        - KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL=SCRAM-SHA-512
+        - KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_jaas.conf
+        - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+        - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+        - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+        - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+        volumes:
+        - ./kafka/secrets:/etc/kafka/secrets
+        networks:
+        - binarystars-network
+
 volumes:
     db-data:
+    hangfire-data:
 
 networks:
     binarystars-network:
