@@ -199,7 +199,9 @@ class CreateNoteActivity : AppCompatActivity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         handleCancel()
+        super.onBackPressed()
     }
 }

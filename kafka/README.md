@@ -6,9 +6,33 @@ Do not commit real secrets or private keys to the repository.
 ## Files
 
 - `kafka/secrets/ca.pem`, `kafka/secrets/client.pem`, `kafka/secrets/client.key` are used by the API client.
-- `kafka/secrets/broker.pem`, `kafka/secrets/broker.key` are used by the broker.
+- `kafka/secrets/broker.pem`, `kafka/secrets/broker.p12` are used by the broker.
 - `kafka/secrets/kafka_jaas.conf` configures broker auth.
 - `kafka/secrets/kafka_client.properties` is used by the CLI to create SCRAM users.
+
+## How It Works (Current)
+
+Kafka runs in KRaft mode with TLS + SASL enabled on all broker listeners. The
+broker listens on four ports:
+
+- `9092` for the KRaft controller (PLAINTEXT).
+- `9093` for internal broker traffic (SASL_SSL, SCRAM-SHA-512).
+- `9094` for external client traffic (SASL_SSL, SCRAM-SHA-512).
+- `9095` for OAuth bearer traffic (SASL_SSL, OAUTHBEARER).
+
+Certificates and auth are mounted from `kafka/secrets` into the container at
+`/etc/kafka/secrets`. The broker uses `broker.p12` as its keystore and
+`ca.pem` as the truststore. Client certs are required on all TLS listeners.
+The JAAS config for SCRAM and OAuth is loaded via
+`KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_jaas.conf`.
+
+The advertised listeners are:
+
+- `INTERNAL://binarystars.kafka:9093`
+- `EXTERNAL://localhost:9094`
+- `OAUTH://localhost:9095`
+
+Kafka is considered healthy when port `9093` accepts TCP connections.
 
 ## Generate TLS Certificates
 
@@ -26,13 +50,16 @@ openssl genrsa -out broker.key 4096
 openssl req -new -key broker.key -subj "/CN=binarystars.kafka" -out broker.csr
 openssl x509 -req -in broker.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
   -out broker.pem -days 3650 -sha256
+openssl pkcs8 -topk8 -nocrypt -in broker.key -out broker.pkcs8.key
+openssl pkcs12 -export -in broker.pem -inkey broker.pkcs8.key -certfile ca.pem \
+  -out broker.p12 -password pass:brokerpass
 
 openssl genrsa -out client.key 4096
 openssl req -new -key client.key -subj "/CN=binarystars-client" -out client.csr
 openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
   -out client.pem -days 3650 -sha256
 
-mv ca.pem ca.key broker.pem broker.key client.pem client.key ../secrets/
+mv ca.pem ca.key broker.pem broker.p12 client.pem client.key ../secrets/
 rm -f *.csr *.srl
 ```
 
@@ -67,8 +94,11 @@ ssl.keystore.key=/etc/kafka/secrets/client.key
 ## Start Kafka (Docker Compose)
 
 ```bash
-docker-compose up -d binarystars.zookeeper binarystars.kafka
+docker compose up -d binarystars.kafka
 ```
+
+Kafka is running in KRaft mode (no ZooKeeper). The cluster ID is defined in
+[docker-compose.yaml](docker-compose.yaml) as `KAFKA_KRAFT_CLUSTER_ID`.
 
 ## Create SCRAM Users
 

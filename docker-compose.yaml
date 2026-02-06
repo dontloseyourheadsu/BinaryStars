@@ -13,10 +13,14 @@ services:
         - ConnectionStrings__DefaultConnection=Host=binarystars.db;Database=binarystars;Username=admin;Password=abc123=0
         - Hangfire__ConnectionString=Host=binarystars.hangfire;Database=binarystars_hangfire;Username=admin;Password=abc123=0
         depends_on:
-        - binarystars.db
-        - binarystars.hangfire
-        - binarystars.kafka
-        - binarystars.grafana
+            binarystars.db:
+                condition: service_healthy
+            binarystars.hangfire:
+                condition: service_healthy
+            binarystars.kafka:
+                condition: service_healthy
+            binarystars.grafana:
+                condition: service_started
         networks:
         - binarystars-network
     
@@ -28,7 +32,8 @@ services:
         - GF_SECURITY_ADMIN_USER=admin
         - GF_SECURITY_ADMIN_PASSWORD=admin
         depends_on:
-        - binarystars.db
+            binarystars.db:
+                condition: service_healthy
         networks:
         - binarystars-network
     
@@ -43,6 +48,11 @@ services:
         - "5432:5432"
         volumes:
         - db-data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U admin -d binarystars"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
         networks:
         - binarystars-network
 
@@ -57,45 +67,69 @@ services:
         - "5433:5432"
         volumes:
         - hangfire-data:/var/lib/postgresql/data
-        networks:
-        - binarystars-network
-
-    binarystars.zookeeper:
-        image: confluentinc/cp-zookeeper:7.6.1
-        environment:
-        - ZOOKEEPER_CLIENT_PORT=2181
-        - ZOOKEEPER_TICK_TIME=2000
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U admin -d binarystars_hangfire"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
         networks:
         - binarystars-network
 
     binarystars.kafka:
         image: confluentinc/cp-kafka:7.6.1
-        depends_on:
-        - binarystars.zookeeper
         ports:
         - "9094:9094"
+        - "9095:9095"
         environment:
-        - KAFKA_BROKER_ID=1
-        - KAFKA_ZOOKEEPER_CONNECT=binarystars.zookeeper:2181
-        - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:SASL_SSL,EXTERNAL:SASL_SSL
-        - KAFKA_LISTENERS=INTERNAL://:9093,EXTERNAL://:9094
-        - KAFKA_ADVERTISED_LISTENERS=INTERNAL://binarystars.kafka:9093,EXTERNAL://localhost:9094
+        - KAFKA_PROCESS_ROLES=broker,controller
+        - KAFKA_NODE_ID=1
+        - KAFKA_KRAFT_CLUSTER_ID=q1Sh2bIQo2Z6tQ0yF0l9AA
+        - CLUSTER_ID=q1Sh2bIQo2Z6tQ0yF0l9AA
+        - KAFKA_CONTROLLER_QUORUM_VOTERS=1@binarystars.kafka:9092
+        - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+        - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:SASL_SSL,EXTERNAL:SASL_SSL,OAUTH:SASL_SSL,CONTROLLER:PLAINTEXT
+        - KAFKA_LISTENERS=CONTROLLER://:9092,INTERNAL://:9093,EXTERNAL://:9094,OAUTH://:9095
+        - KAFKA_ADVERTISED_LISTENERS=INTERNAL://binarystars.kafka:9093,EXTERNAL://localhost:9094,OAUTH://localhost:9095
         - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
-        - KAFKA_SSL_KEYSTORE_TYPE=PEM
-        - KAFKA_SSL_KEYSTORE_CERTIFICATE_CHAIN=/etc/kafka/secrets/broker.pem
-        - KAFKA_SSL_KEYSTORE_KEY=/etc/kafka/secrets/broker.key
-        - KAFKA_SSL_TRUSTSTORE_TYPE=PEM
-        - KAFKA_SSL_TRUSTSTORE_CERTIFICATES=/etc/kafka/secrets/ca.pem
-        - KAFKA_SSL_CLIENT_AUTH=required
         - KAFKA_SASL_ENABLED_MECHANISMS=SCRAM-SHA-512,OAUTHBEARER
         - KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL=SCRAM-SHA-512
+        - KAFKA_LISTENER_NAME_INTERNAL_SASL_ENABLED_MECHANISMS=SCRAM-SHA-512
+        - KAFKA_LISTENER_NAME_EXTERNAL_SASL_ENABLED_MECHANISMS=SCRAM-SHA-512
+        - KAFKA_LISTENER_NAME_OAUTH_SASL_ENABLED_MECHANISMS=OAUTHBEARER
+        - KAFKA_LISTENER_NAME_INTERNAL_SCRAM_SHA_512_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username="broker" password="broker-secret";
+        - KAFKA_LISTENER_NAME_EXTERNAL_SCRAM_SHA_512_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username="broker" password="broker-secret";
+        - KAFKA_LISTENER_NAME_OAUTH_OAUTHBEARER_SASL_JAAS_CONFIG=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required unsecuredLoginStringClaim_sub="broker";
+        - KAFKA_LISTENER_NAME_OAUTH_SASL_SERVER_CALLBACK_HANDLER_CLASS=org.apache.kafka.common.security.oauthbearer.internals.unsecured.OAuthBearerUnsecuredValidatorCallbackHandler
         - KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_jaas.conf
+        - KAFKA_LISTENER_NAME_INTERNAL_SSL_KEYSTORE_TYPE=PKCS12
+        - KAFKA_LISTENER_NAME_INTERNAL_SSL_KEYSTORE_LOCATION=/etc/kafka/secrets/broker.p12
+        - KAFKA_LISTENER_NAME_INTERNAL_SSL_KEYSTORE_PASSWORD=brokerpass
+        - KAFKA_LISTENER_NAME_INTERNAL_SSL_TRUSTSTORE_TYPE=PEM
+        - KAFKA_LISTENER_NAME_INTERNAL_SSL_TRUSTSTORE_LOCATION=/etc/kafka/secrets/ca.pem
+        - KAFKA_LISTENER_NAME_INTERNAL_SSL_CLIENT_AUTH=required
+        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_KEYSTORE_TYPE=PKCS12
+        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_KEYSTORE_LOCATION=/etc/kafka/secrets/broker.p12
+        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_KEYSTORE_PASSWORD=brokerpass
+        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_TRUSTSTORE_TYPE=PEM
+        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_TRUSTSTORE_LOCATION=/etc/kafka/secrets/ca.pem
+        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_CLIENT_AUTH=required
+        - KAFKA_LISTENER_NAME_OAUTH_SSL_KEYSTORE_TYPE=PKCS12
+        - KAFKA_LISTENER_NAME_OAUTH_SSL_KEYSTORE_LOCATION=/etc/kafka/secrets/broker.p12
+        - KAFKA_LISTENER_NAME_OAUTH_SSL_KEYSTORE_PASSWORD=brokerpass
+        - KAFKA_LISTENER_NAME_OAUTH_SSL_TRUSTSTORE_TYPE=PEM
+        - KAFKA_LISTENER_NAME_OAUTH_SSL_TRUSTSTORE_LOCATION=/etc/kafka/secrets/ca.pem
+        - KAFKA_LISTENER_NAME_OAUTH_SSL_CLIENT_AUTH=required
         - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
         - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
         - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
         - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
         volumes:
         - ./kafka/secrets:/etc/kafka/secrets
+        healthcheck:
+            test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/9093'"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
         networks:
         - binarystars-network
 

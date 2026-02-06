@@ -3,7 +3,7 @@ package com.tds.binarystars
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
-import com.google.android.material.bottomnavigation.BottomNavigationView
+import android.widget.LinearLayout
 import com.tds.binarystars.fragments.DevicesFragment
 import com.tds.binarystars.fragments.FilesFragment
 import com.tds.binarystars.fragments.MapFragment
@@ -19,8 +19,11 @@ import android.widget.Toast
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
 import com.tds.binarystars.crypto.CryptoManager
+import androidx.drawerlayout.widget.DrawerLayout
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var drawerLayout: DrawerLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,24 +32,47 @@ class MainActivity : AppCompatActivity() {
         checkDeviceRegistration()
         checkPendingTransfers()
 
-        val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
+        drawerLayout = findViewById(R.id.drawer_layout)
 
         // Load default fragment
         if (savedInstanceState == null) {
             loadFragment(DevicesFragment())
         }
 
-        bottomNav.setOnItemSelectedListener { item ->
-            val fragment: Fragment = when (item.itemId) {
-                R.id.nav_devices -> DevicesFragment()
-                R.id.nav_files -> FilesFragment()
-                R.id.nav_notes -> NotesFragment()
-                R.id.nav_map -> MapFragment()
-                R.id.nav_settings -> SettingsFragment()
-                else -> DevicesFragment()
-            }
-            loadFragment(fragment)
-            true
+        // Set up sidebar item click listeners
+        setupSidebarListeners()
+    }
+
+    private fun setupSidebarListeners() {
+        val navDevices = findViewById<LinearLayout>(R.id.nav_devices)
+        val navFiles = findViewById<LinearLayout>(R.id.nav_files)
+        val navNotes = findViewById<LinearLayout>(R.id.nav_notes)
+        val navMap = findViewById<LinearLayout>(R.id.nav_map)
+        val navSettings = findViewById<LinearLayout>(R.id.nav_settings)
+
+        navDevices.setOnClickListener {
+            loadFragment(DevicesFragment())
+            drawerLayout.closeDrawers()
+        }
+
+        navFiles.setOnClickListener {
+            loadFragment(FilesFragment())
+            drawerLayout.closeDrawers()
+        }
+
+        navNotes.setOnClickListener {
+            loadFragment(NotesFragment())
+            drawerLayout.closeDrawers()
+        }
+
+        navMap.setOnClickListener {
+            loadFragment(MapFragment())
+            drawerLayout.closeDrawers()
+        }
+
+        navSettings.setOnClickListener {
+            loadFragment(SettingsFragment())
+            drawerLayout.closeDrawers()
         }
     }
 
@@ -160,8 +186,7 @@ class MainActivity : AppCompatActivity() {
                         .setTitle("New Files")
                         .setMessage("You have files ready to download.")
                         .setPositiveButton("Open") { _, _ ->
-                            val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
-                            bottomNav.selectedItemId = R.id.nav_files
+                            loadFragment(FilesFragment())
                         }
                         .setNegativeButton("Later", null)
                         .show()
