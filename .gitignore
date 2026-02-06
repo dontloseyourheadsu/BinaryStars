@@ -30,6 +30,7 @@ render.experimental.xml
 # Kafka secrets (dev-only)
 kafka/secrets/*.key
 kafka/secrets/*.pem
+kafka/secrets/*.p12
 kafka/secrets/*.srl
 kafka/secrets/*.csr
 kafka/secrets/kafka_client.properties
