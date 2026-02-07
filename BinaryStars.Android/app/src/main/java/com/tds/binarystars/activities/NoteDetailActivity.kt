@@ -13,6 +13,7 @@ import com.tds.binarystars.R
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.NoteType
 import com.tds.binarystars.api.UpdateNoteRequestDto
+import com.tds.binarystars.storage.NotesStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,11 +115,32 @@ class NoteDetailActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
 
                 if (response.isSuccessful) {
-                    content = updatedContent
+                    val updated = response.body()
+                    if (updated != null) {
+                        noteName = updated.name
+                        content = updated.content
+                        createdAt = updated.createdAt
+                        updatedAt = updated.updatedAt
+                        NotesStorage.upsertNote(updated)
+                    } else {
+                        content = updatedContent
+                        val currentTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).format(Date())
+                        updatedAt = currentTime
+                        NotesStorage.upsertNote(
+                            com.tds.binarystars.api.NoteResponse(
+                                id = noteId,
+                                name = noteName,
+                                signedByDeviceId = deviceId,
+                                signedByDeviceName = deviceName,
+                                contentType = contentType,
+                                content = content,
+                                createdAt = createdAt,
+                                updatedAt = updatedAt
+                            )
+                        )
+                    }
                     Toast.makeText(this@NoteDetailActivity, "Note saved successfully", Toast.LENGTH_SHORT).show()
-                    val currentTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).format(Date())
-                    updatedAt = currentTime
-                    tvTimestamps.text = "Created: ${formatDate(createdAt)}\nUpdated: ${formatDate(currentTime)}"
+                    tvTimestamps.text = "Created: ${formatDate(createdAt)}\nUpdated: ${formatDate(updatedAt)}"
                 } else {
                     Toast.makeText(this@NoteDetailActivity, "Failed to save note", Toast.LENGTH_SHORT).show()
                 }
@@ -195,6 +217,7 @@ class NoteDetailActivity : AppCompatActivity() {
                     try {
                         val response = withContext(Dispatchers.IO) { ApiClient.apiService.deleteNote(noteId) }
                         if (response.isSuccessful) {
+                            NotesStorage.deleteNote(noteId)
                             Toast.makeText(this@NoteDetailActivity, "Note deleted", Toast.LENGTH_SHORT).show()
                             finish()
                         } else {

@@ -25,6 +25,8 @@ import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.storage.ChatStorage
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.util.NetworkUtils
+import com.tds.binarystars.model.ChatSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +37,9 @@ class MessagingFragment : Fragment(), MessagingEventListener {
     private lateinit var progressBar: ProgressBar
     private lateinit var newChatButton: Button
     private lateinit var adapter: MessagingChatsAdapter
+    private lateinit var contentView: View
+    private lateinit var noConnectionView: View
+    private lateinit var retryButton: Button
     private val items = mutableListOf<ChatListItem>()
 
     override fun onCreateView(
@@ -55,6 +60,9 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         emptyState = view.findViewById(R.id.tvMessagingEmptyState)
         progressBar = view.findViewById(R.id.pbMessagingLoading)
         newChatButton = view.findViewById(R.id.btnNewChat)
+        contentView = view.findViewById(R.id.viewContent)
+        noConnectionView = view.findViewById(R.id.viewNoConnection)
+        retryButton = view.findViewById(R.id.btnRetry)
 
         adapter = MessagingChatsAdapter(items) { item ->
             openChat(item.deviceId, item.deviceName)
@@ -65,6 +73,10 @@ class MessagingFragment : Fragment(), MessagingEventListener {
 
         newChatButton.setOnClickListener {
             pickDeviceToChat()
+        }
+
+        retryButton.setOnClickListener {
+            loadChats()
         }
 
         loadChats()
@@ -97,27 +109,54 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
             val summaries = withContext(Dispatchers.IO) { ChatStorage.getChats() }
+            val isOnline = NetworkUtils.isOnline(requireContext())
+            if (!isOnline) {
+                progressBar.visibility = View.GONE
+                newChatButton.isEnabled = false
+                updateItems(summaries, emptyMap())
+                if (items.isEmpty()) {
+                    setNoConnection(true)
+                } else {
+                    setNoConnection(false)
+                }
+                return@launch
+            }
+
+            newChatButton.isEnabled = true
             val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
             progressBar.visibility = View.GONE
 
-            val nameLookup = devicesResponse.body().orEmpty().associateBy({ it.id }, { it.name })
-
-            items.clear()
-            summaries.forEach { summary ->
-                val name = nameLookup[summary.deviceId] ?: summary.deviceId
-                items.add(
-                    ChatListItem(
-                        deviceId = summary.deviceId,
-                        deviceName = name,
-                        lastMessage = summary.lastMessage,
-                        lastSentAt = summary.lastSentAt
-                    )
-                )
+            val nameLookup = if (devicesResponse.isSuccessful) {
+                devicesResponse.body().orEmpty().associateBy({ it.id }, { it.name })
+            } else {
+                emptyMap()
             }
 
-            adapter.notifyDataSetChanged()
-            emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+            updateItems(summaries, nameLookup)
+            setNoConnection(false)
         }
+    }
+
+    private fun updateItems(summaries: List<ChatSummary>, nameLookup: Map<String, String>) {
+        items.clear()
+        summaries.forEach { summary ->
+            val name = nameLookup[summary.deviceId] ?: summary.deviceId
+            items.add(
+                ChatListItem(
+                    deviceId = summary.deviceId,
+                    deviceName = name,
+                    lastMessage = summary.lastMessage,
+                    lastSentAt = summary.lastSentAt
+                )
+            )
+        }
+        adapter.notifyDataSetChanged()
+        emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun setNoConnection(show: Boolean) {
+        noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
+        contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
     @SuppressLint("HardwareIds")

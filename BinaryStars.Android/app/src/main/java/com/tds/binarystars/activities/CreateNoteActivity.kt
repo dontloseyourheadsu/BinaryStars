@@ -13,6 +13,7 @@ import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.CreateNoteRequest
 import com.tds.binarystars.api.DeviceDto
 import com.tds.binarystars.api.NoteType
+import com.tds.binarystars.storage.NotesStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -150,6 +151,7 @@ class CreateNoteActivity : AppCompatActivity() {
                 progressBar.visibility = android.view.View.GONE
 
                 if (response.isSuccessful) {
+                    response.body()?.let { NotesStorage.upsertNote(it) }
                     Toast.makeText(this@CreateNoteActivity, "Note created successfully", Toast.LENGTH_SHORT).show()
                     isEdited = false
                     finish()
