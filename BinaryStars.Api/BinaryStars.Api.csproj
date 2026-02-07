@@ -46,6 +46,7 @@
     <Compile Include="Controllers/DebugController.cs" />
     <Compile Include="Controllers/DevicesController.cs" />
     <Compile Include="Controllers/FileTransfersController.cs" />
+    <Compile Include="Controllers/MessagingController.cs" />
     <Compile Include="Controllers/NotesController.cs" />
     <Compile Include="Extensions/ServicesExtensions.cs" />
     <Compile Include="Models/AccountProfileResponse.cs" />
@@ -54,12 +55,17 @@
     <Compile Include="Models/HangfireSettings.cs" />
     <Compile Include="Models/JwtSettings.cs" />
     <Compile Include="Models/KafkaSettings.cs" />
+    <Compile Include="Models/MessagingModels.cs" />
     <Compile Include="Services/FileTransferCleanupJob.cs" />
     <Compile Include="Services/FileTransferJob.cs" />
     <Compile Include="Services/FileTransferKafkaService.cs" />
     <Compile Include="Services/JwtTokenService.cs" />
     <Compile Include="Services/KafkaAuthMode.cs" />
     <Compile Include="Services/KafkaClientFactory.cs" />
+    <Compile Include="Services/MessagingConnectionManager.cs" />
+    <Compile Include="Services/MessagingJson.cs" />
+    <Compile Include="Services/MessagingKafkaService.cs" />
+    <Compile Include="Services/MessagingWebSocketHandler.cs" />
   </ItemGroup>
 
   <ItemGroup>

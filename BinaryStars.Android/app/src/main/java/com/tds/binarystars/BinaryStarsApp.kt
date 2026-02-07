@@ -3,6 +3,7 @@ package com.tds.binarystars
 import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.tds.binarystars.api.AuthTokenStore
+import com.tds.binarystars.storage.ChatStorage
 import com.tds.binarystars.storage.SettingsStorage
 
 class BinaryStarsApp : Application() {
@@ -10,6 +11,7 @@ class BinaryStarsApp : Application() {
         super.onCreate()
         AuthTokenStore.init(this)
         SettingsStorage.init(this)
+        ChatStorage.init(this)
 
         val isDarkModeEnabled = SettingsStorage.isDarkModeEnabled(false)
         AppCompatDelegate.setDefaultNightMode(

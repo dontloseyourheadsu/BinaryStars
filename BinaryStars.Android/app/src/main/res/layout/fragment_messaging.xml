@@ -27,16 +27,16 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Files"
+            android:text="Messaging"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@color/carbon_text_main" />
 
         <Button
-            android:id="@+id/btnSendFile"
+            android:id="@+id/btnNewChat"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Send"
+            android:text="New"
             android:backgroundTint="@color/primary_purple"
             android:textColor="@android:color/white" />
     </LinearLayout>
@@ -47,23 +47,23 @@
         android:background="@color/carbon_border" />
 
     <ProgressBar
-        android:id="@+id/pbFilesLoading"
+        android:id="@+id/pbMessagingLoading"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone" />
 
     <TextView
-        android:id="@+id/tvFilesEmptyState"
+        android:id="@+id/tvMessagingEmptyState"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:text="No transfers yet."
+        android:text="No chats yet. Start one to send a message."
         android:textSize="16sp"
         android:textColor="@color/carbon_text_muted"
         android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvFileTransfers"
+        android:id="@+id/rvChats"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

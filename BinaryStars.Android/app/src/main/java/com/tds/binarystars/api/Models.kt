@@ -139,3 +139,32 @@ data class UpdateNoteRequestDto(
     val name: String,
     val content: String
 )
+
+// Messaging Models
+data class MessagingEnvelopeDto(
+    val type: String,
+    val payload: com.google.gson.JsonElement
+)
+
+data class MessagingMessageDto(
+    val id: String,
+    val userId: String,
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val body: String,
+    val sentAt: String
+)
+
+data class SendMessageRequestDto(
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val body: String,
+    val sentAt: String?
+)
+
+data class DeviceRemovedEventDto(
+    val id: String,
+    val userId: String,
+    val removedDeviceId: String,
+    val occurredAt: String
+)

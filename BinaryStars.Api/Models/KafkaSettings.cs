@@ -6,6 +6,8 @@ public class KafkaSettings
 
     public string BootstrapServers { get; set; } = string.Empty;
     public string Topic { get; set; } = "binarystars.transfers";
+    public string MessagingTopic { get; set; } = "binarystars.messages";
+    public string DeviceRemovedTopic { get; set; } = "binarystars.device-removed";
     public KafkaSecuritySettings Security { get; set; } = new();
     public KafkaScramSettings Scram { get; set; } = new();
     public KafkaOauthSettings Oauth { get; set; } = new();

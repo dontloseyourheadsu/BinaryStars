@@ -2,6 +2,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BinaryStars.Application.Services.Devices;
 using System.Security.Claims;
+using BinaryStars.Api.Models;
+using BinaryStars.Api.Services;
+using BinaryStars.Application.Databases.Repositories.Accounts;
+using System.Net.WebSockets;
+using System.Text;
 
 namespace BinaryStars.Api.Controllers;
 
@@ -12,11 +17,22 @@ public class DevicesController : ControllerBase
 {
     private readonly IDevicesReadService _devicesReadService;
     private readonly IDevicesWriteService _devicesWriteService;
+    private readonly MessagingKafkaService _messagingKafkaService;
+    private readonly MessagingConnectionManager _connectionManager;
+    private readonly IAccountRepository _accountRepository;
 
-    public DevicesController(IDevicesReadService devicesReadService, IDevicesWriteService devicesWriteService)
+    public DevicesController(
+        IDevicesReadService devicesReadService,
+        IDevicesWriteService devicesWriteService,
+        MessagingKafkaService messagingKafkaService,
+        MessagingConnectionManager connectionManager,
+        IAccountRepository accountRepository)
     {
         _devicesReadService = devicesReadService;
         _devicesWriteService = devicesWriteService;
+        _messagingKafkaService = messagingKafkaService;
+        _connectionManager = connectionManager;
+        _accountRepository = accountRepository;
     }
 
     [HttpGet]
@@ -57,8 +73,45 @@ public class DevicesController : ControllerBase
 
 
         if (result.IsSuccess)
+        {
+            var removalEvent = new DeviceRemovedEvent(
+                Guid.NewGuid().ToString("D"),
+                userId,
+                deviceId,
+                DateTimeOffset.UtcNow);
+
+            var authMode = await ResolveKafkaAuthModeAsync(userId);
+            await _messagingKafkaService.PublishDeviceRemovedAsync(removalEvent, authMode, null, cancellationToken);
+
+            await NotifyConnectedDevicesAsync(userId, removalEvent, cancellationToken);
             return Ok();
+        }
 
         return BadRequest(result.Errors);
+    }
+
+    private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
+    {
+        var user = await _accountRepository.FindByIdAsync(userId);
+        if (user == null)
+            return KafkaAuthMode.Scram;
+
+        var logins = await _accountRepository.GetLoginsAsync(user);
+        return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
+    }
+
+    private async Task NotifyConnectedDevicesAsync(Guid userId, DeviceRemovedEvent removalEvent, CancellationToken cancellationToken)
+    {
+        var payload = MessagingJson.SerializeEnvelope("device_removed", removalEvent);
+        var bytes = Encoding.UTF8.GetBytes(payload);
+        var connections = _connectionManager.GetByUser(userId);
+
+        foreach (var connection in connections)
+        {
+            if (connection.Socket.State != WebSocketState.Open)
+                continue;
+
+            await connection.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+        }
     }
 }

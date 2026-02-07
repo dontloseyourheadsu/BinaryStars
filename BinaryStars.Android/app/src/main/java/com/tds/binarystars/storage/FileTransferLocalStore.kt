@@ -32,4 +32,9 @@ object FileTransferLocalStore {
             .remove(KEY_DIR_PREFIX + transferId)
             .apply()
     }
+
+    fun clearAll(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+    }
 }
