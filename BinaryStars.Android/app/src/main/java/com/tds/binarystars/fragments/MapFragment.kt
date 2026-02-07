@@ -18,11 +18,14 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.tds.binarystars.R
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.util.NetworkUtils
 
 class MapFragment : Fragment() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationDebugText: TextView
+    private lateinit var contentView: View
+    private lateinit var noConnectionView: View
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -50,7 +53,24 @@ class MapFragment : Fragment() {
         }
         locationDebugText = view.findViewById(R.id.textLocationDebug)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
+        contentView = view.findViewById(R.id.viewContent)
+        noConnectionView = view.findViewById(R.id.viewNoConnection)
+        view.findViewById<android.widget.Button>(R.id.btnRetry).setOnClickListener {
+            refreshLocation()
+        }
 
+        refreshLocation()
+    }
+
+    private fun refreshLocation() {
+        if (!NetworkUtils.isOnline(requireContext())) {
+            contentView.visibility = View.GONE
+            noConnectionView.visibility = View.VISIBLE
+            return
+        }
+
+        contentView.visibility = View.VISIBLE
+        noConnectionView.visibility = View.GONE
         checkLocationPermissions()
     }
 

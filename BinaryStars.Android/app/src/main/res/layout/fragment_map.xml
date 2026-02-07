@@ -37,55 +37,61 @@
         android:layout_height="1dp"
         android:background="@color/carbon_border" />
 
-    <TextView
-        android:id="@+id/textLocationDebug"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:text="Location: Unknown"
-        android:textColor="@android:color/holo_red_dark"
-        android:background="#FFFF00" />
-
-    <!-- Selector Bar -->
     <LinearLayout
+        android:id="@+id/viewContent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:background="@color/carbon_bg_panel"
-        android:padding="12dp"
-        android:gravity="center_vertical">
-        
-        <Spinner
-            android:id="@+id/spinnerDevices"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:background="@color/bg_light" 
-            android:paddingHorizontal="8dp"
-            android:layout_marginEnd="8dp"/>
-            
-        <Spinner
-            android:id="@+id/spinnerTime"
-            android:layout_width="100dp"
-            android:layout_height="40dp"
-            android:background="@color/bg_light"/>
-            
-    </LinearLayout>
-    
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/carbon_border"/>
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
-        
+        <TextView
+            android:id="@+id/textLocationDebug"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="Location: Unknown"
+            android:textColor="@android:color/holo_red_dark"
+            android:background="#FFFF00" />
+
+        <!-- Selector Bar -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="24dp">
+            android:orientation="horizontal"
+            android:background="@color/carbon_bg_panel"
+            android:padding="12dp"
+            android:gravity="center_vertical">
+            
+            <Spinner
+                android:id="@+id/spinnerDevices"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:background="@color/bg_light" 
+                android:paddingHorizontal="8dp"
+                android:layout_marginEnd="8dp"/>
+                
+            <Spinner
+                android:id="@+id/spinnerTime"
+                android:layout_width="100dp"
+                android:layout_height="40dp"
+                android:background="@color/bg_light"/>
+                
+        </LinearLayout>
+        
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/carbon_border"/>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+            
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="24dp">
 
             <!-- Map Container -->
             <FrameLayout
@@ -239,7 +245,49 @@
                     app:layout_constraintBottom_toBottomOf="parent"/>
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-        </LinearLayout>
-    </ScrollView>
-    
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/viewNoConnection"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginBottom="12dp"
+            android:contentDescription="No connection"
+            android:src="@drawable/ic_sync"
+            app:tint="@color/carbon_text_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No connection"
+            android:textColor="@color/carbon_text_main"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Connect to the internet to load location."
+            android:textColor="@color/carbon_text_muted"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Retry" />
+    </LinearLayout>
+
 </LinearLayout>

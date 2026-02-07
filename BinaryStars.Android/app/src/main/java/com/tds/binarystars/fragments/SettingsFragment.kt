@@ -21,9 +21,22 @@ import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.UserRoleDto
 import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.util.NetworkUtils
 import kotlinx.coroutines.launch
 
 class SettingsFragment : Fragment() {
+    private lateinit var contentView: View
+    private lateinit var noConnectionView: View
+    private lateinit var retryButton: Button
+    private lateinit var switchTheme: Switch
+    private lateinit var tvUsername: TextView
+    private lateinit var tvPlanStatus: TextView
+    private lateinit var tvEmail: TextView
+    private lateinit var tvDevicesCount: TextView
+    private lateinit var devicesListContainer: LinearLayout
+    private lateinit var btnUpgradePlan: Button
+    private lateinit var btnSignOut: Button
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -38,14 +51,18 @@ class SettingsFragment : Fragment() {
             (activity as? MainActivity)?.openDrawer()
         }
         
-        val switchTheme = view.findViewById<Switch>(R.id.switchTheme)
-        val tvUsername = view.findViewById<TextView>(R.id.tvUsername)
-        val tvPlanStatus = view.findViewById<TextView>(R.id.tvPlanStatus)
-        val tvEmail = view.findViewById<TextView>(R.id.tvEmail)
-        val tvDevicesCount = view.findViewById<TextView>(R.id.tvDevicesCount)
-        val devicesListContainer = view.findViewById<LinearLayout>(R.id.devicesListContainer)
-        val btnUpgradePlan = view.findViewById<Button>(R.id.btnUpgradePlan)
-        val btnSignOut = view.findViewById<Button>(R.id.btnSignOut)
+        contentView = view.findViewById(R.id.viewContent)
+        noConnectionView = view.findViewById(R.id.viewNoConnection)
+        retryButton = view.findViewById(R.id.btnRetry)
+
+        switchTheme = view.findViewById(R.id.switchTheme)
+        tvUsername = view.findViewById(R.id.tvUsername)
+        tvPlanStatus = view.findViewById(R.id.tvPlanStatus)
+        tvEmail = view.findViewById(R.id.tvEmail)
+        tvDevicesCount = view.findViewById(R.id.tvDevicesCount)
+        devicesListContainer = view.findViewById(R.id.devicesListContainer)
+        btnUpgradePlan = view.findViewById(R.id.btnUpgradePlan)
+        btnSignOut = view.findViewById(R.id.btnSignOut)
         
         // Initialize state
         val isDarkModeEnabled = SettingsStorage.isDarkModeEnabled(false)
@@ -71,6 +88,22 @@ class SettingsFragment : Fragment() {
             startActivity(intent)
         }
 
+        retryButton.setOnClickListener {
+            refreshData()
+        }
+
+        refreshData()
+    }
+
+    private fun refreshData() {
+        if (!NetworkUtils.isOnline(requireContext())) {
+            contentView.visibility = View.GONE
+            noConnectionView.visibility = View.VISIBLE
+            return
+        }
+
+        contentView.visibility = View.VISIBLE
+        noConnectionView.visibility = View.GONE
         loadAccountProfile(tvUsername, tvEmail, tvPlanStatus, btnUpgradePlan)
         loadDevices(tvDevicesCount, devicesListContainer)
     }

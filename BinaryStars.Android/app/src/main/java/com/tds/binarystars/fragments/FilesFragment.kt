@@ -30,7 +30,10 @@ import com.tds.binarystars.api.FileTransferStatusDto
 import com.tds.binarystars.api.StreamingRequestBody
 import com.tds.binarystars.crypto.CryptoManager
 import com.tds.binarystars.storage.FileTransferLocalStore
+import com.tds.binarystars.storage.FileTransferStorage
+import com.tds.binarystars.storage.LocalFileTransfer
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.util.NetworkUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,6 +48,9 @@ class FilesFragment : Fragment() {
     private lateinit var emptyState: TextView
     private lateinit var sendButton: Button
     private lateinit var adapter: FileTransfersAdapter
+    private lateinit var contentView: View
+    private lateinit var noConnectionView: View
+    private lateinit var retryButton: Button
     private val items = mutableListOf<TransferUiItem>()
     private var pendingMoveItem: TransferUiItem? = null
 
@@ -79,6 +85,9 @@ class FilesFragment : Fragment() {
         progressBar = view.findViewById(R.id.pbFilesLoading)
         emptyState = view.findViewById(R.id.tvFilesEmptyState)
         sendButton = view.findViewById(R.id.btnSendFile)
+        contentView = view.findViewById(R.id.viewContent)
+        noConnectionView = view.findViewById(R.id.viewNoConnection)
+        retryButton = view.findViewById(R.id.btnRetry)
 
         adapter = FileTransfersAdapter(items) { item, action ->
             when (action) {
@@ -98,6 +107,10 @@ class FilesFragment : Fragment() {
 
         sendButton.setOnClickListener { pickFileLauncher.launch("*/*") }
 
+        retryButton.setOnClickListener {
+            loadTransfers()
+        }
+
         loadTransfers()
     }
 
@@ -109,6 +122,26 @@ class FilesFragment : Fragment() {
     private fun loadTransfers() {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
+            val isOnline = NetworkUtils.isOnline(requireContext())
+            if (!isOnline) {
+                val cached = withContext(Dispatchers.IO) { FileTransferStorage.getTransfers() }
+                progressBar.visibility = View.GONE
+                sendButton.isEnabled = false
+                if (cached.isEmpty()) {
+                    setNoConnection(true)
+                    return@launch
+                }
+
+                setNoConnection(false)
+                items.clear()
+                items.addAll(buildUiItemsFromLocal(cached))
+                adapter.notifyDataSetChanged()
+                updateEmptyState()
+                return@launch
+            }
+
+            sendButton.isEnabled = true
+            setNoConnection(false)
             val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
             val transfersResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getFileTransfers() }
             progressBar.visibility = View.GONE
@@ -117,20 +150,29 @@ class FilesFragment : Fragment() {
                 val devices = devicesResponse.body().orEmpty()
                 val deviceLookup = devices.associateBy({ it.id }, { it.name })
 
-                items.clear()
-                transfersResponse.body().orEmpty().forEach { dto ->
-                    val directionLabel = if (dto.isSender) {
-                        "To: ${deviceLookup[dto.targetDeviceId] ?: dto.targetDeviceId}"
-                    } else {
-                        "From: ${deviceLookup[dto.senderDeviceId] ?: dto.senderDeviceId}"
-                    }
-                    val sizeText = formatSize(dto.sizeBytes)
-                    val meta = "$directionLabel • $sizeText"
-                    val localPath = FileTransferLocalStore.getLocalPath(requireContext(), dto.id)
-                    items.add(buildUiItem(dto.id, dto.fileName, dto.contentType, meta, dto.status, dto.isSender, localPath))
+                val locals = transfersResponse.body().orEmpty().map { dto ->
+                    LocalFileTransfer(
+                        id = dto.id,
+                        fileName = dto.fileName,
+                        contentType = dto.contentType,
+                        sizeBytes = dto.sizeBytes,
+                        senderDeviceId = dto.senderDeviceId,
+                        senderDeviceName = deviceLookup[dto.senderDeviceId] ?: dto.senderDeviceId,
+                        targetDeviceId = dto.targetDeviceId,
+                        targetDeviceName = deviceLookup[dto.targetDeviceId] ?: dto.targetDeviceId,
+                        status = dto.status.name,
+                        createdAt = dto.createdAt,
+                        expiresAt = dto.expiresAt,
+                        isSender = dto.isSender
+                    )
                 }
 
+                withContext(Dispatchers.IO) { FileTransferStorage.upsertTransfers(locals) }
+
+                items.clear()
+                items.addAll(buildUiItemsFromLocal(locals))
                 adapter.notifyDataSetChanged()
+                setNoConnection(false)
                 updateEmptyState()
             } else {
                 emptyState.text = "Failed to load transfers"
@@ -147,6 +189,34 @@ class FilesFragment : Fragment() {
             emptyState.visibility = View.GONE
             recyclerView.visibility = View.VISIBLE
         }
+    }
+
+    private fun buildUiItemsFromLocal(transfers: List<LocalFileTransfer>): List<TransferUiItem> {
+        return transfers.map { transfer ->
+            val directionLabel = if (transfer.isSender) {
+                "To: ${transfer.targetDeviceName}"
+            } else {
+                "From: ${transfer.senderDeviceName}"
+            }
+            val sizeText = formatSize(transfer.sizeBytes)
+            val meta = "$directionLabel • $sizeText"
+            val status = FileTransferStatusDto.valueOf(transfer.status)
+            val localPath = FileTransferLocalStore.getLocalPath(requireContext(), transfer.id)
+            buildUiItem(
+                transfer.id,
+                transfer.fileName,
+                transfer.contentType,
+                meta,
+                status,
+                transfer.isSender,
+                localPath
+            )
+        }
+    }
+
+    private fun setNoConnection(show: Boolean) {
+        noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
+        contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
     private fun buildUiItem(

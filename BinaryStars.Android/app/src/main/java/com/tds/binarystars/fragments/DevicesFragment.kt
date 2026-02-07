@@ -17,6 +17,7 @@ import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 import kotlinx.coroutines.launch
+import com.tds.binarystars.util.NetworkUtils
 
 import android.provider.Settings
 import android.annotation.SuppressLint
@@ -51,6 +52,22 @@ class DevicesFragment : Fragment() {
         val rvOnline = view.findViewById<RecyclerView>(R.id.rvOnlineDevices)
         val rvOffline = view.findViewById<RecyclerView>(R.id.rvOfflineDevices)
         val btnLinkDevice = view.findViewById<Button>(R.id.btnLinkDevice)
+        val contentView = view.findViewById<View>(R.id.viewContent)
+        val noConnectionView = view.findViewById<View>(R.id.viewNoConnection)
+        val retryButton = view.findViewById<Button>(R.id.btnRetry)
+
+        retryButton.setOnClickListener {
+            refreshDevices()
+        }
+
+        if (!NetworkUtils.isOnline(requireContext())) {
+            contentView.visibility = View.GONE
+            noConnectionView.visibility = View.VISIBLE
+            return
+        }
+
+        contentView.visibility = View.VISIBLE
+        noConnectionView.visibility = View.GONE
 
         rvOnline.layoutManager = LinearLayoutManager(context)
         rvOffline.layoutManager = LinearLayoutManager(context)

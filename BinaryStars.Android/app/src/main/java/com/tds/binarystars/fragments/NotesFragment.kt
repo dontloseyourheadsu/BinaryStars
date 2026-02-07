@@ -23,6 +23,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.storage.NotesStorage
+import com.tds.binarystars.util.NetworkUtils
 
 class NotesFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
@@ -30,6 +32,9 @@ class NotesFragment : Fragment() {
     private lateinit var emptyStateText: TextView
     private lateinit var createNoteBtn: Button
     private lateinit var adapter: NotesAdapter
+    private lateinit var contentView: View
+    private lateinit var noConnectionView: View
+    private lateinit var retryButton: Button
     private var notes: MutableList<NoteResponse> = mutableListOf()
 
     override fun onCreateView(
@@ -50,6 +55,9 @@ class NotesFragment : Fragment() {
         progressBar = view.findViewById(R.id.pbLoading)
         emptyStateText = view.findViewById(R.id.tvEmptyState)
         createNoteBtn = view.findViewById(R.id.btnCreateNote)
+        contentView = view.findViewById(R.id.viewContent)
+        noConnectionView = view.findViewById(R.id.viewNoConnection)
+        retryButton = view.findViewById(R.id.btnRetry)
 
         adapter = NotesAdapter(notes) { note ->
             val intent = Intent(requireContext(), NoteDetailActivity::class.java)
@@ -71,38 +79,90 @@ class NotesFragment : Fragment() {
             startActivity(Intent(requireContext(), CreateNoteActivity::class.java))
         }
 
+        retryButton.setOnClickListener {
+            loadNotes()
+        }
+
         loadNotes()
     }
 
     private fun loadNotes() {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
+            val isOnline = NetworkUtils.isOnline(requireContext())
+            if (!isOnline) {
+                createNoteBtn.isEnabled = false
+                val cached = withContext(Dispatchers.IO) { NotesStorage.getNotes() }
+                progressBar.visibility = View.GONE
+                notes.clear()
+                notes.addAll(cached)
+                adapter.notifyDataSetChanged()
+                if (notes.isEmpty()) {
+                    setNoConnection(true)
+                } else {
+                    setNoConnection(false)
+                    updateEmptyState()
+                }
+                return@launch
+            }
+
+            createNoteBtn.isEnabled = true
+
             try {
                 val response = withContext(Dispatchers.IO) { ApiClient.apiService.getNotes() }
-
                 progressBar.visibility = View.GONE
 
                 if (response.isSuccessful && response.body() != null) {
                     notes.clear()
                     notes.addAll(response.body()!!)
                     adapter.notifyDataSetChanged()
-
+                    withContext(Dispatchers.IO) { NotesStorage.upsertNotes(notes.toList()) }
+                    setNoConnection(false)
+                    updateEmptyState()
+                } else {
+                    val cached = withContext(Dispatchers.IO) { NotesStorage.getNotes() }
+                    notes.clear()
+                    notes.addAll(cached)
+                    adapter.notifyDataSetChanged()
+                    setNoConnection(false)
                     if (notes.isEmpty()) {
+                        emptyStateText.text = "Failed to load notes"
                         emptyStateText.visibility = View.VISIBLE
                         recyclerView.visibility = View.GONE
                     } else {
-                        emptyStateText.visibility = View.GONE
-                        recyclerView.visibility = View.VISIBLE
+                        updateEmptyState()
                     }
-                } else {
-                    emptyStateText.text = "Failed to load notes"
-                    emptyStateText.visibility = View.VISIBLE
                 }
             } catch (e: Exception) {
                 progressBar.visibility = View.GONE
-                emptyStateText.text = "Error: ${e.message}"
-                emptyStateText.visibility = View.VISIBLE
+                val cached = withContext(Dispatchers.IO) { NotesStorage.getNotes() }
+                notes.clear()
+                notes.addAll(cached)
+                adapter.notifyDataSetChanged()
+                setNoConnection(false)
+                if (notes.isEmpty()) {
+                    emptyStateText.text = "Error: ${e.message}"
+                    emptyStateText.visibility = View.VISIBLE
+                    recyclerView.visibility = View.GONE
+                } else {
+                    updateEmptyState()
+                }
             }
+        }
+    }
+
+    private fun setNoConnection(show: Boolean) {
+        noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
+        contentView.visibility = if (show) View.GONE else View.VISIBLE
+    }
+
+    private fun updateEmptyState() {
+        if (notes.isEmpty()) {
+            emptyStateText.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+        } else {
+            emptyStateText.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
         }
     }
 

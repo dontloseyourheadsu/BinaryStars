@@ -47,28 +47,76 @@
         android:layout_height="1dp"
         android:background="@color/carbon_border"/>
 
-    <!-- Progress Bar -->
-    <ProgressBar
-        android:id="@+id/pbLoading"
+    <LinearLayout
+        android:id="@+id/viewContent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone" />
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-    <!-- Empty State -->
-    <TextView
-        android:id="@+id/tvEmptyState"
+        <!-- Progress Bar -->
+        <ProgressBar
+            android:id="@+id/pbLoading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+
+        <!-- Empty State -->
+        <TextView
+            android:id="@+id/tvEmptyState"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="No notes yet. Create one to get started!"
+            android:textSize="16sp"
+            android:textColor="@color/carbon_text_muted"
+            android:visibility="gone" />
+
+        <!-- Notes List -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvNotes"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/viewNoConnection"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:text="No notes yet. Create one to get started!"
-        android:textSize="16sp"
-        android:textColor="@color/carbon_text_muted"
-        android:visibility="gone" />
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
 
-    <!-- Notes List -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvNotes"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginBottom="12dp"
+            android:contentDescription="No connection"
+            android:src="@drawable/ic_sync"
+            app:tint="@color/carbon_text_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No connection"
+            android:textColor="@color/carbon_text_main"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Connect to the internet to load notes."
+            android:textColor="@color/carbon_text_muted"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Retry" />
+    </LinearLayout>
 
 </LinearLayout>
