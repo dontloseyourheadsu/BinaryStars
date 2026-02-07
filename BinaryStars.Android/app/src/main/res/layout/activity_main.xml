@@ -106,6 +106,31 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/nav_messaging"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:tag="nav_messaging"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Messaging"
+                android:textSize="16sp"
+                android:textColor="@color/black" />
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_message"
+                android:contentDescription="Messaging" />
+
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/nav_map"
             android:layout_width="match_parent"
             android:layout_height="56dp"
