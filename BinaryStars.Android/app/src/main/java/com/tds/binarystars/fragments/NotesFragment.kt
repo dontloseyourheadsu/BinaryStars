@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.ImageView
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -21,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.tds.binarystars.MainActivity
 
 class NotesFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
@@ -39,6 +41,10 @@ class NotesFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
+            (activity as? MainActivity)?.openDrawer()
+        }
 
         recyclerView = view.findViewById(R.id.rvNotes)
         progressBar = view.findViewById(R.id.pbLoading)

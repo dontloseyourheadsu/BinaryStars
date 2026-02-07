@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
@@ -29,6 +30,7 @@ import com.tds.binarystars.api.FileTransferStatusDto
 import com.tds.binarystars.api.StreamingRequestBody
 import com.tds.binarystars.crypto.CryptoManager
 import com.tds.binarystars.storage.FileTransferLocalStore
+import com.tds.binarystars.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,6 +70,10 @@ class FilesFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
+            (activity as? MainActivity)?.openDrawer()
+        }
 
         recyclerView = view.findViewById(R.id.rvFileTransfers)
         progressBar = view.findViewById(R.id.pbFilesLoading)

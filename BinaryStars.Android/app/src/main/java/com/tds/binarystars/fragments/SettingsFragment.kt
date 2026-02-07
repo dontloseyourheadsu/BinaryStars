@@ -9,6 +9,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.ImageView
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -19,6 +20,7 @@ import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.UserRoleDto
 import com.tds.binarystars.storage.SettingsStorage
+import com.tds.binarystars.MainActivity
 import kotlinx.coroutines.launch
 
 class SettingsFragment : Fragment() {
@@ -31,6 +33,10 @@ class SettingsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
+            (activity as? MainActivity)?.openDrawer()
+        }
         
         val switchTheme = view.findViewById<Switch>(R.id.switchTheme)
         val tvUsername = view.findViewById<TextView>(R.id.tvUsername)

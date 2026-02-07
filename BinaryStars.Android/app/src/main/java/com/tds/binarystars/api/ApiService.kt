@@ -72,4 +72,8 @@ interface ApiService {
 
     @POST("files/transfers/{transferId}/reject")
     suspend fun rejectFileTransfer(@Path("transferId") transferId: String, @Query("deviceId") deviceId: String): Response<Void>
+
+    // Messaging
+    @POST("messaging/send")
+    suspend fun sendMessage(@Body request: SendMessageRequestDto): Response<MessagingMessageDto>
 }

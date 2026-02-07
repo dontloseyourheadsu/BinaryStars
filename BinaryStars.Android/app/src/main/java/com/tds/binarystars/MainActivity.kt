@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import com.tds.binarystars.fragments.DevicesFragment
 import com.tds.binarystars.fragments.FilesFragment
 import com.tds.binarystars.fragments.MapFragment
+import com.tds.binarystars.fragments.MessagingFragment
 import com.tds.binarystars.fragments.NotesFragment
 import com.tds.binarystars.fragments.SettingsFragment
 
@@ -20,6 +21,8 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
 import com.tds.binarystars.crypto.CryptoManager
 import androidx.drawerlayout.widget.DrawerLayout
+import com.tds.binarystars.messaging.MessagingSocketManager
+import androidx.core.view.GravityCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,6 +34,9 @@ class MainActivity : AppCompatActivity() {
 
         checkDeviceRegistration()
         checkPendingTransfers()
+
+        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        MessagingSocketManager.connect(this, deviceId)
 
         drawerLayout = findViewById(R.id.drawer_layout)
 
@@ -47,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         val navDevices = findViewById<LinearLayout>(R.id.nav_devices)
         val navFiles = findViewById<LinearLayout>(R.id.nav_files)
         val navNotes = findViewById<LinearLayout>(R.id.nav_notes)
+        val navMessaging = findViewById<LinearLayout>(R.id.nav_messaging)
         val navMap = findViewById<LinearLayout>(R.id.nav_map)
         val navSettings = findViewById<LinearLayout>(R.id.nav_settings)
 
@@ -65,6 +72,11 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawers()
         }
 
+        navMessaging.setOnClickListener {
+            loadFragment(MessagingFragment())
+            drawerLayout.closeDrawers()
+        }
+
         navMap.setOnClickListener {
             loadFragment(MapFragment())
             drawerLayout.closeDrawers()
@@ -74,6 +86,15 @@ class MainActivity : AppCompatActivity() {
             loadFragment(SettingsFragment())
             drawerLayout.closeDrawers()
         }
+    }
+
+    fun openDrawer() {
+        drawerLayout.openDrawer(GravityCompat.START)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        MessagingSocketManager.disconnect()
     }
 
     private fun loadFragment(fragment: Fragment) {

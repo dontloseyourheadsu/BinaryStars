@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -16,6 +17,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.tds.binarystars.R
+import com.tds.binarystars.MainActivity
 
 class MapFragment : Fragment() {
 
@@ -43,6 +45,9 @@ class MapFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
+            (activity as? MainActivity)?.openDrawer()
+        }
         locationDebugText = view.findViewById(R.id.textLocationDebug)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 

@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import android.provider.Settings
 import android.annotation.SuppressLint
 import android.widget.Button
+import android.widget.ImageView
 import com.tds.binarystars.MainActivity
 
 class DevicesFragment : Fragment() {
@@ -36,6 +37,10 @@ class DevicesFragment : Fragment() {
     @SuppressLint("HardwareIds")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
+            (activity as? MainActivity)?.openDrawer()
+        }
         
         refreshDevices()
     }
