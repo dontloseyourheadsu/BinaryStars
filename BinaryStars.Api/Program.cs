@@ -141,11 +141,19 @@ if (app.Environment.IsDevelopment())
     app.UseHangfireDashboard("/hangfire");
 }
 
+app.UseWebSockets();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TokenRefreshMiddleware>();
 
 app.MapControllers();
+
+app.Map("/ws/messaging", async context =>
+{
+    var handler = context.RequestServices.GetRequiredService<MessagingWebSocketHandler>();
+    await handler.HandleAsync(context);
+});
 
 if (!app.Environment.IsEnvironment("Test"))
 {

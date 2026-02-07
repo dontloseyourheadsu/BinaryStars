@@ -9,6 +9,7 @@ using BinaryStars.Application.Services.Devices;
 using BinaryStars.Application.Services.Notes;
 using BinaryStars.Application.Services.Transfers;
 using BinaryStars.Application.Validators.Accounts;
+using BinaryStars.Api.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -34,6 +35,9 @@ public static class ServicesExtensions
         services.AddScoped<IFileTransfersReadService, FileTransfersService>();
         services.AddScoped<IFileTransfersWriteService, FileTransfersService>();
         services.AddScoped<ExternalIdentityValidator>();
+        services.AddSingleton<MessagingConnectionManager>();
+        services.AddScoped<MessagingKafkaService>();
+        services.AddScoped<MessagingWebSocketHandler>();
 
         // Validators
         services.AddScoped<AuthValidator>();
