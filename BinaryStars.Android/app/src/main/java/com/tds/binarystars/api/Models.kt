@@ -162,6 +162,23 @@ data class SendMessageRequestDto(
     val sentAt: String?
 )
 
+// Location Models
+data class LocationUpdateRequestDto(
+    val deviceId: String,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracyMeters: Double?,
+    val recordedAt: String
+)
+
+data class LocationHistoryPointDto(
+    val id: String,
+    val title: String,
+    val recordedAt: String,
+    val latitude: Double,
+    val longitude: Double
+)
+
 data class DeviceRemovedEventDto(
     val id: String,
     val userId: String,
