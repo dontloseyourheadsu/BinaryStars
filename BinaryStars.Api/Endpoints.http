@@ -1,0 +1,148 @@
+@host = http://localhost:5004
+@token = REPLACE_WITH_ACCESS_TOKEN
+@deviceId = android-ssa-id-123
+@deviceId2 = android-ssa-id-456
+@noteId = 00000000-0000-0000-0000-000000000000
+@transferId = 00000000-0000-0000-0000-000000000000
+
+### Register
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "jupiter",
+  "email": "jupiter@example.com",
+  "password": "StrongPassword123!"
+}
+
+### Login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "jupiter@example.com",
+  "password": "StrongPassword123!"
+}
+
+### Get Profile
+GET {{host}}/api/accounts/me
+Authorization: Bearer {{token}}
+
+### Register Device
+POST {{host}}/api/devices/register
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "id": "{{deviceId}}",
+  "name": "Pixel 8",
+  "ipAddress": "192.168.1.10",
+  "ipv6Address": "fe80::1",
+  "publicKey": "BASE64_PUBLIC_KEY",
+  "publicKeyAlgorithm": "RSA"
+}
+
+### List Devices
+GET {{host}}/api/devices
+Authorization: Bearer {{token}}
+
+### Create Note
+POST {{host}}/api/notes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "My first note",
+  "deviceId": "{{deviceId}}",
+  "contentType": "Text",
+  "content": "Hello from BinaryStars"
+}
+
+### List Notes
+GET {{host}}/api/notes
+Authorization: Bearer {{token}}
+
+### Get Note By Id
+GET {{host}}/api/notes/{{noteId}}
+Authorization: Bearer {{token}}
+
+### Update Note
+PUT {{host}}/api/notes/{{noteId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Updated title",
+  "content": "Updated content"
+}
+
+### Delete Note
+DELETE {{host}}/api/notes/{{noteId}}
+Authorization: Bearer {{token}}
+
+### Create Transfer
+POST {{host}}/api/files/transfers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fileName": "example.bin",
+  "contentType": "application/octet-stream",
+  "sizeBytes": 16,
+  "senderDeviceId": "{{deviceId}}",
+  "targetDeviceId": "{{deviceId2}}",
+  "encryptionEnvelope": "{\"alg\":\"RSA\",\"keyId\":\"key-1\"}"
+}
+
+### Upload Transfer Bytes
+# Replace ./sample.bin with a real file path on your machine
+PUT {{host}}/api/files/transfers/{{transferId}}/upload
+Authorization: Bearer {{token}}
+Content-Type: application/octet-stream
+
+< ./sample.bin
+
+### Download Transfer Bytes
+GET {{host}}/api/files/transfers/{{transferId}}/download?deviceId={{deviceId2}}
+Authorization: Bearer {{token}}
+
+### Reject Transfer
+POST {{host}}/api/files/transfers/{{transferId}}/reject?deviceId={{deviceId2}}
+Authorization: Bearer {{token}}
+
+### Create Location
+POST {{host}}/api/locations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "deviceId": "{{deviceId}}",
+  "latitude": 40.7128,
+  "longitude": -74.006,
+  "accuracyMeters": 6.5,
+  "recordedAt": "2026-02-08T16:00:00Z"
+}
+
+### Get Location History
+GET {{host}}/api/locations/history?deviceId={{deviceId}}&limit=50
+Authorization: Bearer {{token}}
+
+### Send Message
+POST {{host}}/api/messaging/send
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "senderDeviceId": "{{deviceId}}",
+  "targetDeviceId": "{{deviceId2}}",
+  "body": "Hello from BinaryStars",
+  "sentAt": "2026-02-08T16:00:00Z"
+}
+
+### Decode JWT (Development Only)
+POST {{host}}/api/debug/token
+Content-Type: application/json
+
+{
+  "token": "{{token}}"
+}
