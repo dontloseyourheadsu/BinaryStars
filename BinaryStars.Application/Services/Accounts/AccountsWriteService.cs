@@ -7,13 +7,39 @@ using Microsoft.AspNetCore.Identity;
 
 namespace BinaryStars.Application.Services.Accounts;
 
+/// <summary>
+/// Write-only account operations exposed by the application layer.
+/// </summary>
 public interface IAccountsWriteService
 {
+    /// <summary>
+    /// Registers a new user with a password-based login.
+    /// </summary>
+    /// <param name="request">The registration request payload.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The created user model or a failure result.</returns>
     Task<Result<UserDbModel>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Validates credentials and returns the associated user on success.
+    /// </summary>
+    /// <param name="request">The login request payload.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The authenticated user model or a failure result.</returns>
     Task<Result<UserDbModel>> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Validates an external identity token and links or creates an account.
+    /// </summary>
+    /// <param name="request">The external login request payload.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The authenticated or newly created user model.</returns>
     Task<Result<UserDbModel>> ExternalLoginAsync(ExternalLoginRequest request, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Application service for creating and authenticating accounts.
+/// </summary>
 public class AccountsWriteService : IAccountsWriteService
 {
     private readonly IAccountRepository _accountRepository;
@@ -30,6 +56,7 @@ public class AccountsWriteService : IAccountsWriteService
         _identityValidator = identityValidator;
     }
 
+    /// <inheritdoc />
     public async Task<Result<UserDbModel>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
         var validationResult = _validator.ValidateRegister(request);
@@ -53,6 +80,7 @@ public class AccountsWriteService : IAccountsWriteService
         return Result<UserDbModel>.Success(user);
     }
 
+    /// <inheritdoc />
     public async Task<Result<UserDbModel>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var validationResult = _validator.ValidateLogin(request);
@@ -88,6 +116,7 @@ public class AccountsWriteService : IAccountsWriteService
         return Result<UserDbModel>.Failure("Invalid login attempt.");
     }
 
+    /// <inheritdoc />
     public async Task<Result<UserDbModel>> ExternalLoginAsync(ExternalLoginRequest request, CancellationToken cancellationToken)
     {
         var validationResult = _validator.ValidateExternal(request);

@@ -6,8 +6,18 @@ using BinaryStars.Api.Models;
 
 namespace BinaryStars.Api.Services;
 
+/// <summary>
+/// Background job request for publishing a transfer to Kafka.
+/// </summary>
+/// <param name="TransferId">The transfer identifier.</param>
+/// <param name="TempFilePath">The temporary file path containing upload bytes.</param>
+/// <param name="KafkaAuthMode">The Kafka authentication mode.</param>
+/// <param name="OAuthToken">Optional OAuth bearer token for Kafka.</param>
 public record FileTransferJobRequest(Guid TransferId, string TempFilePath, string KafkaAuthMode, string? OAuthToken);
 
+/// <summary>
+/// Hangfire job for publishing uploaded transfer content into Kafka.
+/// </summary>
 public class FileTransferJob
 {
     private readonly IFileTransferRepository _repository;
@@ -16,6 +26,14 @@ public class FileTransferJob
     private readonly FileTransferSettings _settings;
     private readonly ILogger<FileTransferJob> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileTransferJob"/> class.
+    /// </summary>
+    /// <param name="repository">Repository for transfer data.</param>
+    /// <param name="writeService">Transfer write service for status updates.</param>
+    /// <param name="kafkaService">Kafka streaming service.</param>
+    /// <param name="settings">Transfer settings.</param>
+    /// <param name="logger">Logger for job status.</param>
     public FileTransferJob(
         IFileTransferRepository repository,
         IFileTransfersWriteService writeService,
@@ -30,6 +48,10 @@ public class FileTransferJob
         _logger = logger;
     }
 
+    /// <summary>
+    /// Streams a temp file into Kafka, updates status, and cleans up the file.
+    /// </summary>
+    /// <param name="request">The job request.</param>
     public async Task SendToKafkaAsync(FileTransferJobRequest request)
     {
         var transfer = await _repository.GetByIdAsync(request.TransferId, CancellationToken.None);

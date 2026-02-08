@@ -165,6 +165,9 @@ if (!app.Environment.IsEnvironment("Test"))
 
 app.Run();
 
+/// <summary>
+/// Application entry point type for integration testing.
+/// </summary>
 public partial class Program
 {
 }

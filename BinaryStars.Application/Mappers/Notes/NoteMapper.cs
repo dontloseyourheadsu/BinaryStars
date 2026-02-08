@@ -3,8 +3,16 @@ using BinaryStars.Domain.Notes;
 
 namespace BinaryStars.Application.Mappers.Notes;
 
+/// <summary>
+/// Maps note database models to domain models and back.
+/// </summary>
 public static class NoteMapper
 {
+    /// <summary>
+    /// Converts a database note model into the domain note model.
+    /// </summary>
+    /// <param name="model">The database model.</param>
+    /// <returns>The domain model.</returns>
     public static Note ToDomain(this NoteDbModel model)
     {
         return new Note(
@@ -18,6 +26,11 @@ public static class NoteMapper
         );
     }
 
+    /// <summary>
+    /// Converts a domain note model into the database note model.
+    /// </summary>
+    /// <param name="domain">The domain model.</param>
+    /// <returns>The database model.</returns>
     public static NoteDbModel ToDb(this Note domain)
     {
         return new NoteDbModel

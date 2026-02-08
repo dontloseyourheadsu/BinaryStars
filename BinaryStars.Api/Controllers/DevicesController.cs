@@ -10,6 +10,9 @@ using System.Text;
 
 namespace BinaryStars.Api.Controllers;
 
+/// <summary>
+/// Provides device management endpoints.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize] // Ensure authentication is required
@@ -21,6 +24,14 @@ public class DevicesController : ControllerBase
     private readonly MessagingConnectionManager _connectionManager;
     private readonly IAccountRepository _accountRepository;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DevicesController"/> class.
+    /// </summary>
+    /// <param name="devicesReadService">The device read service.</param>
+    /// <param name="devicesWriteService">The device write service.</param>
+    /// <param name="messagingKafkaService">The Kafka messaging service.</param>
+    /// <param name="connectionManager">The websocket connection manager.</param>
+    /// <param name="accountRepository">The account repository.</param>
     public DevicesController(
         IDevicesReadService devicesReadService,
         IDevicesWriteService devicesWriteService,
@@ -35,6 +46,11 @@ public class DevicesController : ControllerBase
         _accountRepository = accountRepository;
     }
 
+    /// <summary>
+    /// Gets devices linked to the authenticated user.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The list of devices.</returns>
     [HttpGet]
     public async Task<IActionResult> GetDevices(CancellationToken cancellationToken)
     {
@@ -48,6 +64,12 @@ public class DevicesController : ControllerBase
         return BadRequest(result.Errors);
     }
 
+    /// <summary>
+    /// Registers or updates a device for the authenticated user.
+    /// </summary>
+    /// <param name="request">The device registration request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The registered device.</returns>
     [HttpPost("register")]
     public async Task<IActionResult> RegisterDevice([FromBody] RegisterDeviceRequest request, CancellationToken cancellationToken)
     {
@@ -65,6 +87,12 @@ public class DevicesController : ControllerBase
         return BadRequest(result.Errors);
     }
 
+    /// <summary>
+    /// Unlinks a device from the authenticated user.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>Ok on success.</returns>
     [HttpDelete("{deviceId}")]
     public async Task<IActionResult> UnlinkDevice(string deviceId, CancellationToken cancellationToken)
     {

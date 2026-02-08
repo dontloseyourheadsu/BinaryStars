@@ -4,6 +4,9 @@ using BinaryStars.Domain.Transfers;
 
 namespace BinaryStars.Api.Services;
 
+/// <summary>
+/// Hangfire job for expiring transfers and cleaning up Kafka packets.
+/// </summary>
 public class FileTransferCleanupJob
 {
     private readonly IFileTransferRepository _repository;
@@ -11,6 +14,13 @@ public class FileTransferCleanupJob
     private readonly FileTransferKafkaService _kafkaService;
     private readonly ILogger<FileTransferCleanupJob> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileTransferCleanupJob"/> class.
+    /// </summary>
+    /// <param name="repository">Repository for transfer data.</param>
+    /// <param name="writeService">Transfer write service for status updates.</param>
+    /// <param name="kafkaService">Kafka streaming service.</param>
+    /// <param name="logger">Logger for cleanup status.</param>
     public FileTransferCleanupJob(
         IFileTransferRepository repository,
         IFileTransfersWriteService writeService,
@@ -23,6 +33,9 @@ public class FileTransferCleanupJob
         _logger = logger;
     }
 
+    /// <summary>
+    /// Marks expired transfers and deletes related Kafka packets.
+    /// </summary>
     public async Task CleanupExpiredAsync()
     {
         var expired = await _repository.GetExpiredAsync(DateTimeOffset.UtcNow, CancellationToken.None);

@@ -5,17 +5,32 @@ using Microsoft.Extensions.Options;
 
 namespace BinaryStars.Api.Services;
 
+/// <summary>
+/// Kafka-backed messaging service for offline delivery and device events.
+/// </summary>
 public class MessagingKafkaService
 {
     private readonly KafkaSettings _settings;
     private readonly KafkaClientFactory _clientFactory;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MessagingKafkaService"/> class.
+    /// </summary>
+    /// <param name="settings">Kafka settings.</param>
+    /// <param name="clientFactory">Kafka client factory.</param>
     public MessagingKafkaService(IOptions<KafkaSettings> settings, KafkaClientFactory clientFactory)
     {
         _settings = settings.Value;
         _clientFactory = clientFactory;
     }
 
+    /// <summary>
+    /// Publishes a device-to-device message.
+    /// </summary>
+    /// <param name="message">The message payload.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task PublishMessageAsync(MessagingMessage message, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
     {
         using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
@@ -33,6 +48,13 @@ public class MessagingKafkaService
         producer.Flush(TimeSpan.FromSeconds(10));
     }
 
+    /// <summary>
+    /// Publishes a device removal event.
+    /// </summary>
+    /// <param name="deviceRemovedEvent">The removal event payload.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task PublishDeviceRemovedAsync(DeviceRemovedEvent deviceRemovedEvent, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
     {
         using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
@@ -50,6 +72,13 @@ public class MessagingKafkaService
         producer.Flush(TimeSpan.FromSeconds(10));
     }
 
+    /// <summary>
+    /// Deletes a message from Kafka using a tombstone.
+    /// </summary>
+    /// <param name="messageId">The message identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task DeleteMessageAsync(string messageId, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
     {
         using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
@@ -64,6 +93,13 @@ public class MessagingKafkaService
         producer.Flush(TimeSpan.FromSeconds(10));
     }
 
+    /// <summary>
+    /// Deletes a device removal event from Kafka using a tombstone.
+    /// </summary>
+    /// <param name="eventId">The event identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task DeleteDeviceRemovedAsync(string eventId, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
     {
         using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
@@ -78,6 +114,15 @@ public class MessagingKafkaService
         producer.Flush(TimeSpan.FromSeconds(10));
     }
 
+    /// <summary>
+    /// Consumes pending messages for a device from Kafka.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The pending messages.</returns>
     public async Task<List<MessagingMessage>> ConsumePendingMessagesAsync(
         string deviceId,
         Guid userId,
@@ -123,6 +168,15 @@ public class MessagingKafkaService
         return messages;
     }
 
+    /// <summary>
+    /// Consumes pending device removal events for a device.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The pending removal events.</returns>
     public async Task<List<DeviceRemovedEvent>> ConsumePendingDeviceRemovedAsync(
         string deviceId,
         Guid userId,

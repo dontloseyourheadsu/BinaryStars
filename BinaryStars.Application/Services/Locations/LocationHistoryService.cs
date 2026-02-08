@@ -6,6 +6,14 @@ using BinaryStars.Domain.Errors.Locations;
 
 namespace BinaryStars.Application.Services.Locations;
 
+/// <summary>
+/// Request payload for reporting a device location update.
+/// </summary>
+/// <param name="DeviceId">The device identifier.</param>
+/// <param name="Latitude">The recorded latitude.</param>
+/// <param name="Longitude">The recorded longitude.</param>
+/// <param name="AccuracyMeters">The optional accuracy in meters.</param>
+/// <param name="RecordedAt">The timestamp when the location was recorded.</param>
 public record LocationUpdateRequest(
     string DeviceId,
     double Latitude,
@@ -13,6 +21,14 @@ public record LocationUpdateRequest(
     double? AccuracyMeters,
     DateTimeOffset RecordedAt);
 
+/// <summary>
+/// Read model returned for device location history points.
+/// </summary>
+/// <param name="Id">The history record identifier.</param>
+/// <param name="Title">A label for UI display.</param>
+/// <param name="RecordedAt">The timestamp when the location was recorded.</param>
+/// <param name="Latitude">The latitude.</param>
+/// <param name="Longitude">The longitude.</param>
 public record LocationHistoryPointResponse(
     Guid Id,
     string Title,
@@ -20,16 +36,40 @@ public record LocationHistoryPointResponse(
     double Latitude,
     double Longitude);
 
+/// <summary>
+/// Write-only location history operations.
+/// </summary>
 public interface ILocationHistoryWriteService
 {
+    /// <summary>
+    /// Adds a new location history entry for a device.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="request">The location update request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A success or failure result.</returns>
     Task<Result> AddLocationAsync(Guid userId, LocationUpdateRequest request, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Read-only location history operations.
+/// </summary>
 public interface ILocationHistoryReadService
 {
+    /// <summary>
+    /// Gets location history for the specified device.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="limit">The maximum number of history points to return.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A list of history points or a failure result.</returns>
     Task<Result<List<LocationHistoryPointResponse>>> GetHistoryAsync(Guid userId, string deviceId, int limit, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Application service for device location history.
+/// </summary>
 public class LocationHistoryService : ILocationHistoryWriteService, ILocationHistoryReadService
 {
     private const int DefaultLimit = 50;
@@ -42,6 +82,7 @@ public class LocationHistoryService : ILocationHistoryWriteService, ILocationHis
         _deviceRepository = deviceRepository;
     }
 
+    /// <inheritdoc />
     public async Task<Result> AddLocationAsync(Guid userId, LocationUpdateRequest request, CancellationToken cancellationToken)
     {
         if (userId == Guid.Empty)
@@ -71,6 +112,7 @@ public class LocationHistoryService : ILocationHistoryWriteService, ILocationHis
         return Result.Success();
     }
 
+    /// <inheritdoc />
     public async Task<Result<List<LocationHistoryPointResponse>>> GetHistoryAsync(Guid userId, string deviceId, int limit, CancellationToken cancellationToken)
     {
         if (userId == Guid.Empty)

@@ -8,6 +8,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BinaryStars.Api.Controllers;
 
+/// <summary>
+/// Provides messaging endpoints for device-to-device chat.
+/// </summary>
 [ApiController]
 [Route("api/messaging")]
 [Authorize]
@@ -19,6 +22,13 @@ public class MessagingController : ControllerBase
     private readonly IDeviceRepository _deviceRepository;
     private readonly IAccountRepository _accountRepository;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MessagingController"/> class.
+    /// </summary>
+    /// <param name="connectionManager">The websocket connection manager.</param>
+    /// <param name="kafkaService">The Kafka messaging service.</param>
+    /// <param name="deviceRepository">The device repository.</param>
+    /// <param name="accountRepository">The account repository.</param>
     public MessagingController(
         MessagingConnectionManager connectionManager,
         MessagingKafkaService kafkaService,
@@ -31,6 +41,12 @@ public class MessagingController : ControllerBase
         _accountRepository = accountRepository;
     }
 
+    /// <summary>
+    /// Sends a message from one device to another.
+    /// </summary>
+    /// <param name="request">The send message request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The sent message payload.</returns>
     [HttpPost("send")]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageRequest request, CancellationToken cancellationToken)
     {

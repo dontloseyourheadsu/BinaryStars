@@ -9,15 +9,27 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace BinaryStars.Api.Services;
 
+/// <summary>
+/// Issues JWT access tokens for authenticated users.
+/// </summary>
 public class JwtTokenService
 {
     private readonly JwtSettings _settings;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="JwtTokenService"/> class.
+    /// </summary>
+    /// <param name="options">The JWT settings.</param>
     public JwtTokenService(IOptions<JwtSettings> options)
     {
         _settings = options.Value;
     }
 
+    /// <summary>
+    /// Creates a new access token for a user entity.
+    /// </summary>
+    /// <param name="user">The user model.</param>
+    /// <returns>The authentication response with token data.</returns>
     public AuthResponse CreateToken(UserDbModel user)
     {
         var now = DateTimeOffset.UtcNow;
@@ -46,6 +58,11 @@ public class JwtTokenService
         return new AuthResponse("Bearer", accessToken, (int)TimeSpan.FromMinutes(_settings.ExpiresInMinutes).TotalSeconds);
     }
 
+    /// <summary>
+    /// Creates a new access token from an existing claims principal.
+    /// </summary>
+    /// <param name="principal">The authenticated principal.</param>
+    /// <returns>The authentication response with token data.</returns>
     public AuthResponse CreateTokenFromClaims(ClaimsPrincipal principal)
     {
         var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;

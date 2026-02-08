@@ -5,8 +5,15 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace BinaryStars.Application.Databases.DatabaseRules;
 
+/// <summary>
+/// Entity configuration for <see cref="NoteDbModel"/>.
+/// </summary>
 public class NoteDbModelConfiguration : IEntityTypeConfiguration<NoteDbModel>
 {
+    /// <summary>
+    /// Configures the note entity schema rules.
+    /// </summary>
+    /// <param name="builder">The entity type builder.</param>
     public void Configure(EntityTypeBuilder<NoteDbModel> builder)
     {
         builder.HasKey(n => n.Id);

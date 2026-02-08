@@ -5,8 +5,15 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace BinaryStars.Application.Databases.DatabaseRules;
 
+/// <summary>
+/// Entity configuration for <see cref="LocationHistoryDbModel"/>.
+/// </summary>
 public class LocationHistoryDbModelConfiguration : IEntityTypeConfiguration<LocationHistoryDbModel>
 {
+    /// <summary>
+    /// Configures the location history entity schema rules.
+    /// </summary>
+    /// <param name="builder">The entity type builder.</param>
     public void Configure(EntityTypeBuilder<LocationHistoryDbModel> builder)
     {
         builder.HasKey(l => l.Id);
