@@ -1,5 +1,13 @@
 # BinaryStars.Android
 
+## Secrets And Local Configuration
+
+- Do not commit real OAuth client IDs or signing keys.
+- Update the Google and Microsoft client IDs in app/build.gradle.kts.
+- Keep auth_config_single_account.json and AndroidManifest.xml aligned with
+  your Microsoft redirect URI and signature hash.
+- The debug keystore lives under ~/.android/debug.keystore by default.
+
 ## OAuth Setup Instructions
 
 This project supports authentication via Google and Microsoft. Follow the instructions below to configure the necessary Client IDs and keys in your environment.
@@ -177,3 +185,9 @@ If you do not have a debug keystore or need to generate a specific one:
 ```bash
 keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias AndroidDebugKey -keypass android -keyalg RSA -keysize 2048 -validity 10000
 ```
+
+## Cloud Deployment Notes
+
+- Update Azure app registrations with release signing hashes and redirect URIs.
+- Use production OAuth client IDs for release builds.
+- Keep client IDs and tenant IDs in a secure build configuration for CI.
