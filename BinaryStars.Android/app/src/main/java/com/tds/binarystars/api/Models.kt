@@ -1,34 +1,40 @@
 package com.tds.binarystars.api
 
+/** Login request payload. */
 data class LoginRequest(
     val email: String,
     val password: String
 )
 
+/** Registration request payload. */
 data class RegisterRequest(
     val username: String,
     val email: String,
     val password: String
 )
 
+/** External provider login payload. */
 data class ExternalAuthRequest(
     val provider: String,
     val token: String,
     val username: String
 )
 
+/** JWT response payload. */
 data class AuthResponse(
     val tokenType: String,
     val accessToken: String,
     val expiresIn: Int
 )
 
+/** User role values returned by the API. */
 enum class UserRoleDto {
     Disabled,
     Free,
     Premium
 }
 
+/** User profile response payload. */
 data class AccountProfileDto(
     val id: String,
     val username: String,
@@ -36,11 +42,13 @@ data class AccountProfileDto(
     val role: UserRoleDto
 )
 
+/** Device type values returned by the API. */
 enum class DeviceTypeDto {
     Linux,
     Android
 }
 
+/** Device response payload. */
 data class DeviceDto(
     val id: String,
     val name: String,
@@ -56,6 +64,7 @@ data class DeviceDto(
     val lastSeen: String
 )
 
+/** Transfer status values returned by the API. */
 enum class FileTransferStatusDto {
     Queued,
     Uploading,
@@ -66,6 +75,7 @@ enum class FileTransferStatusDto {
     Rejected
 }
 
+/** Summary response for transfer lists. */
 data class FileTransferSummaryDto(
     val id: String,
     val fileName: String,
@@ -79,6 +89,7 @@ data class FileTransferSummaryDto(
     val isSender: Boolean
 )
 
+/** Detailed response for a transfer. */
 data class FileTransferDetailDto(
     val id: String,
     val fileName: String,
@@ -102,6 +113,7 @@ data class FileTransferDetailDto(
     val completedAt: String?
 )
 
+/** Transfer creation request payload. */
 data class CreateFileTransferRequestDto(
     val fileName: String,
     val contentType: String,
@@ -112,11 +124,13 @@ data class CreateFileTransferRequestDto(
 )
 
 // Notes Models
+/** Note content type. */
 enum class NoteType {
     Plaintext,
     Markdown
 }
 
+/** Note response payload. */
 data class NoteResponse(
     val id: String,
     val name: String,
@@ -128,6 +142,7 @@ data class NoteResponse(
     val updatedAt: String
 )
 
+/** Note creation request payload. */
 data class CreateNoteRequest(
     val name: String,
     val deviceId: String,
@@ -135,17 +150,20 @@ data class CreateNoteRequest(
     val content: String
 )
 
+/** Note update request payload. */
 data class UpdateNoteRequestDto(
     val name: String,
     val content: String
 )
 
 // Messaging Models
+/** Websocket envelope wrapper. */
 data class MessagingEnvelopeDto(
     val type: String,
     val payload: com.google.gson.JsonElement
 )
 
+/** Messaging payload returned by the API. */
 data class MessagingMessageDto(
     val id: String,
     val userId: String,
@@ -155,6 +173,7 @@ data class MessagingMessageDto(
     val sentAt: String
 )
 
+/** Send message request payload. */
 data class SendMessageRequestDto(
     val senderDeviceId: String,
     val targetDeviceId: String,
@@ -163,6 +182,7 @@ data class SendMessageRequestDto(
 )
 
 // Location Models
+/** Location update request payload. */
 data class LocationUpdateRequestDto(
     val deviceId: String,
     val latitude: Double,
@@ -171,6 +191,7 @@ data class LocationUpdateRequestDto(
     val recordedAt: String
 )
 
+/** Location history response payload. */
 data class LocationHistoryPointDto(
     val id: String,
     val title: String,
@@ -179,6 +200,7 @@ data class LocationHistoryPointDto(
     val longitude: Double
 )
 
+/** Device removal event payload. */
 data class DeviceRemovedEventDto(
     val id: String,
     val userId: String,

@@ -13,6 +13,9 @@ using Microsoft.Extensions.Options;
 
 namespace BinaryStars.Api.Controllers;
 
+/// <summary>
+/// Provides file transfer endpoints backed by Kafka packet streaming.
+/// </summary>
 [ApiController]
 [Route("api/files/transfers")]
 [Authorize]
@@ -26,6 +29,16 @@ public class FileTransfersController : ControllerBase
     private readonly FileTransferSettings _settings;
     private readonly KafkaSettings _kafkaSettings;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileTransfersController"/> class.
+    /// </summary>
+    /// <param name="readService">The transfer read service.</param>
+    /// <param name="writeService">The transfer write service.</param>
+    /// <param name="repository">The transfer repository.</param>
+    /// <param name="accountRepository">The account repository.</param>
+    /// <param name="kafkaService">The Kafka transfer service.</param>
+    /// <param name="settings">The file transfer settings.</param>
+    /// <param name="kafkaSettings">The Kafka settings.</param>
     public FileTransfersController(
         IFileTransfersReadService readService,
         IFileTransfersWriteService writeService,
@@ -44,6 +57,11 @@ public class FileTransfersController : ControllerBase
         _kafkaSettings = kafkaSettings.Value;
     }
 
+    /// <summary>
+    /// Gets all transfers for the authenticated user.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The list of transfers.</returns>
     [HttpGet]
     public async Task<IActionResult> GetTransfers(CancellationToken cancellationToken)
     {
@@ -55,6 +73,12 @@ public class FileTransfersController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Gets pending transfers for a specific device.
+    /// </summary>
+    /// <param name="deviceId">The target device identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The list of pending transfers.</returns>
     [HttpGet("pending")]
     public async Task<IActionResult> GetPendingTransfers([FromQuery] string deviceId, CancellationToken cancellationToken)
     {
@@ -66,6 +90,12 @@ public class FileTransfersController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Gets a specific transfer by identifier.
+    /// </summary>
+    /// <param name="transferId">The transfer identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The transfer details.</returns>
     [HttpGet("{transferId:guid}")]
     public async Task<IActionResult> GetTransfer(Guid transferId, CancellationToken cancellationToken)
     {
@@ -77,6 +107,12 @@ public class FileTransfersController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Creates a new transfer and returns metadata for upload.
+    /// </summary>
+    /// <param name="request">The transfer creation request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The created transfer detail response.</returns>
     [HttpPost]
     public async Task<IActionResult> CreateTransfer([FromBody] CreateFileTransferRequestDto request, CancellationToken cancellationToken)
     {
@@ -108,6 +144,12 @@ public class FileTransfersController : ControllerBase
         return CreatedAtAction(nameof(GetTransfer), new { transferId = result.Value.Id }, result.Value);
     }
 
+    /// <summary>
+    /// Uploads transfer bytes and queues Kafka publishing.
+    /// </summary>
+    /// <param name="transferId">The transfer identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>Accepted when queued for processing.</returns>
     [HttpPut("{transferId:guid}/upload")]
     [DisableRequestSizeLimit]
     public async Task<IActionResult> UploadTransfer(Guid transferId, CancellationToken cancellationToken)
@@ -144,6 +186,13 @@ public class FileTransfersController : ControllerBase
         return Accepted(new { transferId });
     }
 
+    /// <summary>
+    /// Streams transfer bytes to the client.
+    /// </summary>
+    /// <param name="transferId">The transfer identifier.</param>
+    /// <param name="deviceId">The target device identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>File stream response.</returns>
     [HttpGet("{transferId:guid}/download")]
     public async Task<IActionResult> DownloadTransfer(Guid transferId, [FromQuery] string deviceId, CancellationToken cancellationToken)
     {
@@ -195,6 +244,13 @@ public class FileTransfersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Rejects a transfer and deletes pending packets.
+    /// </summary>
+    /// <param name="transferId">The transfer identifier.</param>
+    /// <param name="deviceId">The target device identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>Ok on success.</returns>
     [HttpPost("{transferId:guid}/reject")]
     public async Task<IActionResult> RejectTransfer(Guid transferId, [FromQuery] string deviceId, CancellationToken cancellationToken)
     {
@@ -247,6 +303,15 @@ public class FileTransfersController : ControllerBase
     }
 }
 
+/// <summary>
+/// Request payload for creating a file transfer.
+/// </summary>
+/// <param name="FileName">The original file name.</param>
+/// <param name="ContentType">The MIME content type.</param>
+/// <param name="SizeBytes">The file size in bytes.</param>
+/// <param name="SenderDeviceId">The sender device identifier.</param>
+/// <param name="TargetDeviceId">The target device identifier.</param>
+/// <param name="EncryptionEnvelope">The encryption envelope metadata.</param>
 public record CreateFileTransferRequestDto(
     string FileName,
     string ContentType,

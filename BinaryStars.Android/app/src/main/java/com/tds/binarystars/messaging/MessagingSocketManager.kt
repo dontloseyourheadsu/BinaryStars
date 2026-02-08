@@ -21,6 +21,9 @@ import java.time.OffsetDateTime
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
+/**
+ * Manages the websocket connection for device messaging.
+ */
 object MessagingSocketManager {
     private const val WS_BASE_URL = "ws://10.0.2.2:5004/ws/messaging"
     private const val MAX_MESSAGE_LENGTH = 500
@@ -37,6 +40,9 @@ object MessagingSocketManager {
         .readTimeout(0, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * Opens a websocket connection for the current device.
+     */
     fun connect(context: Context, deviceId: String) {
         if (webSocket != null && currentDeviceId == deviceId) return
 
@@ -67,11 +73,17 @@ object MessagingSocketManager {
         })
     }
 
+    /**
+     * Closes the websocket connection.
+     */
     fun disconnect() {
         webSocket?.close(1000, "Client closing")
         webSocket = null
     }
 
+    /**
+     * Sends a message through the websocket if connected.
+     */
     fun sendMessage(request: SendMessageRequestDto): Boolean {
         if (request.body.length > MAX_MESSAGE_LENGTH) {
             return false
@@ -86,10 +98,16 @@ object MessagingSocketManager {
         return socket.send(json)
     }
 
+    /**
+     * Registers a listener for messaging events.
+     */
     fun addListener(listener: MessagingEventListener) {
         listeners.add(listener)
     }
 
+    /**
+     * Unregisters a messaging event listener.
+     */
     fun removeListener(listener: MessagingEventListener) {
         listeners.remove(listener)
     }
@@ -171,6 +189,9 @@ object MessagingSocketManager {
     }
 }
 
+/**
+ * Listener for websocket messaging events.
+ */
 interface MessagingEventListener {
     fun onChatUpdated(deviceId: String)
     fun onDeviceRemoved(deviceId: String, isSelf: Boolean)

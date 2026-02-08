@@ -91,6 +91,9 @@ public readonly record struct Device
     /// <param name="wifiUploadSpeed">The upload speed.</param>
     /// <param name="wifiDownloadSpeed">The download speed.</param>
     /// <param name="lastSeen">The last seen timestamp.</param>
+    /// <param name="publicKey">The public key used for end-to-end encryption.</param>
+    /// <param name="publicKeyAlgorithm">The algorithm used to generate the public key.</param>
+    /// <param name="publicKeyCreatedAt">The timestamp when the public key was generated.</param>
     public Device(
         string id,
         string name,

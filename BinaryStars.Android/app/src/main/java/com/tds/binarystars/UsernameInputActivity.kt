@@ -17,6 +17,9 @@ class UsernameInputActivity : AppCompatActivity() {
 
     private val logTag = "BinaryStarsReg"
 
+    /**
+     * Collects a username for external provider registration.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_username_input)

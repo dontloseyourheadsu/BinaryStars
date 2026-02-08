@@ -7,6 +7,9 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.tds.binarystars.api.NoteResponse
 import com.tds.binarystars.api.NoteType
 
+/**
+ * SQLite-backed cache for notes to support offline access.
+ */
 object NotesStorage {
     private const val DB_NAME = "binarystars_notes.db"
     private const val DB_VERSION = 1
@@ -23,12 +26,14 @@ object NotesStorage {
 
     private var dbHelper: NotesDbHelper? = null
 
+    /** Initializes the notes database helper. */
     fun init(context: Context) {
         if (dbHelper == null) {
             dbHelper = NotesDbHelper(context.applicationContext)
         }
     }
 
+    /** Upserts a list of notes in a transaction. */
     fun upsertNotes(notes: List<NoteResponse>) {
         val db = dbHelper?.writableDatabase ?: return
         db.beginTransaction()
@@ -42,11 +47,13 @@ object NotesStorage {
         }
     }
 
+    /** Upserts a single note. */
     fun upsertNote(note: NoteResponse) {
         val db = dbHelper?.writableDatabase ?: return
         upsertNoteInternal(db, note)
     }
 
+    /** Returns all cached notes sorted by updated time. */
     fun getNotes(): List<NoteResponse> {
         val db = dbHelper?.readableDatabase ?: return emptyList()
         val cursor = db.query(
@@ -89,11 +96,13 @@ object NotesStorage {
         }
     }
 
+    /** Deletes a cached note by ID. */
     fun deleteNote(noteId: String) {
         val db = dbHelper?.writableDatabase ?: return
         db.delete(TABLE_NOTES, "$COLUMN_ID = ?", arrayOf(noteId))
     }
 
+    /** Clears all cached notes. */
     fun clearAll() {
         val db = dbHelper?.writableDatabase ?: return
         db.delete(TABLE_NOTES, null, null)

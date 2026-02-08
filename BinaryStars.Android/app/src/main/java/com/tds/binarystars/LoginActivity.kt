@@ -41,6 +41,9 @@ class LoginActivity : AppCompatActivity() {
     // BuildConfig.MICROSOFT_CLIENT_ID
     // BuildConfig.MICROSOFT_TENANT_ID
 
+    /**
+     * Initializes login flows for password, Google, and Microsoft providers.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -229,6 +232,9 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Sends an external provider token to the API and handles registration flow.
+     */
     private fun submitExternalLogin(provider: String, token: String) {
         lifecycleScope.launch {
             try {

@@ -8,24 +8,59 @@ using System.Text.Json;
 
 namespace BinaryStars.Application.Services.Notes;
 
+/// <summary>
+/// Write-only note operations exposed by the application layer.
+/// </summary>
 public interface INotesWriteService
 {
+    /// <summary>
+    /// Creates a new note for the specified user.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="request">The note creation request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The created note response or a failure result.</returns>
     Task<Result<NoteResponse>> CreateNoteAsync(Guid userId, CreateNoteRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Updates an existing note for the specified user.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="request">The note update request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The updated note response or a failure result.</returns>
     Task<Result<NoteResponse>> UpdateNoteAsync(Guid userId, UpdateNoteRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes a note owned by the specified user.
+    /// </summary>
+    /// <param name="noteId">The note identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A success or failure result.</returns>
     Task<Result> DeleteNoteAsync(Guid noteId, Guid userId, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Application service for creating, updating, and deleting notes.
+/// </summary>
 public class NotesWriteService : INotesWriteService
 {
     private readonly INotesRepository _notesRepository;
     private readonly IDeviceRepository _deviceRepository;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NotesWriteService"/> class.
+    /// </summary>
+    /// <param name="notesRepository">Repository for note data.</param>
+    /// <param name="deviceRepository">Repository for device data.</param>
     public NotesWriteService(INotesRepository notesRepository, IDeviceRepository deviceRepository)
     {
         _notesRepository = notesRepository;
         _deviceRepository = deviceRepository;
     }
 
+    /// <inheritdoc />
     public async Task<Result<NoteResponse>> CreateNoteAsync(Guid userId, CreateNoteRequest request, CancellationToken cancellationToken)
     {
         // Validate device is linked to user
@@ -61,6 +96,7 @@ public class NotesWriteService : INotesWriteService
         ));
     }
 
+    /// <inheritdoc />
     public async Task<Result<NoteResponse>> UpdateNoteAsync(Guid userId, UpdateNoteRequest request, CancellationToken cancellationToken)
     {
         var note = await _notesRepository.GetByIdAsync(request.NoteId, cancellationToken);
@@ -92,6 +128,7 @@ public class NotesWriteService : INotesWriteService
         ));
     }
 
+    /// <inheritdoc />
     public async Task<Result> DeleteNoteAsync(Guid noteId, Guid userId, CancellationToken cancellationToken)
     {
         var note = await _notesRepository.GetByIdAsync(noteId, cancellationToken);
@@ -108,11 +145,21 @@ public class NotesWriteService : INotesWriteService
         return Result.Success();
     }
 
+    /// <summary>
+    /// Normalizes raw note content into a JSON payload for storage.
+    /// </summary>
+    /// <param name="content">The raw note content.</param>
+    /// <returns>The JSON payload to store.</returns>
     private static string NormalizeContentForStorage(string content)
     {
         return JsonSerializer.Serialize(new { text = content });
     }
 
+    /// <summary>
+    /// Extracts the user-facing text content from the stored JSON payload.
+    /// </summary>
+    /// <param name="storedContent">The stored JSON note content.</param>
+    /// <returns>The extracted text content.</returns>
     private static string ExtractContentForResponse(string storedContent)
     {
         try

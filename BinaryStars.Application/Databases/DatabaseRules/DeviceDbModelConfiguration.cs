@@ -5,8 +5,15 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace BinaryStars.Application.Databases.DatabaseRules;
 
+/// <summary>
+/// Entity configuration for <see cref="DeviceDbModel"/>.
+/// </summary>
 public class DeviceDbModelConfiguration : IEntityTypeConfiguration<DeviceDbModel>
 {
+    /// <summary>
+    /// Configures the device entity schema rules.
+    /// </summary>
+    /// <param name="builder">The entity type builder.</param>
     public void Configure(EntityTypeBuilder<DeviceDbModel> builder)
     {
         builder.HasKey(d => d.Id);

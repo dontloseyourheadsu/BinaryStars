@@ -17,11 +17,17 @@ import java.util.concurrent.TimeUnit
 import android.content.pm.PackageManager
 import android.provider.Settings
 
+/**
+ * WorkManager task for uploading device location in the background.
+ */
 class LocationUpdateWorker(
     appContext: Context,
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
 
+    /**
+     * Gets location data and posts it to the API.
+     */
     override suspend fun doWork(): Result {
         if (!NetworkUtils.isOnline(applicationContext)) {
             return Result.success()

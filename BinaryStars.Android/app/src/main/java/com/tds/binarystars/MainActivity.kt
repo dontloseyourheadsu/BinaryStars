@@ -28,6 +28,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var drawerLayout: DrawerLayout
 
+    /**
+     * Sets up the navigation drawer, device registration checks, and messaging socket.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -49,6 +52,9 @@ class MainActivity : AppCompatActivity() {
         setupSidebarListeners()
     }
 
+    /**
+     * Hooks up click handlers for the sidebar navigation items.
+     */
     private fun setupSidebarListeners() {
         val navDevices = findViewById<LinearLayout>(R.id.nav_devices)
         val navFiles = findViewById<LinearLayout>(R.id.nav_files)
@@ -88,6 +94,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Opens the navigation drawer.
+     */
     fun openDrawer() {
         drawerLayout.openDrawer(GravityCompat.START)
     }
@@ -97,6 +106,9 @@ class MainActivity : AppCompatActivity() {
         MessagingSocketManager.disconnect()
     }
 
+    /**
+     * Replaces the main content fragment.
+     */
     private fun loadFragment(fragment: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
@@ -104,6 +116,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Ensures the current device is registered and prompts the user when needed.
+     */
     private fun checkDeviceRegistration() {
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         val deviceName = android.os.Build.MODEL
@@ -139,6 +154,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Shows a user prompt to link the device to the account.
+     */
     private fun showRegistrationPrompt(deviceId: String, deviceName: String) {
         AlertDialog.Builder(this)
             .setTitle("Link Device")
@@ -150,6 +168,9 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Registers the current device with the backend.
+     */
     public fun registerDevice(deviceId: String, deviceName: String) {
          // Need real IP logic here, using placeholders for now as implementing full Net logic is out of scope of single file
          val ipAddress = "127.0.0.1" 
@@ -177,6 +198,9 @@ class MainActivity : AppCompatActivity() {
          }
     }
     
+    /**
+     * Unlinks a device from the current account.
+     */
     public fun unlinkDevice(deviceId: String) {
         lifecycleScope.launch {
             try {
@@ -197,6 +221,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Checks for pending file transfers and prompts the user to view them.
+     */
     private fun checkPendingTransfers() {
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         lifecycleScope.launch {

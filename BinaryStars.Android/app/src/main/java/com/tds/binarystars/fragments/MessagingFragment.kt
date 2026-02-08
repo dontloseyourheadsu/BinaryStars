@@ -42,6 +42,9 @@ class MessagingFragment : Fragment(), MessagingEventListener {
     private lateinit var retryButton: Button
     private val items = mutableListOf<ChatListItem>()
 
+    /**
+     * Inflates the messaging list UI.
+     */
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -49,6 +52,9 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         return inflater.inflate(R.layout.fragment_messaging, container, false)
     }
 
+    /**
+     * Initializes UI, adapters, and loads chat summaries.
+     */
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -82,12 +88,18 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         loadChats()
     }
 
+    /**
+     * Registers websocket listeners and refreshes chats.
+     */
     override fun onResume() {
         super.onResume()
         MessagingSocketManager.addListener(this)
         loadChats()
     }
 
+    /**
+     * Unregisters websocket listeners.
+     */
     override fun onPause() {
         super.onPause()
         MessagingSocketManager.removeListener(this)
@@ -105,6 +117,9 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         // No-op for now
     }
 
+    /**
+     * Loads cached chats and applies device name lookups when online.
+     */
     private fun loadChats() {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
@@ -137,6 +152,9 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         }
     }
 
+    /**
+     * Updates the adapter items from cached chat summaries.
+     */
     private fun updateItems(summaries: List<ChatSummary>, nameLookup: Map<String, String>) {
         items.clear()
         summaries.forEach { summary ->
@@ -154,12 +172,18 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
     }
 
+    /**
+     * Toggles offline state UI panels.
+     */
     private fun setNoConnection(show: Boolean) {
         noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
         contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Prompts the user to select a device and opens a chat.
+     */
     private fun pickDeviceToChat() {
         viewLifecycleOwner.lifecycleScope.launch {
             val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
@@ -182,6 +206,9 @@ class MessagingFragment : Fragment(), MessagingEventListener {
         }
     }
 
+    /**
+     * Opens the messaging chat activity for the selected device.
+     */
     private fun openChat(deviceId: String, deviceName: String) {
         val intent = Intent(requireContext(), MessagingChatActivity::class.java)
         intent.putExtra(MessagingChatActivity.EXTRA_DEVICE_ID, deviceId)

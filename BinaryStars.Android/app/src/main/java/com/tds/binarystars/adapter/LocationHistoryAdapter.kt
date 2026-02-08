@@ -8,6 +8,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tds.binarystars.R
 import com.tds.binarystars.model.LocationHistoryPoint
 
+/**
+ * Recycler adapter for location history points.
+ */
 class LocationHistoryAdapter(
     private val items: List<LocationHistoryPoint>,
     private val onClick: (LocationHistoryPoint) -> Unit

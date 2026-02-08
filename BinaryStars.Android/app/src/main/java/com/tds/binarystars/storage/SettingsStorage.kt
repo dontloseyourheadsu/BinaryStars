@@ -4,6 +4,9 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
+/**
+ * Simple SQLite-backed store for app settings.
+ */
 object SettingsStorage {
     private const val DB_NAME = "binarystars_settings.db"
     private const val DB_VERSION = 1
@@ -17,12 +20,14 @@ object SettingsStorage {
 
     private var dbHelper: SettingsDbHelper? = null
 
+    /** Initializes the settings database helper. */
     fun init(context: Context) {
         if (dbHelper == null) {
             dbHelper = SettingsDbHelper(context.applicationContext)
         }
     }
 
+    /** Persists the dark mode setting. */
     fun setDarkModeEnabled(enabled: Boolean) {
         val db = dbHelper?.writableDatabase ?: return
         val value = if (enabled) "1" else "0"
@@ -32,6 +37,7 @@ object SettingsStorage {
         )
     }
 
+    /** Reads the dark mode setting. */
     fun isDarkModeEnabled(defaultValue: Boolean = false): Boolean {
         val db = dbHelper?.readableDatabase ?: return defaultValue
         val cursor = db.rawQuery(
@@ -46,6 +52,7 @@ object SettingsStorage {
         return defaultValue
     }
 
+    /** Persists location update enablement. */
     fun setLocationUpdatesEnabled(enabled: Boolean) {
         val db = dbHelper?.writableDatabase ?: return
         val value = if (enabled) "1" else "0"
@@ -55,6 +62,7 @@ object SettingsStorage {
         )
     }
 
+    /** Reads location update enablement. */
     fun areLocationUpdatesEnabled(defaultValue: Boolean = false): Boolean {
         val db = dbHelper?.readableDatabase ?: return defaultValue
         val cursor = db.rawQuery(
@@ -69,6 +77,7 @@ object SettingsStorage {
         return defaultValue
     }
 
+    /** Stores the background update interval in minutes. */
     fun setLocationUpdateMinutes(minutes: Int) {
         val db = dbHelper?.writableDatabase ?: return
         db.execSQL(
@@ -77,6 +86,7 @@ object SettingsStorage {
         )
     }
 
+    /** Reads the background update interval in minutes. */
     fun getLocationUpdateMinutes(defaultValue: Int = 15): Int {
         val db = dbHelper?.readableDatabase ?: return defaultValue
         val cursor = db.rawQuery(

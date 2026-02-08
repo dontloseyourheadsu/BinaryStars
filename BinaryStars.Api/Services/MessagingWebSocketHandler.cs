@@ -9,6 +9,9 @@ using BinaryStars.Application.Databases.Repositories.Devices;
 
 namespace BinaryStars.Api.Services;
 
+/// <summary>
+/// Handles websocket connections for device-to-device messaging.
+/// </summary>
 public class MessagingWebSocketHandler
 {
     private const int MaxMessageLength = 500;
@@ -17,6 +20,13 @@ public class MessagingWebSocketHandler
     private readonly IDeviceRepository _deviceRepository;
     private readonly IAccountRepository _accountRepository;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MessagingWebSocketHandler"/> class.
+    /// </summary>
+    /// <param name="connectionManager">The connection manager.</param>
+    /// <param name="kafkaService">The Kafka messaging service.</param>
+    /// <param name="deviceRepository">The device repository.</param>
+    /// <param name="accountRepository">The account repository.</param>
     public MessagingWebSocketHandler(
         MessagingConnectionManager connectionManager,
         MessagingKafkaService kafkaService,
@@ -29,6 +39,10 @@ public class MessagingWebSocketHandler
         _accountRepository = accountRepository;
     }
 
+    /// <summary>
+    /// Accepts and processes a websocket request for messaging.
+    /// </summary>
+    /// <param name="context">The HTTP context.</param>
     public async Task HandleAsync(HttpContext context)
     {
         if (!context.WebSockets.IsWebSocketRequest)

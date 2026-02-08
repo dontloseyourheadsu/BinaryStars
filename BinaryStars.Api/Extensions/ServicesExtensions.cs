@@ -17,8 +17,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BinaryStars.Api.Extensions;
 
+/// <summary>
+/// Service registration extensions for the API host.
+/// </summary>
 public static class ServicesExtensions
 {
+    /// <summary>
+    /// Registers application-layer services, repositories, and validators.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The updated service collection.</returns>
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         // Repositories
@@ -50,6 +58,12 @@ public static class ServicesExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers database services and ASP.NET Core Identity.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The application configuration.</param>
+    /// <returns>The updated service collection.</returns>
     public static IServiceCollection AddDatabaseServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<ApplicationDbContext>(options =>

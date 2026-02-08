@@ -4,12 +4,19 @@ using Microsoft.Extensions.Hosting;
 
 namespace BinaryStars.Api.Controllers;
 
+/// <summary>
+/// Development-only debugging endpoints.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class DebugController : ControllerBase
 {
     private readonly IHostEnvironment _env;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DebugController"/> class.
+    /// </summary>
+    /// <param name="env">The hosting environment.</param>
     public DebugController(IHostEnvironment env)
     {
         _env = env;
@@ -17,6 +24,11 @@ public class DebugController : ControllerBase
 
     // Development-only helper to decode a JWT without validating it.
     // POST /api/debug/token  { "token": "<jwt>" }
+    /// <summary>
+    /// Decodes a JWT without validation (development only).
+    /// </summary>
+    /// <param name="req">The token request.</param>
+    /// <returns>The decoded JWT header and payload.</returns>
     [HttpPost("token")]
     public IActionResult DecodeToken([FromBody] TokenRequest req)
     {
@@ -42,5 +54,9 @@ public class DebugController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Request payload for decoding a JWT.
+    /// </summary>
+    /// <param name="Token">The JWT to decode.</param>
     public record TokenRequest(string Token);
 }

@@ -10,12 +10,20 @@ using BinaryStars.Application.Validators.Accounts;
 
 namespace BinaryStars.Application.Services.Accounts;
 
+/// <summary>
+/// Validates external identity provider tokens for Google and Microsoft.
+/// </summary>
 public class ExternalIdentityValidator
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<ExternalIdentityValidator> _logger;
     private readonly IConfigurationManager<OpenIdConnectConfiguration>? _microsoftConfigManager;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExternalIdentityValidator"/> class.
+    /// </summary>
+    /// <param name="configuration">Configuration containing provider settings.</param>
+    /// <param name="logger">Logger for validation failures.</param>
     public ExternalIdentityValidator(IConfiguration configuration, ILogger<ExternalIdentityValidator> logger)
     {
         _configuration = configuration;
@@ -31,6 +39,12 @@ public class ExternalIdentityValidator
         }
     }
 
+    /// <summary>
+    /// Validates the external login request using the configured provider.
+    /// </summary>
+    /// <param name="request">The external login request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A validation result with the resolved email and provider subject.</returns>
     public async Task<ExternalIdentityValidationResult> ValidateAsync(ExternalLoginRequest request, CancellationToken cancellationToken)
     {
         return request.Provider.ToLowerInvariant() switch
@@ -129,8 +143,27 @@ public class ExternalIdentityValidator
     }
 }
 
+/// <summary>
+/// Represents the outcome of validating an external identity token.
+/// </summary>
+/// <param name="IsSuccess">Indicates whether validation succeeded.</param>
+/// <param name="Email">The resolved email or username claim.</param>
+/// <param name="ProviderSubject">The provider-specific subject identifier.</param>
+/// <param name="Error">The failure message when validation fails.</param>
 public record ExternalIdentityValidationResult(bool IsSuccess, string? Email, string? ProviderSubject, string? Error)
 {
+    /// <summary>
+    /// Creates a successful validation result.
+    /// </summary>
+    /// <param name="email">The resolved email address.</param>
+    /// <param name="subject">The provider subject identifier.</param>
+    /// <returns>A successful validation result.</returns>
     public static ExternalIdentityValidationResult Success(string email, string? subject) => new(true, email, subject, null);
+
+    /// <summary>
+    /// Creates a failed validation result.
+    /// </summary>
+    /// <param name="error">The failure message.</param>
+    /// <returns>A failed validation result.</returns>
     public static ExternalIdentityValidationResult Failure(string error) => new(false, null, null, error);
 }

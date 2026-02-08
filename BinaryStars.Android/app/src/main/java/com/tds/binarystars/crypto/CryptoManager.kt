@@ -28,6 +28,9 @@ object CryptoManager {
     private const val RSA_TRANSFORMATION = "RSA/ECB/OAEPWithSHA-256AndMGF1Padding"
     private const val AES_TRANSFORMATION = "AES/GCM/NoPadding"
 
+    /**
+     * Loads or creates the device RSA key pair in the Android Keystore.
+     */
     fun getOrCreateKeyPair(): KeyPair {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
         keyStore.load(null)
@@ -50,15 +53,24 @@ object CryptoManager {
         return generator.generateKeyPair()
     }
 
+    /**
+     * Returns the device public key encoded as base64.
+     */
     fun getPublicKeyBase64(): String {
         val keyPair = getOrCreateKeyPair()
         return Base64.encodeToString(keyPair.public.encoded, Base64.NO_WRAP)
     }
 
+    /**
+     * Returns the public key algorithm identifier.
+     */
     fun getPublicKeyAlgorithm(): String {
         return "RSA"
     }
 
+    /**
+     * Encrypts input data to the output stream and returns a JSON envelope.
+     */
     fun encryptToStream(
         input: InputStream,
         output: OutputStream,
@@ -95,6 +107,9 @@ object CryptoManager {
         return envelope.toString()
     }
 
+    /**
+     * Decrypts input data using the provided envelope JSON.
+     */
     fun decryptToStream(input: InputStream, output: OutputStream, envelopeJson: String) {
         val envelope = JSONObject(envelopeJson)
         val iv = Base64.decode(envelope.getString("iv"), Base64.NO_WRAP)

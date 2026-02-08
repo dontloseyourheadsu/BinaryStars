@@ -1,5 +1,6 @@
 package com.tds.binarystars.api
 
+/** Device registration request payload. */
 data class RegisterDeviceRequest(
     val id: String,
     val name: String,

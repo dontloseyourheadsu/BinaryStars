@@ -5,15 +5,28 @@ using Microsoft.Extensions.Options;
 
 namespace BinaryStars.Api.Services;
 
+/// <summary>
+/// Builds Kafka producers and consumers with the configured security settings.
+/// </summary>
 public class KafkaClientFactory
 {
     private readonly KafkaSettings _settings;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KafkaClientFactory"/> class.
+    /// </summary>
+    /// <param name="settings">Kafka settings.</param>
     public KafkaClientFactory(IOptions<KafkaSettings> settings)
     {
         _settings = settings.Value;
     }
 
+    /// <summary>
+    /// Creates a Kafka producer for transfer or messaging operations.
+    /// </summary>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthBearerToken">Optional OAuth bearer token.</param>
+    /// <returns>The Kafka producer.</returns>
     public IProducer<string, byte[]> CreateProducer(KafkaAuthMode authMode, string? oauthBearerToken)
     {
         var config = new ProducerConfig
@@ -32,6 +45,13 @@ public class KafkaClientFactory
         return builder.Build();
     }
 
+    /// <summary>
+    /// Creates a Kafka consumer for transfer or messaging operations.
+    /// </summary>
+    /// <param name="groupId">The consumer group identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthBearerToken">Optional OAuth bearer token.</param>
+    /// <returns>The Kafka consumer.</returns>
     public IConsumer<string, byte[]> CreateConsumer(string groupId, KafkaAuthMode authMode, string? oauthBearerToken)
     {
         var config = new ConsumerConfig

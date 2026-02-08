@@ -4,8 +4,15 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace BinaryStars.Application.Databases.DatabaseRules;
 
+/// <summary>
+/// Entity configuration for <see cref="FileTransferDbModel"/>.
+/// </summary>
 public class FileTransferDbModelConfiguration : IEntityTypeConfiguration<FileTransferDbModel>
 {
+    /// <summary>
+    /// Configures the file transfer entity schema rules.
+    /// </summary>
+    /// <param name="builder">The entity type builder.</param>
     public void Configure(EntityTypeBuilder<FileTransferDbModel> builder)
     {
         builder.HasKey(t => t.Id);

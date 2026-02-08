@@ -27,6 +27,9 @@ import com.tds.binarystars.MainActivity
 
 class DevicesFragment : Fragment() {
 
+    /**
+     * Inflates the devices list UI.
+     */
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -36,6 +39,9 @@ class DevicesFragment : Fragment() {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Initializes the list and triggers device refresh.
+     */
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -47,6 +53,9 @@ class DevicesFragment : Fragment() {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Loads devices, handles offline mode, and updates the UI.
+     */
     fun refreshDevices() {
         val view = view ?: return
         val rvOnline = view.findViewById<RecyclerView>(R.id.rvOnlineDevices)

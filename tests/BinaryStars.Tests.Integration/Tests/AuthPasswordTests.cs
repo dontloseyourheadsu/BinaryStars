@@ -3,6 +3,9 @@ using BinaryStars.Tests.Integration.Helpers;
 
 namespace BinaryStars.Tests.Integration.Tests;
 
+/// <summary>
+/// Authentication tests for the password-based login flow.
+/// </summary>
 [Collection("integration")]
 public class AuthPasswordTests
 {
@@ -13,6 +16,9 @@ public class AuthPasswordTests
         _fixture = fixture;
     }
 
+    /// <summary>
+    /// Registers and logs in to validate an access token is returned.
+    /// </summary>
     [Fact]
     public async Task RegisterAndLogin_ReturnsAccessToken()
     {

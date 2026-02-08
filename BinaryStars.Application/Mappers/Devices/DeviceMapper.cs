@@ -3,8 +3,16 @@ using BinaryStars.Domain.Devices;
 
 namespace BinaryStars.Application.Mappers.Devices;
 
+/// <summary>
+/// Maps device database models to domain models and back.
+/// </summary>
 public static class DeviceMapper
 {
+    /// <summary>
+    /// Converts a database device model into the domain device model.
+    /// </summary>
+    /// <param name="model">The database model.</param>
+    /// <returns>The domain model.</returns>
     public static Device ToDomain(this DeviceDbModel model)
     {
         return new Device(
@@ -25,6 +33,12 @@ public static class DeviceMapper
         );
     }
 
+    /// <summary>
+    /// Converts a domain device model into the database device model.
+    /// </summary>
+    /// <param name="domain">The domain model.</param>
+    /// <param name="userId">The owning user identifier.</param>
+    /// <returns>The database model.</returns>
     public static DeviceDbModel ToDb(this Device domain, Guid userId)
     {
         return new DeviceDbModel

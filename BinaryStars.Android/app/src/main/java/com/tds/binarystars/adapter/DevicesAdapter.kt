@@ -12,6 +12,9 @@ import com.tds.binarystars.R
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 
+/**
+ * Recycler adapter for the devices list.
+ */
 class DevicesAdapter(private val devices: List<Device>) : RecyclerView.Adapter<DevicesAdapter.DeviceViewHolder>() {
 
     class DeviceViewHolder(view: View) : RecyclerView.ViewHolder(view) {

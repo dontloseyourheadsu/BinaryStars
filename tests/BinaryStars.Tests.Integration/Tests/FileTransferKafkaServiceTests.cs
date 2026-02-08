@@ -7,6 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BinaryStars.Tests.Integration.Tests;
 
+/// <summary>
+/// Integration tests for Kafka-backed file transfer streaming.
+/// </summary>
 [Collection("integration")]
 public class FileTransferKafkaServiceTests
 {
@@ -17,6 +20,9 @@ public class FileTransferKafkaServiceTests
         _fixture = fixture;
     }
 
+    /// <summary>
+    /// Streams from Kafka and verifies the published payload is returned.
+    /// </summary>
     [Fact]
     public async Task StreamToAsync_ReturnsPublishedBytes()
     {

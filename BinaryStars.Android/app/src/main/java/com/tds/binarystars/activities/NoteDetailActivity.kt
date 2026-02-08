@@ -50,6 +50,9 @@ class NoteDetailActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Loads note metadata and configures the UI.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_note_detail)
@@ -66,6 +69,9 @@ class NoteDetailActivity : AppCompatActivity() {
         setupUI()
     }
 
+    /**
+     * Reads note data from the intent extras.
+     */
     private fun loadNoteData() {
         noteId = intent.getStringExtra("noteId") ?: ""
         noteName = intent.getStringExtra("noteName") ?: ""
@@ -77,6 +83,9 @@ class NoteDetailActivity : AppCompatActivity() {
         updatedAt = intent.getStringExtra("updatedAt") ?: ""
     }
 
+    /**
+     * Binds note content and toolbar actions.
+     */
     private fun setupUI() {
         tvNoteName.text = noteName
         val displayDevice = if (deviceName.isNotBlank()) deviceName else deviceId
@@ -96,6 +105,9 @@ class NoteDetailActivity : AppCompatActivity() {
         btnEditDevice.setOnClickListener { changeDevice() }
     }
 
+    /**
+     * Opens the content editor for the note.
+     */
     private fun openEditor() {
         val intent = ContentEditorActivity.newIntent(
             context = this,
@@ -105,6 +117,9 @@ class NoteDetailActivity : AppCompatActivity() {
         editContentLauncher.launch(intent)
     }
 
+    /**
+     * Persists note updates to the API.
+     */
     private fun saveNote(updatedContent: String) {
         val request = UpdateNoteRequestDto(noteName, updatedContent)
 
@@ -151,6 +166,9 @@ class NoteDetailActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Prompts for a new signing device (UI only).
+     */
     private fun changeDevice() {
         lifecycleScope.launch {
             try {
@@ -174,6 +192,9 @@ class NoteDetailActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Formats ISO timestamps into a display string.
+     */
     private fun formatDate(dateString: String): String {
         return try {
             val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
@@ -208,6 +229,9 @@ class NoteDetailActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Deletes the current note via the API.
+     */
     private fun deleteNote() {
         AlertDialog.Builder(this)
             .setTitle("Delete Note?")
@@ -232,6 +256,9 @@ class NoteDetailActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Prompts the user to change the editor font size.
+     */
     private fun showFontSizeDialog() {
         val sizes = arrayOf("Small (12sp)", "Medium (16sp)", "Large (20sp)")
         AlertDialog.Builder(this)

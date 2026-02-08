@@ -1,5 +1,8 @@
 package com.tds.binarystars.model
 
+/**
+ * Domain model representing a registered device.
+ */
 data class Device(
     val id: String,
     val name: String,
@@ -15,6 +18,9 @@ data class Device(
     val lastSeen: Long = System.currentTimeMillis()
 )
 
+/**
+ * Supported local device types.
+ */
 enum class DeviceType {
     LINUX,
     ANDROID

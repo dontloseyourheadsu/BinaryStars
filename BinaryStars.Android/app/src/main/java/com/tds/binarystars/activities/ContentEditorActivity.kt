@@ -58,6 +58,9 @@ class ContentEditorActivity : AppCompatActivity() {
     private var isHistoryUpdate = false
     private var markwon: Markwon? = null
 
+    /**
+     * Initializes the editor UI and formatting controls.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_content_editor)
@@ -105,6 +108,9 @@ class ContentEditorActivity : AppCompatActivity() {
         setupListeners()
     }
 
+    /**
+     * Configures the editor layout based on content type.
+     */
     private fun setupEditorUi() {
         if (contentType == NoteType.Markdown) {
             tvEditorTitle.text = "Markdown Editor"
@@ -128,12 +134,18 @@ class ContentEditorActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Seeds the undo/redo history with initial content.
+     */
     private fun setupHistory(initialContent: String) {
         history.clear()
         history.add(initialContent)
         historyIndex = 0
     }
 
+    /**
+     * Registers click listeners and text change handlers.
+     */
     private fun setupListeners() {
         btnSave.setOnClickListener { finishWithResult() }
         btnCancel.setOnClickListener { finish() }
@@ -182,11 +194,17 @@ class ContentEditorActivity : AppCompatActivity() {
         })
     }
 
+    /**
+     * Renders markdown preview text.
+     */
     private fun renderMarkdownPreview(markdown: String) {
         val renderer = markwon ?: return
         renderer.setMarkdown(markdownPreview, markdown)
     }
 
+    /**
+     * Adds a new entry to the history stack.
+     */
     private fun pushHistory(text: String) {
         if (historyIndex < history.size - 1) {
             history = history.subList(0, historyIndex + 1).toMutableList()
@@ -194,18 +212,27 @@ class ContentEditorActivity : AppCompatActivity() {
         history.add(text)
     }
 
+    /**
+     * Reverts to the previous history entry.
+     */
     private fun undo() {
         if (historyIndex <= 0) return
         historyIndex -= 1
         applyHistoryValue(history[historyIndex])
     }
 
+    /**
+     * Advances to the next history entry.
+     */
     private fun redo() {
         if (historyIndex >= history.size - 1) return
         historyIndex += 1
         applyHistoryValue(history[historyIndex])
     }
 
+    /**
+     * Applies a historical content value to the editor.
+     */
     private fun applyHistoryValue(value: String) {
         isHistoryUpdate = true
         editorContent.setText(value)
@@ -216,6 +243,9 @@ class ContentEditorActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Wraps the current selection with the provided prefix and suffix.
+     */
     private fun applySurrounding(prefix: String, suffix: String) {
         val start = editorContent.selectionStart
         val end = editorContent.selectionEnd
@@ -227,6 +257,9 @@ class ContentEditorActivity : AppCompatActivity() {
         editorContent.setSelection(start + prefix.length, start + prefix.length + selected.length)
     }
 
+    /**
+     * Inserts a prefix at the start of the current line.
+     */
     private fun insertAtLineStart(prefix: String) {
         val start = editorContent.selectionStart
         if (start < 0) return
@@ -237,32 +270,50 @@ class ContentEditorActivity : AppCompatActivity() {
         editorContent.setSelection(start + prefix.length)
     }
 
+    /**
+     * Inserts a markdown heading prefix.
+     */
     private fun insertHeading(level: Int) {
         val safeLevel = level.coerceIn(1, 6)
         val prefix = "#".repeat(safeLevel) + " "
         insertAtLineStart(prefix)
     }
 
+    /**
+     * Inserts a markdown table template.
+     */
     private fun insertTable() {
         val template = "| Column 1 | Column 2 |\n| --- | --- |\n| Value 1 | Value 2 |\n"
         insertTextAtCursor(template)
     }
 
+    /**
+     * Inserts a fenced code block template.
+     */
     private fun insertCodeBlock() {
         val template = "```\ncode\n```\n"
         insertTextAtCursor(template)
     }
 
+    /**
+     * Inserts a markdown link template.
+     */
     private fun insertLink() {
         val template = "[text](url)"
         insertTextAtCursor(template)
     }
 
+    /**
+     * Inserts a horizontal rule.
+     */
     private fun insertHorizontalRule() {
         val template = "\n---\n"
         insertTextAtCursor(template)
     }
 
+    /**
+     * Toggles formatting button visibility for markdown mode.
+     */
     private fun setMarkdownButtonsVisible(visible: Boolean) {
         val visibility = if (visible) View.VISIBLE else View.GONE
         btnBold.visibility = visibility
@@ -286,6 +337,9 @@ class ContentEditorActivity : AppCompatActivity() {
         btnHorizontalRule.visibility = visibility
     }
 
+    /**
+     * Inserts text at the current cursor position.
+     */
     private fun insertTextAtCursor(textToInsert: String) {
         val start = editorContent.selectionStart
         if (start < 0) return
@@ -295,6 +349,9 @@ class ContentEditorActivity : AppCompatActivity() {
         editorContent.setSelection(start + textToInsert.length)
     }
 
+    /**
+     * Returns edited content back to the caller.
+     */
     private fun finishWithResult() {
         val result = Intent().apply {
             putExtra(EXTRA_CONTENT, editorContent.text.toString())
@@ -308,6 +365,9 @@ class ContentEditorActivity : AppCompatActivity() {
         const val EXTRA_CONTENT = "extra_content"
         private const val MAX_HISTORY = 50
 
+        /**
+         * Builds an intent to open the editor.
+         */
         fun newIntent(context: Context, contentType: NoteType, initialContent: String): Intent {
             return Intent(context, ContentEditorActivity::class.java).apply {
                 putExtra(EXTRA_CONTENT_TYPE, contentType.ordinal)

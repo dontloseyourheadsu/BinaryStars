@@ -8,6 +8,15 @@ using BinaryStars.Domain.Errors.Devices;
 
 namespace BinaryStars.Application.Services.Devices;
 
+/// <summary>
+/// Request payload for registering or updating a device.
+/// </summary>
+/// <param name="Id">The unique device identifier.</param>
+/// <param name="Name">The display name for the device.</param>
+/// <param name="IpAddress">The IPv4 address reported by the device.</param>
+/// <param name="Ipv6Address">The optional IPv6 address.</param>
+/// <param name="PublicKey">The optional public key for encryption.</param>
+/// <param name="PublicKeyAlgorithm">The optional public key algorithm.</param>
 public record RegisterDeviceRequest(
     string Id,
     string Name,
@@ -16,12 +25,33 @@ public record RegisterDeviceRequest(
     string? PublicKey,
     string? PublicKeyAlgorithm);
 
+/// <summary>
+/// Write-only device operations exposed by the application layer.
+/// </summary>
 public interface IDevicesWriteService
 {
+    /// <summary>
+    /// Registers or updates a device linked to the specified user.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="request">The device registration request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The created or updated device or a failure result.</returns>
     Task<Result<Device>> RegisterDeviceAsync(Guid userId, RegisterDeviceRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Unlinks a device and removes dependent data when allowed.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="deviceId">The device identifier to unlink.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A success or failure result.</returns>
     Task<Result> UnlinkDeviceAsync(Guid userId, string deviceId, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Application service for device registration and unlinking.
+/// </summary>
 public class DevicesWriteService : IDevicesWriteService
 {
     private readonly IDeviceRepository _deviceRepository;
@@ -39,6 +69,7 @@ public class DevicesWriteService : IDevicesWriteService
         _fileTransferRepository = fileTransferRepository;
     }
 
+    /// <inheritdoc />
     public async Task<Result<Device>> RegisterDeviceAsync(Guid userId, RegisterDeviceRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Id))
@@ -103,6 +134,7 @@ public class DevicesWriteService : IDevicesWriteService
         return Result<Device>.Success(MapToDomain(newDevice));
     }
 
+    /// <inheritdoc />
     public async Task<Result> UnlinkDeviceAsync(Guid userId, string deviceId, CancellationToken cancellationToken)
     {
         var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);

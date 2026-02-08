@@ -37,6 +37,9 @@ class NotesFragment : Fragment() {
     private lateinit var retryButton: Button
     private var notes: MutableList<NoteResponse> = mutableListOf()
 
+    /**
+     * Inflates the notes list UI.
+     */
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -44,6 +47,9 @@ class NotesFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_notes, container, false)
     }
 
+    /**
+     * Initializes UI, adapters, and loads notes.
+     */
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -86,6 +92,9 @@ class NotesFragment : Fragment() {
         loadNotes()
     }
 
+    /**
+     * Loads notes from the API or cache and updates the UI.
+     */
     private fun loadNotes() {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
@@ -151,11 +160,17 @@ class NotesFragment : Fragment() {
         }
     }
 
+    /**
+     * Toggles offline state UI panels.
+     */
     private fun setNoConnection(show: Boolean) {
         noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
         contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
+    /**
+     * Updates the empty state UI based on list contents.
+     */
     private fun updateEmptyState() {
         if (notes.isEmpty()) {
             emptyStateText.visibility = View.VISIBLE

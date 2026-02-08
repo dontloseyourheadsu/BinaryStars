@@ -3,8 +3,14 @@ using BinaryStars.Domain.Errors.Devices;
 
 namespace BinaryStars.Tests.Unit.Domain.Devices;
 
+/// <summary>
+/// Unit tests for the <see cref="Device"/> domain model.
+/// </summary>
 public class DeviceDomainModelTests
 {
+    /// <summary>
+    /// Verifies devices can be created with valid parameters.
+    /// </summary>
     [Fact]
     public void CreatingDevice_WithValidParameters_ShouldSucceed()
     {
@@ -47,6 +53,9 @@ public class DeviceDomainModelTests
         Assert.Equal(lastSeen, device.LastSeen);
     }
 
+    /// <summary>
+    /// Verifies invalid parameters throw argument exceptions.
+    /// </summary>
     [Theory]
     [InlineData(null, "My Device", "192.168.1.100", DeviceErrors.IdCannotBeNullOrWhitespace)]
     [InlineData("", "My Device", "192.168.1.100", DeviceErrors.IdCannotBeNullOrWhitespace)]

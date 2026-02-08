@@ -113,6 +113,9 @@ class MapFragment : Fragment() {
             }
         }
 
+    /**
+     * Inflates the map UI.
+     */
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -121,6 +124,9 @@ class MapFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_map, container, false)
     }
 
+    /**
+     * Initializes map components, adapters, and location controls.
+     */
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
@@ -188,6 +194,9 @@ class MapFragment : Fragment() {
         loadDevices()
     }
 
+    /**
+     * Loads devices for the map list, with an offline fallback.
+     */
     private fun loadDevices() {
         if (!NetworkUtils.isOnline(requireContext())) {
             val currentDevice = buildCurrentDeviceItem()
@@ -235,6 +244,9 @@ class MapFragment : Fragment() {
         deviceListEmpty.visibility = if (devices.isEmpty()) View.VISIBLE else View.GONE
     }
 
+    /**
+     * Opens a device and loads its history and live location.
+     */
     private fun openDevice(item: MapDeviceItem) {
         if (!NetworkUtils.isOnline(requireContext()) && !item.isCurrent) {
             Toast.makeText(requireContext(), "Offline mode supports current device only", Toast.LENGTH_SHORT).show()
@@ -258,6 +270,9 @@ class MapFragment : Fragment() {
         mapDetailView.visibility = View.VISIBLE
     }
 
+    /**
+     * Loads location history for a device with a mock fallback.
+     */
     private fun loadHistory(deviceId: String) {
         history.clear()
         historyAdapter.notifyDataSetChanged()
@@ -301,10 +316,16 @@ class MapFragment : Fragment() {
         historyEmpty.visibility = if (history.isEmpty()) View.VISIBLE else View.GONE
     }
 
+    /**
+     * Focuses the map on a historical location point.
+     */
     private fun showHistoryPoint(point: LocationHistoryPoint) {
         showMapLocation(point.latitude, point.longitude, point.title)
     }
 
+    /**
+     * Shows live or last known location for the selected device.
+     */
     private fun showLiveLocation() {
         val device = selectedDevice ?: return
         if (device.isCurrent) {
@@ -322,6 +343,9 @@ class MapFragment : Fragment() {
         }
     }
 
+    /**
+     * Requests foreground location permission before running an action.
+     */
     private fun ensureLocationPermission(onGranted: () -> Unit) {
         val hasPermission = ContextCompat.checkSelfPermission(
             requireContext(),
@@ -346,6 +370,9 @@ class MapFragment : Fragment() {
     }
 
     @SuppressLint("MissingPermission")
+    /**
+     * Reads the current device location and updates the map.
+     */
     private fun fetchCurrentLocation() {
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
             .addOnSuccessListener { location ->
@@ -370,6 +397,9 @@ class MapFragment : Fragment() {
             }
     }
 
+    /**
+     * Updates the map with the provided coordinates.
+     */
     private fun showMapLocation(latitude: Double, longitude: Double, title: String) {
         pendingLocation = Triple(latitude, longitude, title)
         val map = mapLibreMap ?: return
@@ -377,6 +407,9 @@ class MapFragment : Fragment() {
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(latitude, longitude), 15.5))
     }
 
+    /**
+     * Ensures the GeoJson source and circle layer exist.
+     */
     private fun ensureLocationLayer(style: Style) {
         if (style.getSource(LOCATION_SOURCE_ID) == null) {
             style.addSource(GeoJsonSource(LOCATION_SOURCE_ID))
@@ -392,6 +425,9 @@ class MapFragment : Fragment() {
         }
     }
 
+    /**
+     * Writes a new point into the GeoJson source.
+     */
     private fun updateLocationSource(latitude: Double, longitude: Double, title: String) {
         val map = mapLibreMap ?: return
         val style = map.style ?: return
@@ -400,6 +436,9 @@ class MapFragment : Fragment() {
         source.setGeoJson(Point.fromLngLat(longitude, latitude))
     }
 
+    /**
+     * Configures the background location settings UI.
+     */
     private fun setupLocationSettings() {
         val intervalOptions = listOf(15, 30, 60)
         val labels = intervalOptions.map { "$it minutes" }
@@ -436,6 +475,9 @@ class MapFragment : Fragment() {
         })
     }
 
+    /**
+     * Requests background location permission when needed.
+     */
     private fun requestBackgroundLocationPermissionIfNeeded() {
         ensureLocationPermission {
             val hasPermission = ContextCompat.checkSelfPermission(
@@ -453,6 +495,9 @@ class MapFragment : Fragment() {
         }
     }
 
+    /**
+     * Enables or disables periodic background updates.
+     */
     private fun enableBackgroundUpdates(enabled: Boolean) {
         if (!enabled) {
             LocationUpdateScheduler.cancel(requireContext())
@@ -463,6 +508,9 @@ class MapFragment : Fragment() {
         LocationUpdateScheduler.schedule(requireContext(), minutes)
     }
 
+    /**
+     * Builds a map list item representing the current device.
+     */
     private fun buildCurrentDeviceItem(): MapDeviceItem {
         val deviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
         val deviceName = android.os.Build.MODEL
@@ -475,16 +523,25 @@ class MapFragment : Fragment() {
         )
     }
 
+    /**
+     * Checks if the provided ID is the current device.
+     */
     private fun isCurrentDevice(deviceId: String): Boolean {
         val currentId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
         return currentId == deviceId
     }
 
+    /**
+     * Toggles offline state UI panels.
+     */
     private fun setNoConnection(show: Boolean) {
         noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
         contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
+    /**
+     * Provides placeholder history when offline.
+     */
     private fun mockHistory(deviceId: String): List<LocationHistoryPoint> {
         val now = OffsetDateTime.now()
         val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm")
@@ -509,6 +566,9 @@ class MapFragment : Fragment() {
         )
     }
 
+    /**
+     * Returns the MapLibre style asset URL.
+     */
     private fun resolveStyleUrl(): String {
         return "asset://osm_raster_style.json"
     }

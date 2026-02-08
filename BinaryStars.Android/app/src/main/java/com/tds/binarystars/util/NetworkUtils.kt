@@ -4,7 +4,11 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 
+/**
+ * Network utility helpers.
+ */
 object NetworkUtils {
+    /** Returns true when the device has validated internet access. */
     fun isOnline(context: Context): Boolean {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = manager.activeNetwork ?: return false

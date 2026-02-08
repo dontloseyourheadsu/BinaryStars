@@ -6,19 +6,44 @@ using Microsoft.Extensions.Options;
 
 namespace BinaryStars.Api.Services;
 
+/// <summary>
+/// Result returned after publishing transfer packets to Kafka.
+/// </summary>
+/// <param name="PacketCount">The number of packets published.</param>
+/// <param name="Partition">The Kafka partition used.</param>
+/// <param name="StartOffset">The starting Kafka offset.</param>
+/// <param name="EndOffset">The ending Kafka offset.</param>
 public record FileTransferKafkaPublishResult(int PacketCount, int? Partition, long? StartOffset, long? EndOffset);
 
+/// <summary>
+/// Kafka-backed streaming service for file transfer packets.
+/// </summary>
 public class FileTransferKafkaService
 {
     private readonly KafkaSettings _settings;
     private readonly KafkaClientFactory _clientFactory;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileTransferKafkaService"/> class.
+    /// </summary>
+    /// <param name="settings">Kafka settings.</param>
+    /// <param name="clientFactory">Kafka client factory.</param>
     public FileTransferKafkaService(IOptions<KafkaSettings> settings, KafkaClientFactory clientFactory)
     {
         _settings = settings.Value;
         _clientFactory = clientFactory;
     }
 
+    /// <summary>
+    /// Publishes a transfer file as packets into Kafka.
+    /// </summary>
+    /// <param name="transfer">The transfer record.</param>
+    /// <param name="filePath">The path to the file to publish.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="chunkSizeBytes">The chunk size in bytes.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>Kafka offsets and packet count.</returns>
     public async Task<FileTransferKafkaPublishResult> PublishFromFileAsync(
         FileTransferDbModel transfer,
         string filePath,
@@ -70,6 +95,14 @@ public class FileTransferKafkaService
         return new FileTransferKafkaPublishResult(packetIndex, partition, startOffset, endOffset);
     }
 
+    /// <summary>
+    /// Streams Kafka packets to an output stream in order.
+    /// </summary>
+    /// <param name="transfer">The transfer record.</param>
+    /// <param name="output">The output stream to write to.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task StreamToAsync(
         FileTransferDbModel transfer,
         Stream output,
@@ -118,6 +151,13 @@ public class FileTransferKafkaService
         }
     }
 
+    /// <summary>
+    /// Deletes transfer packets by writing tombstones to Kafka.
+    /// </summary>
+    /// <param name="transfer">The transfer record.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task DeleteTransferPacketsAsync(
         FileTransferDbModel transfer,
         KafkaAuthMode authMode,

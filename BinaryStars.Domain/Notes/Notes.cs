@@ -44,6 +44,19 @@ public readonly record struct Note
     /// </summary>
     public DateTimeOffset UpdatedAt { get; init; }
 
+    /// <summary>
+    /// Initializes a new <see cref="Note"/> with immutable content metadata.
+    /// </summary>
+    /// <param name="id">The note identifier.</param>
+    /// <param name="name">The note title.</param>
+    /// <param name="userId">The owner user identifier.</param>
+    /// <param name="signedByDeviceId">The device identifier that signed the note.</param>
+    /// <param name="contentType">The content type of the note.</param>
+    /// <param name="createdAt">The creation timestamp.</param>
+    /// <param name="updatedAt">The last updated timestamp.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when required identifiers or metadata are missing.
+    /// </exception>
     public Note(
         Guid id,
         string name,

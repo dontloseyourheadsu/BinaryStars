@@ -4,12 +4,18 @@ using Microsoft.Extensions.Configuration;
 
 namespace BinaryStars.Tests.Integration.Fixtures;
 
+/// <summary>
+/// WebApplicationFactory that injects test configuration settings.
+/// </summary>
 public class TestApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _connectionString;
     private readonly string _kafkaBootstrapServers;
     private readonly string _tempPath;
 
+    /// <summary>
+    /// Creates a factory with test database and Kafka connection strings.
+    /// </summary>
     public TestApiFactory(string connectionString, string kafkaBootstrapServers, string tempPath)
     {
         _connectionString = connectionString;
@@ -17,6 +23,9 @@ public class TestApiFactory : WebApplicationFactory<Program>
         _tempPath = tempPath;
     }
 
+    /// <summary>
+    /// Overrides the web host configuration with test settings.
+    /// </summary>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Test");

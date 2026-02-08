@@ -45,6 +45,9 @@ class CreateNoteActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Initializes the note creation form and device list.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_create_note)
@@ -75,6 +78,9 @@ class CreateNoteActivity : AppCompatActivity() {
         btnCancel.setOnClickListener { handleCancel() }
     }
 
+    /**
+     * Configures the note type spinner.
+     */
     private fun setupTypeSpinner() {
         val adapter = ArrayAdapter(
             this,
@@ -94,6 +100,9 @@ class CreateNoteActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Updates editor button labels based on content type.
+     */
     private fun updateEditorUI() {
         if (selectedContentType == NoteType.Markdown) {
             btnEditContent.text = "Edit Markdown Content"
@@ -103,6 +112,9 @@ class CreateNoteActivity : AppCompatActivity() {
         updateContentPreview()
     }
 
+    /**
+     * Loads devices for the signer picker.
+     */
     private fun loadDevices() {
         lifecycleScope.launch {
             try {
@@ -119,6 +131,9 @@ class CreateNoteActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Binds devices into the spinner.
+     */
     private fun setupDeviceSpinner() {
         val adapter = ArrayAdapter(
             this,
@@ -129,6 +144,9 @@ class CreateNoteActivity : AppCompatActivity() {
         deviceSpinner.adapter = adapter
     }
 
+    /**
+     * Sends a create note request to the API.
+     */
     private fun saveNote() {
         val name = etNoteName.text.toString().trim()
         val content = noteContent
@@ -172,6 +190,9 @@ class CreateNoteActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Opens the markdown/plaintext editor.
+     */
     private fun openContentEditor() {
         val intent = ContentEditorActivity.newIntent(
             context = this,
@@ -181,6 +202,9 @@ class CreateNoteActivity : AppCompatActivity() {
         editContentLauncher.launch(intent)
     }
 
+    /**
+     * Updates the preview text for the note content.
+     */
     private fun updateContentPreview() {
         if (noteContent.isBlank()) {
             tvContentPreview.text = "No content yet"
@@ -195,6 +219,9 @@ class CreateNoteActivity : AppCompatActivity() {
         tvContentPreview.text = preview
     }
 
+    /**
+     * Prompts the user before discarding changes.
+     */
     private fun handleCancel() {
         if (isEdited) {
             AlertDialog.Builder(this)
