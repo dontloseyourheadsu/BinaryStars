@@ -5,6 +5,9 @@ using BinaryStars.Tests.Integration.Helpers;
 
 namespace BinaryStars.Tests.Integration.Tests;
 
+/// <summary>
+/// Integration tests for file transfer creation.
+/// </summary>
 [Collection("integration")]
 public class FileTransferTests
 {
@@ -15,6 +18,9 @@ public class FileTransferTests
         _fixture = fixture;
     }
 
+    /// <summary>
+    /// Creates a transfer and verifies it starts in a queued state.
+    /// </summary>
     [Fact]
     public async Task CreateTransfer_ReturnsQueuedStatus()
     {
@@ -51,6 +57,9 @@ public class FileTransferTests
         Assert.Equal("Queued", status);
     }
 
+    /// <summary>
+    /// Registers a device for test setup.
+    /// </summary>
     private static async Task RegisterDeviceAsync(HttpClient client, string deviceId, string name)
     {
         var response = await client.PostAsJsonAsync("api/devices/register", new

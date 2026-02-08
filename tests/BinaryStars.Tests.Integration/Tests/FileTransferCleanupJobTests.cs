@@ -7,6 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BinaryStars.Tests.Integration.Tests;
 
+/// <summary>
+/// Integration tests for cleaning up expired transfers.
+/// </summary>
 [Collection("integration")]
 public class FileTransferCleanupJobTests
 {
@@ -17,6 +20,9 @@ public class FileTransferCleanupJobTests
         _fixture = fixture;
     }
 
+    /// <summary>
+    /// Marks an expired transfer as expired and removes local temp data.
+    /// </summary>
     [Fact]
     public async Task CleanupExpiredAsync_MarksTransfersExpired()
     {

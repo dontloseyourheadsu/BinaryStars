@@ -5,8 +5,14 @@ using BinaryStars.Domain.Errors.Accounts;
 
 namespace BinaryStars.Tests.Unit.Domain.Accounts;
 
+/// <summary>
+/// Unit tests for the <see cref="Account"/> domain model.
+/// </summary>
 public class AccountDomainModelTests
 {
+    /// <summary>
+    /// Verifies accounts can be created with valid data.
+    /// </summary>
     [Fact]
     public void CreatingAccount_WithValidParameters_ShouldSucceed()
     {
@@ -27,6 +33,9 @@ public class AccountDomainModelTests
         Assert.Equal(2, account.ConnectedDevicesCount);
     }
 
+    /// <summary>
+    /// Verifies default users are rejected.
+    /// </summary>
     [Fact]
     public void CreatingAccount_WithInvalidUser_ShouldThrowArgumentException()
     {
@@ -39,6 +48,9 @@ public class AccountDomainModelTests
         Assert.Contains(AccountErrors.UserCannotBeDefault, exception.Message);
     }
 
+    /// <summary>
+    /// Verifies null device collections are rejected.
+    /// </summary>
     [Fact]
     public void CreatingAccount_WithNullDevices_ShouldThrowArgumentException()
     {

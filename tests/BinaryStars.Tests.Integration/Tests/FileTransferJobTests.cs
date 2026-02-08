@@ -9,6 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BinaryStars.Tests.Integration.Tests;
 
+/// <summary>
+/// Integration tests for the file transfer background job.
+/// </summary>
 [Collection("integration")]
 public class FileTransferJobTests
 {
@@ -19,6 +22,9 @@ public class FileTransferJobTests
         _fixture = fixture;
     }
 
+    /// <summary>
+    /// Sends a transfer to Kafka and validates persisted offsets.
+    /// </summary>
     [Fact]
     public async Task SendToKafkaAsync_PersistsOffsetsAndMarksAvailable()
     {
@@ -71,6 +77,9 @@ public class FileTransferJobTests
         Assert.False(File.Exists(tempFilePath));
     }
 
+    /// <summary>
+    /// Registers a device for test setup.
+    /// </summary>
     private static async Task RegisterDeviceAsync(HttpClient client, string deviceId, string name)
     {
         var response = await client.PostAsJsonAsync("api/devices/register", new

@@ -4,6 +4,9 @@ using BinaryStars.Tests.Integration.Helpers;
 
 namespace BinaryStars.Tests.Integration.Tests;
 
+/// <summary>
+/// Integration tests for device registration and listing.
+/// </summary>
 [Collection("integration")]
 public class DevicesTests
 {
@@ -14,6 +17,9 @@ public class DevicesTests
         _fixture = fixture;
     }
 
+    /// <summary>
+    /// Registers a device and verifies it appears in the list response.
+    /// </summary>
     [Fact]
     public async Task RegisterDevice_ThenListIncludesDevice()
     {
@@ -48,5 +54,8 @@ public class DevicesTests
         Assert.Contains(devices!, device => device.Id == deviceId);
     }
 
+    /// <summary>
+    /// Simple response shape used by device list assertions.
+    /// </summary>
     private sealed record DeviceResponse(string Id, string Name);
 }

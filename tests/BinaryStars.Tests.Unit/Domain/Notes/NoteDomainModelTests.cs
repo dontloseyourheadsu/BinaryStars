@@ -3,8 +3,14 @@ using BinaryStars.Domain.Errors.Notes;
 
 namespace BinaryStars.Tests.Unit.Domain.Notes;
 
+/// <summary>
+/// Unit tests for the <see cref="Note"/> domain model.
+/// </summary>
 public class NoteDomainModelTests
 {
+    /// <summary>
+    /// Verifies a note can be created with valid parameters.
+    /// </summary>
     [Fact]
     public void CreatingNote_WithValidParameters_ShouldSucceed()
     {
@@ -30,6 +36,9 @@ public class NoteDomainModelTests
         Assert.Equal(updatedAt, note.UpdatedAt);
     }
 
+    /// <summary>
+    /// Verifies empty identifiers are rejected.
+    /// </summary>
     [Fact]
     public void CreatingNote_WithEmptyId_ShouldThrowArgumentException()
     {
@@ -48,6 +57,9 @@ public class NoteDomainModelTests
         Assert.Contains(NoteErrors.IdCannotBeEmpty, exception.Message);
     }
 
+    /// <summary>
+    /// Verifies whitespace names are rejected.
+    /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -67,6 +79,9 @@ public class NoteDomainModelTests
         Assert.Contains(NoteErrors.NameCannotBeNullOrWhitespace, exception.Message);
     }
 
+    /// <summary>
+    /// Verifies null names are rejected.
+    /// </summary>
     [Fact]
     public void CreatingNote_WithNullName_ShouldThrowArgumentException()
     {
@@ -85,6 +100,9 @@ public class NoteDomainModelTests
         Assert.Contains(NoteErrors.NameCannotBeNullOrWhitespace, exception.Message);
     }
 
+    /// <summary>
+    /// Verifies empty user IDs are rejected.
+    /// </summary>
     [Fact]
     public void CreatingNote_WithEmptyUserId_ShouldThrowArgumentException()
     {
@@ -103,6 +121,9 @@ public class NoteDomainModelTests
         Assert.Contains(NoteErrors.UserIdCannotBeEmpty, exception.Message);
     }
 
+    /// <summary>
+    /// Verifies whitespace device IDs are rejected.
+    /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -122,6 +143,9 @@ public class NoteDomainModelTests
         Assert.Contains(NoteErrors.SignedByDeviceIdCannotBeNullOrWhitespace, exception.Message);
     }
 
+    /// <summary>
+    /// Verifies null device IDs are rejected.
+    /// </summary>
     [Fact]
     public void CreatingNote_WithNullDeviceId_ShouldThrowArgumentException()
     {
@@ -140,6 +164,9 @@ public class NoteDomainModelTests
         Assert.Contains(NoteErrors.SignedByDeviceIdCannotBeNullOrWhitespace, exception.Message);
     }
 
+    /// <summary>
+    /// Verifies plaintext notes are accepted.
+    /// </summary>
     [Fact]
     public void CreatingNote_WithPlaintextType_ShouldSucceed()
     {
@@ -159,6 +186,9 @@ public class NoteDomainModelTests
         Assert.Equal(NoteType.Plaintext, note.ContentType);
     }
 
+    /// <summary>
+    /// Ensures created/updated timestamps are preserved.
+    /// </summary>
     [Fact]
     public void CreatingNote_WithDifferentTimestamps_ShouldPreserveTimestamps()
     {
@@ -180,6 +210,9 @@ public class NoteDomainModelTests
         Assert.True(note.UpdatedAt >= note.CreatedAt);
     }
 
+    /// <summary>
+    /// Confirms the record type remains immutable.
+    /// </summary>
     [Fact]
     public void Note_IsImmutable_CannotChangeProperties()
     {
