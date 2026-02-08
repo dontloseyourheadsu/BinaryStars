@@ -154,3 +154,4 @@ The API uses the BinaryStars JWT as the OAuth bearer token when Kafka auth mode 
 
 - These certificates are for local development only.
 - For production, replace with managed CA-signed certs and a proper OAuth provider.
+- Store broker credentials and client keys in a secure secret manager for cloud deployments.
