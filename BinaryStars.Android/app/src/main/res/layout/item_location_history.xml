@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginTop="8dp"
+    android:orientation="vertical"
+    android:background="@color/carbon_bg_panel"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/tvHistoryTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Location"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:textColor="@color/carbon_text_main" />
+
+    <TextView
+        android:id="@+id/tvHistoryMeta"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="10:45 AM"
+        android:textSize="12sp"
+        android:textColor="@color/carbon_text_muted" />
+</LinearLayout>
