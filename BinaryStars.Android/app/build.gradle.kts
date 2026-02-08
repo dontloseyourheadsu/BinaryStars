@@ -86,6 +86,8 @@ dependencies {
         exclude(group = "com.microsoft.device.display", module = "display-mask")
     }
     implementation(libs.opentelemetry.api)
+    implementation(libs.maplibre)
+    implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
