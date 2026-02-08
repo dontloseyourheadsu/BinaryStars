@@ -76,4 +76,11 @@ interface ApiService {
     // Messaging
     @POST("messaging/send")
     suspend fun sendMessage(@Body request: SendMessageRequestDto): Response<MessagingMessageDto>
+
+    // Location
+    @POST("locations")
+    suspend fun sendLocation(@Body request: LocationUpdateRequestDto): Response<Void>
+
+    @GET("locations/history")
+    suspend fun getLocationHistory(@Query("deviceId") deviceId: String): Response<List<LocationHistoryPointDto>>
 }

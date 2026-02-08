@@ -1,6 +1,8 @@
 package com.tds.binarystars
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
@@ -53,11 +55,26 @@ class LoginActivity : AppCompatActivity() {
 
         // Agrega esto en onCreate para ver el hash real
         try {
-            val info = packageManager.getPackageInfo(
-                "com.tds.binarystars", // Tu package name
-                android.content.pm.PackageManager.GET_SIGNATURES
-            )
-            for (signature in info.signatures) {
+            val packageName = packageName
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                PackageManager.GET_SIGNING_CERTIFICATES
+            } else {
+                @Suppress("DEPRECATION")
+                PackageManager.GET_SIGNATURES
+            }
+            val info = packageManager.getPackageInfo(packageName, flags)
+            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val signingInfo = info.signingInfo
+                if (signingInfo.hasMultipleSigners()) {
+                    signingInfo.apkContentsSigners
+                } else {
+                    signingInfo.signingCertificateHistory
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                info.signatures
+            }
+            for (signature in signatures) {
                 val md = java.security.MessageDigest.getInstance("SHA")
                 md.update(signature.toByteArray())
                 val hash = android.util.Base64.encodeToString(md.digest(), android.util.Base64.NO_WRAP)
@@ -177,7 +194,11 @@ class LoginActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            app.signIn(this, null, scopes, object : AuthenticationCallback {
+            val signInParameters = com.microsoft.identity.client.SignInParameters
+                .builder()
+                .withActivity(this)
+                .withScopes(scopes.toList())
+                .withCallback(object : AuthenticationCallback {
                 override fun onSuccess(authenticationResult: IAuthenticationResult?) {
                     // 2. FIX: Use accessToken. The 'claims' map does NOT contain the raw ID token.
                     // If your backend specifically needs the ID token string, note that MSAL Android
@@ -202,6 +223,9 @@ class LoginActivity : AppCompatActivity() {
                     Log.d(logTag, "MSAL sign-in canceled")
                 }
             })
+                .build()
+
+            app.signIn(signInParameters)
         }
     }
 

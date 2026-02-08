@@ -1,5 +1,6 @@
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
+using BinaryStars.Application.Databases.DatabaseModels.Locations;
 using BinaryStars.Application.Databases.DatabaseModels.Notes;
 using BinaryStars.Application.Databases.DatabaseModels.Transfers;
 using BinaryStars.Application.Databases.DatabaseRules;
@@ -14,6 +15,7 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
     public DbSet<DeviceDbModel> Devices { get; set; }
     public DbSet<NoteDbModel> Notes { get; set; }
     public DbSet<FileTransferDbModel> FileTransfers { get; set; }
+    public DbSet<LocationHistoryDbModel> LocationHistory { get; set; }
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -28,5 +30,6 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
         builder.ApplyConfiguration(new DeviceDbModelConfiguration());
         builder.ApplyConfiguration(new NoteDbModelConfiguration());
         builder.ApplyConfiguration(new FileTransferDbModelConfiguration());
+        builder.ApplyConfiguration(new LocationHistoryDbModelConfiguration());
     }
 }

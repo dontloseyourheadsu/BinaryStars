@@ -3,6 +3,7 @@ package com.tds.binarystars.activities
 import android.os.Bundle
 import android.view.View
 import android.widget.*
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -47,6 +48,12 @@ class CreateNoteActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_create_note)
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                handleCancel()
+            }
+        })
 
         etNoteName = findViewById(R.id.etNoteName)
         noteTypeSpinner = findViewById(R.id.spinnerNoteType)
@@ -201,9 +208,5 @@ class CreateNoteActivity : AppCompatActivity() {
         }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        handleCancel()
-        super.onBackPressed()
-    }
+    
 }

@@ -2,10 +2,12 @@ using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
+using BinaryStars.Application.Databases.Repositories.Locations;
 using BinaryStars.Application.Databases.Repositories.Notes;
 using BinaryStars.Application.Databases.Repositories.Transfers;
 using BinaryStars.Application.Services.Accounts;
 using BinaryStars.Application.Services.Devices;
+using BinaryStars.Application.Services.Locations;
 using BinaryStars.Application.Services.Notes;
 using BinaryStars.Application.Services.Transfers;
 using BinaryStars.Application.Validators.Accounts;
@@ -24,6 +26,7 @@ public static class ServicesExtensions
         services.AddScoped<IDeviceRepository, DeviceRepository>();
         services.AddScoped<INotesRepository, NotesRepository>();
         services.AddScoped<IFileTransferRepository, FileTransferRepository>();
+        services.AddScoped<ILocationHistoryRepository, LocationHistoryRepository>();
 
         // Services
         services.AddScoped<IAccountsWriteService, AccountsWriteService>();
@@ -34,6 +37,8 @@ public static class ServicesExtensions
         services.AddScoped<INotesWriteService, NotesWriteService>();
         services.AddScoped<IFileTransfersReadService, FileTransfersService>();
         services.AddScoped<IFileTransfersWriteService, FileTransfersService>();
+        services.AddScoped<ILocationHistoryReadService, LocationHistoryService>();
+        services.AddScoped<ILocationHistoryWriteService, LocationHistoryService>();
         services.AddScoped<ExternalIdentityValidator>();
         services.AddSingleton<MessagingConnectionManager>();
         services.AddScoped<MessagingKafkaService>();
