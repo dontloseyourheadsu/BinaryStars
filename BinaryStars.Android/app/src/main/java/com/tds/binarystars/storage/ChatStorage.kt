@@ -8,6 +8,9 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.tds.binarystars.model.ChatMessage
 import com.tds.binarystars.model.ChatSummary
 
+/**
+ * SQLite-backed cache for chat messages and summaries.
+ */
 object ChatStorage {
     private const val DB_NAME = "binarystars_chat.db"
     private const val DB_VERSION = 1
@@ -26,12 +29,14 @@ object ChatStorage {
 
     private var dbHelper: ChatDbHelper? = null
 
+    /** Initializes the chat database helper. */
     fun init(context: Context) {
         if (dbHelper == null) {
             dbHelper = ChatDbHelper(context.applicationContext)
         }
     }
 
+    /** Upserts a message and updates the chat summary. */
     fun upsertMessage(message: ChatMessage) {
         val db = dbHelper?.writableDatabase ?: return
 
@@ -69,6 +74,7 @@ object ChatStorage {
         }
     }
 
+    /** Returns chat summaries ordered by most recent. */
     fun getChats(): List<ChatSummary> {
         val db = dbHelper?.readableDatabase ?: return emptyList()
         val cursor = db.rawQuery(
@@ -91,6 +97,7 @@ object ChatStorage {
         }
     }
 
+    /** Returns messages for a device, optionally before a timestamp. */
     fun getMessages(deviceId: String, beforeSentAt: Long?, limit: Int): List<ChatMessage> {
         val db = dbHelper?.readableDatabase ?: return emptyList()
         val args = mutableListOf<String>()
@@ -131,12 +138,14 @@ object ChatStorage {
         }
     }
 
+    /** Clears messages for a single chat thread. */
     fun clearChat(deviceId: String) {
         val db = dbHelper?.writableDatabase ?: return
         db.delete(TABLE_MESSAGES, "$COLUMN_CHAT_DEVICE_ID = ?", arrayOf(deviceId))
         db.delete(TABLE_CHATS, "$COLUMN_CHAT_DEVICE_ID = ?", arrayOf(deviceId))
     }
 
+    /** Clears all chat data. */
     fun clearAll() {
         val db = dbHelper?.writableDatabase ?: return
         db.delete(TABLE_MESSAGES, null, null)

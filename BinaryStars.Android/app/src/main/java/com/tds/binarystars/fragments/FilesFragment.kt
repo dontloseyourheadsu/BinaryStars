@@ -67,6 +67,9 @@ class FilesFragment : Fragment() {
         }
     }
 
+    /**
+     * Inflates the file transfers UI.
+     */
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -74,6 +77,9 @@ class FilesFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_files, container, false)
     }
 
+    /**
+     * Initializes UI widgets, adapters, and loads transfers.
+     */
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -119,6 +125,9 @@ class FilesFragment : Fragment() {
         loadTransfers()
     }
 
+    /**
+     * Loads transfers from API or cache, updating the UI for offline mode.
+     */
     private fun loadTransfers() {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
@@ -181,6 +190,9 @@ class FilesFragment : Fragment() {
         }
     }
 
+    /**
+     * Updates the empty state UI based on list contents.
+     */
     private fun updateEmptyState() {
         if (items.isEmpty()) {
             emptyState.visibility = View.VISIBLE
@@ -191,6 +203,9 @@ class FilesFragment : Fragment() {
         }
     }
 
+    /**
+     * Maps cached transfers into UI list items.
+     */
     private fun buildUiItemsFromLocal(transfers: List<LocalFileTransfer>): List<TransferUiItem> {
         return transfers.map { transfer ->
             val directionLabel = if (transfer.isSender) {
@@ -214,11 +229,17 @@ class FilesFragment : Fragment() {
         }
     }
 
+    /**
+     * Toggles offline state UI panels.
+     */
     private fun setNoConnection(show: Boolean) {
         noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
         contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
+    /**
+     * Builds a UI model for a file transfer row.
+     */
     private fun buildUiItem(
         id: String,
         fileName: String,
@@ -269,6 +290,9 @@ class FilesFragment : Fragment() {
         )
     }
 
+    /**
+     * Opens a device picker to choose a target for sending a file.
+     */
     private fun handleFileSelected(uri: Uri) {
         lifecycleScope.launch {
             val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
@@ -291,6 +315,9 @@ class FilesFragment : Fragment() {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Encrypts and uploads a file to the selected device.
+     */
     private fun sendFileToDevice(uri: Uri, targetDeviceId: String, publicKey: String?, publicKeyAlgorithm: String?) {
         if (publicKey.isNullOrBlank() || publicKeyAlgorithm.isNullOrBlank()) {
             Toast.makeText(requireContext(), "Target device encryption key missing", Toast.LENGTH_SHORT).show()
@@ -372,6 +399,9 @@ class FilesFragment : Fragment() {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Downloads, decrypts, and stores a transfer locally.
+     */
     private fun downloadTransfer(item: TransferUiItem) {
         val deviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
         lifecycleScope.launch {
@@ -411,6 +441,9 @@ class FilesFragment : Fragment() {
         }
     }
 
+    /**
+     * Resends a previously sent transfer using the cached file path.
+     */
     private fun resendTransfer(item: TransferUiItem) {
         val localPath = item.localPath
         if (localPath.isNullOrBlank()) {
@@ -423,6 +456,9 @@ class FilesFragment : Fragment() {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Rejects a pending transfer for the current device.
+     */
     private fun rejectTransfer(item: TransferUiItem) {
         val deviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
         lifecycleScope.launch {
@@ -436,6 +472,9 @@ class FilesFragment : Fragment() {
         }
     }
 
+    /**
+     * Moves a downloaded transfer from app storage to a user-selected location.
+     */
     private fun moveFileToDevice(uri: Uri, item: TransferUiItem) {
         val localPath = item.localPath
         if (localPath.isNullOrBlank()) {
@@ -460,6 +499,9 @@ class FilesFragment : Fragment() {
         }
     }
 
+    /**
+     * Opens a local file using an external app.
+     */
     private fun openLocalFile(item: TransferUiItem) {
         val localPath = item.localPath
         if (localPath.isNullOrBlank()) {
@@ -481,6 +523,9 @@ class FilesFragment : Fragment() {
         startActivity(Intent.createChooser(intent, "Open with"))
     }
 
+    /**
+     * Resolves a display name for a content Uri.
+     */
     private fun resolveFileName(uri: Uri): String {
         if (uri.scheme == "file") {
             return File(uri.path ?: "").name
@@ -498,6 +543,9 @@ class FilesFragment : Fragment() {
         return "file_${System.currentTimeMillis()}"
     }
 
+    /**
+     * Resolves size in bytes for a content Uri.
+     */
     private fun resolveFileSize(uri: Uri): Long {
         if (uri.scheme == "file") {
             return File(uri.path ?: "").length()
@@ -515,6 +563,9 @@ class FilesFragment : Fragment() {
         return 0
     }
 
+    /**
+     * Formats bytes into a human readable size string.
+     */
     private fun formatSize(sizeBytes: Long): String {
         if (sizeBytes <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB")

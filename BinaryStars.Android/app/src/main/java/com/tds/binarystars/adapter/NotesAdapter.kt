@@ -12,6 +12,9 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 
+/**
+ * Recycler adapter for note cards.
+ */
 class NotesAdapter(
     private val notes: List<NoteResponse>,
     private val onNoteClick: (NoteResponse) -> Unit

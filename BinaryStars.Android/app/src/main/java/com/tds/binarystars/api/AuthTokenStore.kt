@@ -9,10 +9,16 @@ object AuthTokenStore {
     private const val KEY_EXPIRES_AT_EPOCH = "expires_at_epoch"
     private var prefs: SharedPreferences? = null
 
+    /**
+     * Initializes the token store with application context.
+     */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    /**
+     * Persists an access token and its expiration time.
+     */
     fun setToken(token: String, expiresInSeconds: Int) {
         val expiresAt = (System.currentTimeMillis() / 1000L) + expiresInSeconds
         prefs?.edit()
@@ -21,6 +27,9 @@ object AuthTokenStore {
             ?.apply()
     }
 
+    /**
+     * Returns the cached access token if it is still valid.
+     */
     fun getToken(): String? {
         val token = prefs?.getString(KEY_ACCESS_TOKEN, null)
         val expiresAt = prefs?.getLong(KEY_EXPIRES_AT_EPOCH, 0L) ?: 0L
@@ -29,6 +38,9 @@ object AuthTokenStore {
         return if (expiresAt > now) token else null
     }
 
+    /**
+     * Clears the stored token and expiration data.
+     */
     fun clear() {
         prefs?.edit()
             ?.remove(KEY_ACCESS_TOKEN)

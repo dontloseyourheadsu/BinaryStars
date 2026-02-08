@@ -10,6 +10,9 @@ import com.tds.binarystars.R
 import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.model.MapDeviceItem
 
+/**
+ * Recycler adapter for map device list entries.
+ */
 class MapDevicesAdapter(
     private val items: List<MapDeviceItem>,
     private val onClick: (MapDeviceItem) -> Unit

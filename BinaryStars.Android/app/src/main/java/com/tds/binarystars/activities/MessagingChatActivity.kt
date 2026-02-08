@@ -49,6 +49,9 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
     private var hasMore = true
     private var oldestTimestamp: Long? = null
 
+    /**
+     * Initializes chat UI, loads history, and wires message actions.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_messaging_chat)
@@ -91,21 +94,33 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
         loadInitial()
     }
 
+    /**
+     * Registers websocket listeners for chat updates.
+     */
     override fun onResume() {
         super.onResume()
         MessagingSocketManager.addListener(this)
     }
 
+    /**
+     * Unregisters websocket listeners.
+     */
     override fun onPause() {
         super.onPause()
         MessagingSocketManager.removeListener(this)
     }
 
+    /**
+     * Refreshes the chat when new messages arrive.
+     */
     override fun onChatUpdated(deviceId: String) {
         if (deviceId != this.deviceId) return
         loadLatest()
     }
 
+    /**
+     * Closes the chat if the device was removed.
+     */
     override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {
         if (isSelf || deviceId == this.deviceId) {
             finish()
@@ -116,6 +131,9 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
         // No-op for now
     }
 
+    /**
+     * Loads the initial page of chat history.
+     */
     private fun loadInitial() {
         val loaded = ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
         messages.clear()
@@ -129,6 +147,9 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
         }
     }
 
+    /**
+     * Reloads the latest messages from storage.
+     */
     private fun loadLatest() {
         val loaded = ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
         adapter.replaceAll(loaded)
@@ -139,6 +160,9 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
         }
     }
 
+    /**
+     * Loads older messages when the user scrolls to the top.
+     */
     private fun loadMore() {
         if (oldestTimestamp == null) return
         isLoading = true
@@ -153,6 +177,9 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
     }
 
     @SuppressLint("HardwareIds")
+    /**
+     * Sends a new message using websocket or REST fallback.
+     */
     private fun sendMessage() {
         val body = input.text.toString().trim()
         if (body.isBlank()) return
@@ -209,6 +236,9 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
         }
     }
 
+    /**
+     * Confirms and clears the local chat history.
+     */
     private fun confirmClearChat() {
         AlertDialog.Builder(this)
             .setTitle("Clear chat")

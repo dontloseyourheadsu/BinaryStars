@@ -5,6 +5,9 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
+/**
+ * SQLite-backed cache for file transfer metadata.
+ */
 object FileTransferStorage {
     private const val DB_NAME = "binarystars_transfers.db"
     private const val DB_VERSION = 1
@@ -25,12 +28,14 @@ object FileTransferStorage {
 
     private var dbHelper: TransfersDbHelper? = null
 
+    /** Initializes the transfers database helper. */
     fun init(context: Context) {
         if (dbHelper == null) {
             dbHelper = TransfersDbHelper(context.applicationContext)
         }
     }
 
+    /** Upserts a list of transfers in a transaction. */
     fun upsertTransfers(transfers: List<LocalFileTransfer>) {
         val db = dbHelper?.writableDatabase ?: return
         db.beginTransaction()
@@ -44,6 +49,7 @@ object FileTransferStorage {
         }
     }
 
+    /** Returns cached transfers ordered by creation time. */
     fun getTransfers(): List<LocalFileTransfer> {
         val db = dbHelper?.readableDatabase ?: return emptyList()
         val cursor = db.query(
@@ -136,6 +142,9 @@ object FileTransferStorage {
     }
 }
 
+/**
+ * Local transfer metadata used by the file transfer UI.
+ */
 data class LocalFileTransfer(
     val id: String,
     val fileName: String,

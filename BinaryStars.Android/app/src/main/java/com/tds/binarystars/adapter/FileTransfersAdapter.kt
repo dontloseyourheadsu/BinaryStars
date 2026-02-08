@@ -10,6 +10,9 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.tds.binarystars.R
 
+/**
+ * Recycler adapter for file transfer items.
+ */
 class FileTransfersAdapter(
     private val items: List<TransferUiItem>,
     private val onActionClick: (TransferUiItem, TransferAction) -> Unit
@@ -61,6 +64,9 @@ class FileTransfersAdapter(
     override fun getItemCount() = items.size
 }
 
+/**
+ * UI model for a file transfer list row.
+ */
 data class TransferUiItem(
     val id: String,
     val fileName: String,
@@ -75,6 +81,9 @@ data class TransferUiItem(
     val localPath: String?
 )
 
+/**
+ * Supported actions for a transfer row.
+ */
 enum class TransferAction(val label: String) {
     Download("Download"),
     Resend("Resend"),

@@ -37,6 +37,9 @@ class SettingsFragment : Fragment() {
     private lateinit var btnUpgradePlan: Button
     private lateinit var btnSignOut: Button
 
+    /**
+     * Inflates the settings UI.
+     */
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -44,6 +47,9 @@ class SettingsFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_settings, container, false)
     }
 
+    /**
+     * Initializes settings view, listeners, and loads profile data.
+     */
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -95,6 +101,9 @@ class SettingsFragment : Fragment() {
         refreshData()
     }
 
+    /**
+     * Reloads account profile and device data.
+     */
     private fun refreshData() {
         if (!NetworkUtils.isOnline(requireContext())) {
             contentView.visibility = View.GONE

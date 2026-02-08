@@ -11,6 +11,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/**
+ * Recycler adapter for chat summary cards.
+ */
 class MessagingChatsAdapter(
     private val items: List<ChatListItem>,
     private val onChatSelected: (ChatListItem) -> Unit
@@ -45,6 +48,9 @@ class MessagingChatsAdapter(
     }
 }
 
+/**
+ * UI model for a chat list entry.
+ */
 data class ChatListItem(
     val deviceId: String,
     val deviceName: String,

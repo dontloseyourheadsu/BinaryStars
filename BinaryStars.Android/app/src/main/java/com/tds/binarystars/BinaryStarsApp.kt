@@ -11,6 +11,9 @@ import com.tds.binarystars.location.LocationUpdateScheduler
 import org.maplibre.android.MapLibre
 
 class BinaryStarsApp : Application() {
+    /**
+     * Initializes app-wide singletons and schedules background work.
+     */
     override fun onCreate() {
         super.onCreate()
         AuthTokenStore.init(this)

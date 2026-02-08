@@ -8,9 +8,13 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
+/**
+ * Schedules periodic background location uploads with WorkManager.
+ */
 object LocationUpdateScheduler {
     private const val WORK_NAME = "location_updates"
 
+    /** Enqueues periodic location updates. */
     fun schedule(context: Context, intervalMinutes: Int) {
         val repeatMinutes = intervalMinutes.coerceAtLeast(15)
         val constraints = Constraints.Builder()
@@ -25,6 +29,7 @@ object LocationUpdateScheduler {
             .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
+    /** Cancels scheduled location updates. */
     fun cancel(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
     }

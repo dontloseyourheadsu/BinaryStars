@@ -12,6 +12,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/**
+ * Recycler adapter for chat messages.
+ */
 class MessagingMessagesAdapter(
     private val items: MutableList<ChatMessage>
 ) : RecyclerView.Adapter<MessagingMessagesAdapter.MessageViewHolder>() {
@@ -47,18 +50,21 @@ class MessagingMessagesAdapter(
 
     override fun getItemCount() = items.size
 
+    /** Replaces the adapter contents. */
     fun replaceAll(newItems: List<ChatMessage>) {
         items.clear()
         items.addAll(newItems)
         notifyDataSetChanged()
     }
 
+    /** Prepends older messages at the top of the list. */
     fun prepend(itemsToAdd: List<ChatMessage>) {
         if (itemsToAdd.isEmpty()) return
         items.addAll(0, itemsToAdd)
         notifyItemRangeInserted(0, itemsToAdd.size)
     }
 
+    /** Appends a single new message. */
     fun append(item: ChatMessage) {
         items.add(item)
         notifyItemInserted(items.lastIndex)

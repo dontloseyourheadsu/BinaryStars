@@ -36,6 +36,9 @@ object ApiClient {
         .writeTimeout(5, TimeUnit.MINUTES)
         .build()
 
+    /**
+     * Lazily constructed Retrofit API service.
+     */
     val apiService: ApiService by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)

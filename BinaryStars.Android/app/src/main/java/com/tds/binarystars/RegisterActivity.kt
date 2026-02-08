@@ -14,6 +14,9 @@ import kotlinx.coroutines.launch
 
 class RegisterActivity : AppCompatActivity() {
 
+    /**
+     * Initializes the registration form and submits account creation.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_register)
