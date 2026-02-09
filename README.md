@@ -78,6 +78,14 @@ sequenceDiagram
 	API-->>Target: File stream
 ```
 
+## Bluetooth File Transfers (Android)
+
+BinaryStars supports direct Bluetooth file transfers between Android devices as
+an alternative to the API/Kafka path. When the target device is discovered and
+in range, the file transfer list shows a Bluetooth icon and the send dialog
+offers a Bluetooth option. Transfers use RFCOMM and the same encryption envelope
+as the API path, with resume and cancel controls for interrupted transfers.
+
 ## Secrets And Configuration
 
 - Do not commit real secrets or private keys.

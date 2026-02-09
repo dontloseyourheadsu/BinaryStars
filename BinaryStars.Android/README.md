@@ -191,3 +191,33 @@ keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias
 - Update Azure app registrations with release signing hashes and redirect URIs.
 - Use production OAuth client IDs for release builds.
 - Keep client IDs and tenant IDs in a secure build configuration for CI.
+
+---
+
+## Bluetooth File Transfers (RFCOMM)
+
+BinaryStars can send files directly between Android devices using Bluetooth
+RFCOMM as an alternative to the API/Kafka path.
+
+### Requirements
+
+- Bluetooth enabled on both devices.
+- Devices must be discoverable and in range.
+- The Bluetooth device name should match the device name registered in the API
+  so the UI can flag transfers as Bluetooth-capable.
+
+### Permissions
+
+The Android app requests the following permissions (runtime on Android 12+):
+
+- `BLUETOOTH_SCAN`
+- `BLUETOOTH_CONNECT`
+- `ACCESS_FINE_LOCATION` (pre-Android 12 discovery)
+
+### UX Notes
+
+- The file transfer list shows a Bluetooth icon when the target device is
+  currently discovered.
+- If the device is in range, the send dialog offers **Bluetooth** or **API**.
+- In-progress Bluetooth transfers can be **canceled** and interrupted transfers
+  can be **resumed** from the file transfer list.
