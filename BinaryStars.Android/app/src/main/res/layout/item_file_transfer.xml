@@ -57,7 +57,7 @@
         android:src="@drawable/ic_check_circle"
         android:visibility="gone"
         app:tint="@color/primary_purple"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/ivBluetoothIcon"
         app:layout_constraintTop_toTopOf="parent" />
 
     <ProgressBar
@@ -65,6 +65,17 @@
         android:layout_width="20dp"
         android:layout_height="20dp"
         android:visibility="gone"
+        app:layout_constraintEnd_toStartOf="@id/ivBluetoothIcon"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ImageView
+        android:id="@+id/ivBluetoothIcon"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:src="@drawable/ic_bluetooth"
+        android:contentDescription="Bluetooth available"
+        android:visibility="gone"
+        app:tint="@color/carbon_text_muted"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 

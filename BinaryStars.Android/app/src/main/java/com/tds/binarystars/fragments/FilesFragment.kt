@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.LayoutInflater
@@ -14,6 +15,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.ImageView
+import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
@@ -27,6 +29,9 @@ import com.tds.binarystars.adapter.TransferUiItem
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.CreateFileTransferRequestDto
 import com.tds.binarystars.api.FileTransferStatusDto
+import com.tds.binarystars.bluetooth.BluetoothTransferManager
+import com.tds.binarystars.bluetooth.BluetoothTransferState
+import com.tds.binarystars.bluetooth.BluetoothTransferStore
 import com.tds.binarystars.api.StreamingRequestBody
 import com.tds.binarystars.crypto.CryptoManager
 import com.tds.binarystars.storage.FileTransferLocalStore
@@ -41,6 +46,12 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.text.DecimalFormat
+import java.time.Instant
+import java.util.UUID
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.content.pm.PackageManager
 
 class FilesFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
@@ -53,6 +64,27 @@ class FilesFragment : Fragment() {
     private lateinit var retryButton: Button
     private val items = mutableListOf<TransferUiItem>()
     private var pendingMoveItem: TransferUiItem? = null
+    private lateinit var bluetoothManager: BluetoothTransferManager
+    private var bluetoothAvailableDevices: Set<String> = emptySet()
+
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.any { it }
+        if (granted) {
+            startBluetoothFeatures()
+        } else {
+            Toast.makeText(requireContext(), "Bluetooth permissions denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val enableBluetoothLauncher = registerForActivityResult(StartActivityForResult()) {
+        if (bluetoothManager.isEnabled()) {
+            startBluetoothFeatures()
+        } else {
+            Toast.makeText(requireContext(), "Bluetooth is disabled", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private val pickFileLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -95,10 +127,18 @@ class FilesFragment : Fragment() {
         noConnectionView = view.findViewById(R.id.viewNoConnection)
         retryButton = view.findViewById(R.id.btnRetry)
 
+        bluetoothManager = BluetoothTransferManager(requireContext()) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                refreshTransfersFromCache()
+            }
+        }
+
         adapter = FileTransfersAdapter(items) { item, action ->
             when (action) {
                 TransferAction.Download -> downloadTransfer(item)
                 TransferAction.Resend -> resendTransfer(item)
+                TransferAction.Resume -> resumeBluetoothTransfer(item)
+                TransferAction.Cancel -> cancelBluetoothTransfer(item)
                 TransferAction.Move -> {
                     pendingMoveItem = item
                     createDocumentLauncher.launch(item.fileName)
@@ -125,6 +165,16 @@ class FilesFragment : Fragment() {
         loadTransfers()
     }
 
+    override fun onStart() {
+        super.onStart()
+        ensureBluetoothReady()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stopBluetoothFeatures()
+    }
+
     /**
      * Loads transfers from API or cache, updating the UI for offline mode.
      */
@@ -132,6 +182,7 @@ class FilesFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
             val isOnline = NetworkUtils.isOnline(requireContext())
+            val bluetoothStates = withContext(Dispatchers.IO) { BluetoothTransferStore.getAll(requireContext()) }
             if (!isOnline) {
                 val cached = withContext(Dispatchers.IO) { FileTransferStorage.getTransfers() }
                 progressBar.visibility = View.GONE
@@ -143,7 +194,7 @@ class FilesFragment : Fragment() {
 
                 setNoConnection(false)
                 items.clear()
-                items.addAll(buildUiItemsFromLocal(cached))
+                items.addAll(buildUiItemsFromLocal(cached, bluetoothStates, bluetoothAvailableDevices))
                 adapter.notifyDataSetChanged()
                 updateEmptyState()
                 return@launch
@@ -177,17 +228,22 @@ class FilesFragment : Fragment() {
                 }
 
                 withContext(Dispatchers.IO) { FileTransferStorage.upsertTransfers(locals) }
-
-                items.clear()
-                items.addAll(buildUiItemsFromLocal(locals))
-                adapter.notifyDataSetChanged()
-                setNoConnection(false)
-                updateEmptyState()
+                refreshTransfersFromCache()
             } else {
                 emptyState.text = "Failed to load transfers"
                 emptyState.visibility = View.VISIBLE
             }
         }
+    }
+
+    private suspend fun refreshTransfersFromCache() {
+        val cached = withContext(Dispatchers.IO) { FileTransferStorage.getTransfers() }
+        val bluetoothStates = withContext(Dispatchers.IO) { BluetoothTransferStore.getAll(requireContext()) }
+        items.clear()
+        items.addAll(buildUiItemsFromLocal(cached, bluetoothStates, bluetoothAvailableDevices))
+        adapter.notifyDataSetChanged()
+        setNoConnection(false)
+        updateEmptyState()
     }
 
     /**
@@ -206,7 +262,11 @@ class FilesFragment : Fragment() {
     /**
      * Maps cached transfers into UI list items.
      */
-    private fun buildUiItemsFromLocal(transfers: List<LocalFileTransfer>): List<TransferUiItem> {
+    private fun buildUiItemsFromLocal(
+        transfers: List<LocalFileTransfer>,
+        bluetoothStates: Map<String, BluetoothTransferState>,
+        bluetoothAvailable: Set<String>
+    ): List<TransferUiItem> {
         return transfers.map { transfer ->
             val directionLabel = if (transfer.isSender) {
                 "To: ${transfer.targetDeviceName}"
@@ -217,6 +277,10 @@ class FilesFragment : Fragment() {
             val meta = "$directionLabel • $sizeText"
             val status = FileTransferStatusDto.valueOf(transfer.status)
             val localPath = FileTransferLocalStore.getLocalPath(requireContext(), transfer.id)
+            val bluetoothState = bluetoothStates[transfer.id]
+            val isBluetoothTransfer = bluetoothState != null
+            val bluetoothAvailableForTarget = transfer.isSender && bluetoothAvailable.contains(transfer.targetDeviceName)
+            val showBluetooth = bluetoothAvailableForTarget
             buildUiItem(
                 transfer.id,
                 transfer.fileName,
@@ -224,7 +288,10 @@ class FilesFragment : Fragment() {
                 meta,
                 status,
                 transfer.isSender,
-                localPath
+                localPath,
+                showBluetooth,
+                isBluetoothTransfer,
+                bluetoothAvailableForTarget
             )
         }
     }
@@ -237,6 +304,53 @@ class FilesFragment : Fragment() {
         contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
+    private fun ensureBluetoothReady() {
+        if (!bluetoothManager.isSupported()) return
+        if (!hasBluetoothPermissions()) {
+            requestBluetoothPermissions()
+            return
+        }
+        if (!bluetoothManager.isEnabled()) {
+            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        }
+        startBluetoothFeatures()
+    }
+
+    private fun startBluetoothFeatures() {
+        bluetoothManager.startDiscovery { devices ->
+            bluetoothAvailableDevices = devices.keys
+            viewLifecycleOwner.lifecycleScope.launch {
+                refreshTransfersFromCache()
+            }
+        }
+        bluetoothManager.startServer()
+    }
+
+    private fun stopBluetoothFeatures() {
+        bluetoothManager.stopDiscovery()
+        bluetoothManager.stopServer()
+    }
+
+    private fun hasBluetoothPermissions(): Boolean {
+        val permissions = requiredBluetoothPermissions()
+        return permissions.all { permission ->
+            ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestBluetoothPermissions() {
+        bluetoothPermissionLauncher.launch(requiredBluetoothPermissions())
+    }
+
+    private fun requiredBluetoothPermissions(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
     /**
      * Builds a UI model for a file transfer row.
      */
@@ -247,30 +361,36 @@ class FilesFragment : Fragment() {
         metaText: String,
         status: FileTransferStatusDto,
         isSender: Boolean,
-        localPath: String?
+        localPath: String?,
+        showBluetooth: Boolean,
+        isBluetoothTransfer: Boolean,
+        bluetoothAvailableForTarget: Boolean
     ): TransferUiItem {
         val statusText = when (status) {
             FileTransferStatusDto.Queued -> if (isSender) "Queued" else "Preparing"
             FileTransferStatusDto.Uploading -> "Uploading"
             FileTransferStatusDto.Available -> if (isSender) "Waiting for download" else "Ready to download"
             FileTransferStatusDto.Downloaded -> if (isSender) "Delivered" else "Downloaded"
-            FileTransferStatusDto.Failed -> "Failed"
+            FileTransferStatusDto.Failed -> if (isBluetoothTransfer) "Interrupted" else "Failed"
             FileTransferStatusDto.Expired -> "Expired"
-            FileTransferStatusDto.Rejected -> "Rejected"
+            FileTransferStatusDto.Rejected -> if (isBluetoothTransfer) "Canceled" else "Rejected"
         }
 
         val showProgress = status == FileTransferStatusDto.Uploading || status == FileTransferStatusDto.Queued
         val showSuccess = status == FileTransferStatusDto.Downloaded
 
         val primaryAction = when {
-            !isSender && status == FileTransferStatusDto.Available -> TransferAction.Download
+            isBluetoothTransfer && isSender && status == FileTransferStatusDto.Uploading -> TransferAction.Cancel
+            isBluetoothTransfer && isSender && status == FileTransferStatusDto.Failed && bluetoothAvailableForTarget -> TransferAction.Resume
+            !isBluetoothTransfer && !isSender && status == FileTransferStatusDto.Available -> TransferAction.Download
             !isSender && status == FileTransferStatusDto.Downloaded && localPath != null -> TransferAction.Move
-            isSender && (status == FileTransferStatusDto.Failed || status == FileTransferStatusDto.Expired || status == FileTransferStatusDto.Rejected) -> TransferAction.Resend
+            !isBluetoothTransfer && isSender &&
+                (status == FileTransferStatusDto.Failed || status == FileTransferStatusDto.Expired || status == FileTransferStatusDto.Rejected) -> TransferAction.Resend
             else -> null
         }
 
         val secondaryAction = when {
-            !isSender && status == FileTransferStatusDto.Available -> TransferAction.Reject
+            !isBluetoothTransfer && !isSender && status == FileTransferStatusDto.Available -> TransferAction.Reject
             !isSender && status == FileTransferStatusDto.Downloaded && localPath != null -> TransferAction.Open
             else -> null
         }
@@ -284,6 +404,8 @@ class FilesFragment : Fragment() {
             isSender = isSender,
             showSuccessIcon = showSuccess,
             showProgress = showProgress,
+            showBluetoothIcon = showBluetooth,
+            isBluetoothTransfer = isBluetoothTransfer,
             primaryAction = primaryAction,
             secondaryAction = secondaryAction,
             localPath = localPath
@@ -307,7 +429,22 @@ class FilesFragment : Fragment() {
                 .setTitle("Send to device")
                 .setItems(names) { _, index ->
                     val device = devices[index]
-                    sendFileToDevice(uri, device.id, device.publicKey, device.publicKeyAlgorithm)
+                    val bluetoothAvailable = bluetoothAvailableDevices.contains(device.name)
+                    if (bluetoothAvailable) {
+                        AlertDialog.Builder(requireContext())
+                            .setTitle("Send via")
+                            .setItems(arrayOf("Bluetooth", "API")) { _, methodIndex ->
+                                if (methodIndex == 0) {
+                                    sendFileToDeviceBluetooth(uri, device.id, device.name, device.publicKey, device.publicKeyAlgorithm)
+                                } else {
+                                    sendFileToDeviceApi(uri, device.id, device.publicKey, device.publicKeyAlgorithm)
+                                }
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    } else {
+                        sendFileToDeviceApi(uri, device.id, device.publicKey, device.publicKeyAlgorithm)
+                    }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -318,7 +455,7 @@ class FilesFragment : Fragment() {
     /**
      * Encrypts and uploads a file to the selected device.
      */
-    private fun sendFileToDevice(uri: Uri, targetDeviceId: String, publicKey: String?, publicKeyAlgorithm: String?) {
+    private fun sendFileToDeviceApi(uri: Uri, targetDeviceId: String, publicKey: String?, publicKeyAlgorithm: String?) {
         if (publicKey.isNullOrBlank() || publicKeyAlgorithm.isNullOrBlank()) {
             Toast.makeText(requireContext(), "Target device encryption key missing", Toast.LENGTH_SHORT).show()
             return
@@ -399,6 +536,115 @@ class FilesFragment : Fragment() {
     }
 
     @SuppressLint("HardwareIds")
+    private fun sendFileToDeviceBluetooth(
+        uri: Uri,
+        targetDeviceId: String,
+        targetDeviceName: String,
+        publicKey: String?,
+        publicKeyAlgorithm: String?
+    ) {
+        if (publicKey.isNullOrBlank() || publicKeyAlgorithm.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Target device encryption key missing", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (!publicKeyAlgorithm.equals("RSA", ignoreCase = true)) {
+            Toast.makeText(requireContext(), "Unsupported device key algorithm", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val device = bluetoothManager.getAvailableDeviceByName(targetDeviceName)
+        if (device == null) {
+            Toast.makeText(requireContext(), "Bluetooth device not in range", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val resolver = requireContext().contentResolver
+        val fileName = resolveFileName(uri)
+        val contentType = resolver.getType(uri) ?: "application/octet-stream"
+        val sizeBytes = resolveFileSize(uri)
+        val senderDeviceId = Settings.Secure.getString(resolver, Settings.Secure.ANDROID_ID)
+        val senderDeviceName = BluetoothAdapter.getDefaultAdapter()?.name ?: "Android"
+
+        if (sizeBytes <= 0) {
+            Toast.makeText(requireContext(), "File size not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                val sentDir = File(requireContext().filesDir, "transfers/sent")
+                sentDir.mkdirs()
+                val originalCopy = File(sentDir, "${System.currentTimeMillis()}_$fileName")
+                resolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(originalCopy).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                val encryptedFile = File(requireContext().cacheDir, "${System.currentTimeMillis()}_bt_enc.bin")
+                val envelope = withContext(Dispatchers.IO) {
+                    resolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(encryptedFile).use { output ->
+                            CryptoManager.encryptToStream(input, output, senderDeviceId, targetDeviceId, publicKey)
+                        }
+                    } ?: ""
+                }
+
+                if (envelope.isBlank()) {
+                    Toast.makeText(requireContext(), "Failed to encrypt file", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val transferId = "bt_${UUID.randomUUID()}"
+                val createdAt = Instant.now().toString()
+                val transfer = LocalFileTransfer(
+                    id = transferId,
+                    fileName = fileName,
+                    contentType = contentType,
+                    sizeBytes = sizeBytes,
+                    senderDeviceId = senderDeviceId,
+                    senderDeviceName = senderDeviceName,
+                    targetDeviceId = targetDeviceId,
+                    targetDeviceName = targetDeviceName,
+                    status = FileTransferStatusDto.Uploading.name,
+                    createdAt = createdAt,
+                    expiresAt = createdAt,
+                    isSender = true
+                )
+                withContext(Dispatchers.IO) { FileTransferStorage.upsertTransfer(transfer) }
+                FileTransferLocalStore.setLocalPath(requireContext(), transferId, originalCopy.absolutePath, "sent")
+
+                val state = BluetoothTransferState(
+                    transferId = transferId,
+                    fileName = fileName,
+                    contentType = contentType,
+                    originalSizeBytes = sizeBytes,
+                    encryptedSizeBytes = encryptedFile.length(),
+                    senderDeviceId = senderDeviceId,
+                    senderDeviceName = senderDeviceName,
+                    targetDeviceId = targetDeviceId,
+                    targetDeviceName = targetDeviceName,
+                    envelope = envelope,
+                    encryptedPath = encryptedFile.absolutePath,
+                    decryptedPath = null,
+                    bytesTransferred = 0,
+                    status = FileTransferStatusDto.Uploading.name,
+                    isSender = true,
+                    createdAt = createdAt,
+                    expiresAt = createdAt
+                )
+                withContext(Dispatchers.IO) { BluetoothTransferStore.upsert(requireContext(), state) }
+
+                withContext(Dispatchers.IO) { bluetoothManager.sendTransfer(state, device) }
+                loadTransfers()
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Bluetooth send failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    @SuppressLint("HardwareIds")
     /**
      * Downloads, decrypts, and stores a transfer locally.
      */
@@ -453,6 +699,69 @@ class FilesFragment : Fragment() {
 
         val uri = Uri.fromFile(File(localPath))
         handleFileSelected(uri)
+    }
+
+    private fun resumeBluetoothTransfer(item: TransferUiItem) {
+        val state = BluetoothTransferStore.get(requireContext(), item.id)
+        if (state == null) {
+            Toast.makeText(requireContext(), "Bluetooth transfer not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (state.encryptedPath.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Resume file not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val device = bluetoothManager.getAvailableDeviceByName(state.targetDeviceName)
+        if (device == null) {
+            Toast.makeText(requireContext(), "Target device not in range", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { bluetoothManager.sendTransfer(state, device) }
+                loadTransfers()
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Resume failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun cancelBluetoothTransfer(item: TransferUiItem) {
+        val state = BluetoothTransferStore.get(requireContext(), item.id)
+        if (state == null) {
+            Toast.makeText(requireContext(), "Bluetooth transfer not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        bluetoothManager.cancelTransfer(item.id)
+        state.encryptedPath?.let { path ->
+            runCatching { File(path).delete() }
+        }
+        val canceledState = state.copy(
+            status = FileTransferStatusDto.Rejected.name,
+            encryptedPath = null
+        )
+        BluetoothTransferStore.upsert(requireContext(), canceledState)
+
+        val canceledTransfer = LocalFileTransfer(
+            id = canceledState.transferId,
+            fileName = canceledState.fileName,
+            contentType = canceledState.contentType,
+            sizeBytes = canceledState.originalSizeBytes,
+            senderDeviceId = canceledState.senderDeviceId,
+            senderDeviceName = canceledState.senderDeviceName,
+            targetDeviceId = canceledState.targetDeviceId,
+            targetDeviceName = canceledState.targetDeviceName,
+            status = canceledState.status,
+            createdAt = canceledState.createdAt,
+            expiresAt = canceledState.expiresAt,
+            isSender = true
+        )
+        FileTransferStorage.upsertTransfer(canceledTransfer)
+        loadTransfers()
     }
 
     @SuppressLint("HardwareIds")

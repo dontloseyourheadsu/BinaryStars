@@ -49,6 +49,12 @@ object FileTransferStorage {
         }
     }
 
+    /** Upserts a single transfer. */
+    fun upsertTransfer(transfer: LocalFileTransfer) {
+        val db = dbHelper?.writableDatabase ?: return
+        upsertTransferInternal(db, transfer)
+    }
+
     /** Returns cached transfers ordered by creation time. */
     fun getTransfers(): List<LocalFileTransfer> {
         val db = dbHelper?.readableDatabase ?: return emptyList()
