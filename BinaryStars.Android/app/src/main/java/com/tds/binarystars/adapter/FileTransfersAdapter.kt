@@ -20,6 +20,7 @@ class FileTransfersAdapter(
 
     class TransferViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val icon: ImageView = view.findViewById(R.id.ivTransferIcon)
+        val bluetoothIcon: ImageView = view.findViewById(R.id.ivBluetoothIcon)
         val fileName: TextView = view.findViewById(R.id.tvTransferFileName)
         val meta: TextView = view.findViewById(R.id.tvTransferMeta)
         val status: TextView = view.findViewById(R.id.tvTransferStatus)
@@ -41,6 +42,7 @@ class FileTransfersAdapter(
         holder.meta.text = item.metaText
         holder.status.text = item.statusText
 
+        holder.bluetoothIcon.visibility = if (item.showBluetoothIcon) View.VISIBLE else View.GONE
         holder.statusIcon.visibility = if (item.showSuccessIcon) View.VISIBLE else View.GONE
         holder.progress.visibility = if (item.showProgress) View.VISIBLE else View.GONE
 
@@ -76,6 +78,8 @@ data class TransferUiItem(
     val isSender: Boolean,
     val showSuccessIcon: Boolean,
     val showProgress: Boolean,
+    val showBluetoothIcon: Boolean,
+    val isBluetoothTransfer: Boolean,
     val primaryAction: TransferAction?,
     val secondaryAction: TransferAction?,
     val localPath: String?
@@ -87,6 +91,8 @@ data class TransferUiItem(
 enum class TransferAction(val label: String) {
     Download("Download"),
     Resend("Resend"),
+    Resume("Resume"),
+    Cancel("Cancel"),
     Move("Move"),
     Open("Open"),
     Reject("Reject")
