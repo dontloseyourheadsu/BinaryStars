@@ -23,6 +23,7 @@ class MessagingChatsAdapter(
         val name: TextView = view.findViewById(R.id.tvChatDeviceName)
         val lastMessage: TextView = view.findViewById(R.id.tvChatLastMessage)
         val lastTime: TextView = view.findViewById(R.id.tvChatLastTime)
+        val bluetoothIcon: android.widget.ImageView = view.findViewById(R.id.ivChatBluetoothIcon)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatViewHolder {
@@ -36,6 +37,7 @@ class MessagingChatsAdapter(
         holder.name.text = item.deviceName
         holder.lastMessage.text = item.lastMessage
         holder.lastTime.text = formatTime(item.lastSentAt)
+        holder.bluetoothIcon.visibility = if (item.isBluetoothAvailable) View.VISIBLE else View.GONE
         holder.itemView.setOnClickListener { onChatSelected(item) }
     }
 
@@ -55,5 +57,6 @@ data class ChatListItem(
     val deviceId: String,
     val deviceName: String,
     val lastMessage: String,
-    val lastSentAt: Long
+    val lastSentAt: Long,
+    val isBluetoothAvailable: Boolean
 )

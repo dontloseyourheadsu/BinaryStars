@@ -1,8 +1,13 @@
 package com.tds.binarystars.activities
 
 import android.annotation.SuppressLint
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
@@ -10,6 +15,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -17,6 +26,8 @@ import com.tds.binarystars.R
 import com.tds.binarystars.adapter.MessagingMessagesAdapter
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.SendMessageRequestDto
+import com.tds.binarystars.bluetooth.BluetoothChatListener
+import com.tds.binarystars.bluetooth.BluetoothChatManager
 import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.model.ChatMessage
@@ -27,7 +38,7 @@ import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
 import java.util.UUID
 
-class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
+class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, BluetoothChatListener {
     companion object {
         const val EXTRA_DEVICE_ID = "device_id"
         const val EXTRA_DEVICE_NAME = "device_name"
@@ -41,6 +52,7 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
     private lateinit var sendButton: ImageView
     private lateinit var clearButton: Button
     private lateinit var titleView: TextView
+    private lateinit var bluetoothToggle: SwitchCompat
 
     private val messages = mutableListOf<ChatMessage>()
     private var deviceId: String = ""
@@ -48,6 +60,31 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
     private var isLoading = false
     private var hasMore = true
     private var oldestTimestamp: Long? = null
+    private var bluetoothAvailable = false
+    private var bluetoothConnected = false
+    private var bluetoothConnecting = false
+    private var bluetoothEnabled = false
+    private var suppressBluetoothToggle = false
+
+    private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
+        bluetoothAvailable = devices.keys.contains(deviceName)
+        updateBluetoothUi()
+    }
+
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.any { it }
+        if (granted) {
+            startBluetoothFeatures()
+        }
+    }
+
+    private val enableBluetoothLauncher = registerForActivityResult(StartActivityForResult()) {
+        if (BluetoothChatManager.isEnabled()) {
+            startBluetoothFeatures()
+        }
+    }
 
     /**
      * Initializes chat UI, loads history, and wires message actions.
@@ -64,8 +101,13 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
         sendButton = findViewById(R.id.btnSendMessage)
         clearButton = findViewById(R.id.btnClearChat)
         titleView = findViewById(R.id.tvChatTitle)
+        bluetoothToggle = findViewById(R.id.switchChatBluetooth)
 
         titleView.text = deviceName
+
+        val selfDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        val selfDeviceName = BluetoothAdapter.getDefaultAdapter()?.name ?: "Android"
+        BluetoothChatManager.setSelf(selfDeviceId, selfDeviceName)
 
         adapter = MessagingMessagesAdapter(messages)
         val layoutManager = LinearLayoutManager(this)
@@ -74,6 +116,40 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
 
         sendButton.setOnClickListener {
             sendMessage()
+        }
+
+        bluetoothToggle.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressBluetoothToggle) return@setOnCheckedChangeListener
+            if (!bluetoothAvailable && isChecked) {
+                suppressBluetoothToggle = true
+                bluetoothToggle.isChecked = false
+                suppressBluetoothToggle = false
+                return@setOnCheckedChangeListener
+            }
+
+            bluetoothEnabled = isChecked
+            BluetoothChatManager.setChatEnabled(deviceId, bluetoothEnabled)
+            if (!bluetoothEnabled) {
+                BluetoothChatManager.disconnect(deviceId)
+                bluetoothConnected = false
+                bluetoothConnecting = false
+                updateBluetoothUi()
+                return@setOnCheckedChangeListener
+            }
+
+            lifecycleScope.launch {
+                bluetoothConnecting = true
+                updateBluetoothUi()
+                val connected = withContext(Dispatchers.IO) {
+                    BluetoothChatManager.connectToDevice(deviceId, deviceName)
+                }
+                bluetoothConnected = connected
+                bluetoothConnecting = false
+                if (!connected && bluetoothEnabled) {
+                    Toast.makeText(this@MessagingChatActivity, "Bluetooth not accepted", Toast.LENGTH_SHORT).show()
+                }
+                updateBluetoothUi()
+            }
         }
 
         clearButton.setOnClickListener {
@@ -100,6 +176,7 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
     override fun onResume() {
         super.onResume()
         MessagingSocketManager.addListener(this)
+        BluetoothChatManager.addListener(this)
     }
 
     /**
@@ -108,6 +185,19 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
     override fun onPause() {
         super.onPause()
         MessagingSocketManager.removeListener(this)
+        BluetoothChatManager.removeListener(this)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ensureBluetoothReady()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        BluetoothChatManager.setChatEnabled(deviceId, false)
+        BluetoothChatManager.disconnect(deviceId)
+        stopBluetoothFeatures()
     }
 
     /**
@@ -129,6 +219,13 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
 
     override fun onConnectionStateChanged(isConnected: Boolean) {
         // No-op for now
+    }
+
+    override fun onBluetoothConnectionChanged(deviceId: String, isConnected: Boolean, isConnecting: Boolean) {
+        if (deviceId != this.deviceId) return
+        bluetoothConnected = isConnected
+        bluetoothConnecting = isConnecting
+        updateBluetoothUi()
     }
 
     /**
@@ -185,6 +282,34 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
         if (body.isBlank()) return
         if (body.length > MAX_MESSAGE_LENGTH) {
             Toast.makeText(this, "Message too long (500 max)", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (bluetoothEnabled) {
+            if (!bluetoothConnected) {
+                Toast.makeText(this, "Waiting for Bluetooth connection", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val senderDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+            val sentAt = OffsetDateTime.now().toString()
+            val sent = BluetoothChatManager.sendMessage(deviceId, body, sentAt)
+            if (!sent) {
+                Toast.makeText(this, "Bluetooth send failed", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val localMessage = ChatMessage(
+                id = UUID.randomUUID().toString(),
+                deviceId = deviceId,
+                senderDeviceId = senderDeviceId,
+                body = body,
+                sentAt = OffsetDateTime.parse(sentAt).toInstant().toEpochMilli(),
+                isOutgoing = true
+            )
+            ChatStorage.upsertMessage(localMessage)
+            adapter.append(localMessage)
+            recyclerView.scrollToPosition(messages.lastIndex)
+            input.setText("")
             return
         }
 
@@ -249,5 +374,72 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun updateBluetoothUi() {
+        bluetoothToggle.visibility = if (bluetoothAvailable) View.VISIBLE else View.GONE
+        bluetoothToggle.isEnabled = !bluetoothConnecting
+
+        if (!bluetoothAvailable && bluetoothEnabled) {
+            suppressBluetoothToggle = true
+            bluetoothToggle.isChecked = false
+            suppressBluetoothToggle = false
+            bluetoothEnabled = false
+            BluetoothChatManager.setChatEnabled(deviceId, false)
+            BluetoothChatManager.disconnect(deviceId)
+        }
+
+        sendButton.isEnabled = !bluetoothEnabled || bluetoothConnected
+        bluetoothToggle.text = when {
+            bluetoothConnecting -> "Bluetooth (connecting)"
+            bluetoothEnabled && bluetoothConnected -> "Bluetooth (connected)"
+            else -> "Bluetooth"
+        }
+    }
+
+    private fun ensureBluetoothReady() {
+        if (!BluetoothChatManager.isSupported()) {
+            bluetoothAvailable = false
+            updateBluetoothUi()
+            return
+        }
+        if (!hasBluetoothPermissions()) {
+            requestBluetoothPermissions()
+            return
+        }
+        if (!BluetoothChatManager.isEnabled()) {
+            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        }
+        startBluetoothFeatures()
+    }
+
+    private fun startBluetoothFeatures() {
+        BluetoothChatManager.acquireDiscovery(this, bluetoothDiscoveryListener)
+        BluetoothChatManager.acquireServer()
+    }
+
+    private fun stopBluetoothFeatures() {
+        BluetoothChatManager.releaseDiscovery(this, bluetoothDiscoveryListener)
+        BluetoothChatManager.releaseServer()
+    }
+
+    private fun hasBluetoothPermissions(): Boolean {
+        val permissions = requiredBluetoothPermissions()
+        return permissions.all { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestBluetoothPermissions() {
+        bluetoothPermissionLauncher.launch(requiredBluetoothPermissions())
+    }
+
+    private fun requiredBluetoothPermissions(): Array<String> {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
     }
 }
