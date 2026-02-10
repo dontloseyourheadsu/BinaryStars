@@ -58,6 +58,17 @@
         android:text=""
         android:textColor="@color/carbon_text_muted"
         android:textSize="11sp"
+        app:layout_constraintEnd_toStartOf="@+id/ivChatBluetoothIcon"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ImageView
+        android:id="@+id/ivChatBluetoothIcon"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:src="@drawable/ic_bluetooth"
+        android:contentDescription="Bluetooth available"
+        android:visibility="gone"
+        app:tint="@color/carbon_text_muted"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 

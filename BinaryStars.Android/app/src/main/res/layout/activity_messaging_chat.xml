@@ -24,6 +24,14 @@
             android:textStyle="bold"
             android:textColor="@color/carbon_text_main" />
 
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchChatBluetooth"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Bluetooth"
+            android:visibility="gone"
+            android:layout_marginEnd="8dp" />
+
         <Button
             android:id="@+id/btnClearChat"
             android:layout_width="wrap_content"
