@@ -380,7 +380,8 @@ class FilesFragment : Fragment() {
         val showSuccess = status == FileTransferStatusDto.Downloaded
 
         val primaryAction = when {
-            isBluetoothTransfer && isSender && status == FileTransferStatusDto.Uploading -> TransferAction.Cancel
+            isBluetoothTransfer && isSender &&
+                (status == FileTransferStatusDto.Uploading || status == FileTransferStatusDto.Queued) -> TransferAction.Cancel
             isBluetoothTransfer && isSender && status == FileTransferStatusDto.Failed && bluetoothAvailableForTarget -> TransferAction.Resume
             !isBluetoothTransfer && !isSender && status == FileTransferStatusDto.Available -> TransferAction.Download
             !isSender && status == FileTransferStatusDto.Downloaded && localPath != null -> TransferAction.Move
@@ -607,7 +608,7 @@ class FilesFragment : Fragment() {
                     senderDeviceName = senderDeviceName,
                     targetDeviceId = targetDeviceId,
                     targetDeviceName = targetDeviceName,
-                    status = FileTransferStatusDto.Uploading.name,
+                    status = FileTransferStatusDto.Queued.name,
                     createdAt = createdAt,
                     expiresAt = createdAt,
                     isSender = true
@@ -629,7 +630,7 @@ class FilesFragment : Fragment() {
                     encryptedPath = encryptedFile.absolutePath,
                     decryptedPath = null,
                     bytesTransferred = 0,
-                    status = FileTransferStatusDto.Uploading.name,
+                    status = FileTransferStatusDto.Queued.name,
                     isSender = true,
                     createdAt = createdAt,
                     expiresAt = createdAt
@@ -719,9 +720,27 @@ class FilesFragment : Fragment() {
             return
         }
 
+        val queuedState = state.copy(status = FileTransferStatusDto.Queued.name)
+        BluetoothTransferStore.upsert(requireContext(), queuedState)
+        val queuedTransfer = LocalFileTransfer(
+            id = queuedState.transferId,
+            fileName = queuedState.fileName,
+            contentType = queuedState.contentType,
+            sizeBytes = queuedState.originalSizeBytes,
+            senderDeviceId = queuedState.senderDeviceId,
+            senderDeviceName = queuedState.senderDeviceName,
+            targetDeviceId = queuedState.targetDeviceId,
+            targetDeviceName = queuedState.targetDeviceName,
+            status = queuedState.status,
+            createdAt = queuedState.createdAt,
+            expiresAt = queuedState.expiresAt,
+            isSender = true
+        )
+        FileTransferStorage.upsertTransfer(queuedTransfer)
+
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { bluetoothManager.sendTransfer(state, device) }
+                withContext(Dispatchers.IO) { bluetoothManager.sendTransfer(queuedState, device) }
                 loadTransfers()
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Resume failed", Toast.LENGTH_SHORT).show()
