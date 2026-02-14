@@ -98,6 +98,9 @@ namespace BinaryStars.Application.Databases.Migrations
                     b.Property<int>("BatteryLevel")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("CpuLoadPercent")
+                        .HasColumnType("integer");
+
                     b.Property<string>("IpAddress")
                         .IsRequired()
                         .HasColumnType("text");
@@ -107,6 +110,11 @@ namespace BinaryStars.Application.Databases.Migrations
 
                     b.Property<bool>("IsOnline")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAvailable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("IsSynced")
                         .HasColumnType("boolean");

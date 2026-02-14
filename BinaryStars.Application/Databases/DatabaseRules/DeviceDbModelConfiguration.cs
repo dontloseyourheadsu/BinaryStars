@@ -24,6 +24,7 @@ public class DeviceDbModelConfiguration : IEntityTypeConfiguration<DeviceDbModel
         builder.Property(d => d.PublicKey).IsRequired(false).HasMaxLength(4096);
         builder.Property(d => d.PublicKeyAlgorithm).IsRequired(false).HasMaxLength(100);
         builder.Property(d => d.PublicKeyCreatedAt).IsRequired(false);
+        builder.Property(d => d.IsAvailable).HasDefaultValue(true);
 
         builder.HasOne<UserDbModel>()
             .WithMany()
