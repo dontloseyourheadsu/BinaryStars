@@ -24,6 +24,7 @@ import android.annotation.SuppressLint
 import android.widget.Button
 import android.widget.ImageView
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.storage.SettingsStorage
 
 class DevicesFragment : Fragment() {
 
@@ -85,6 +86,7 @@ class DevicesFragment : Fragment() {
         val context = requireContext()
         val currentDeviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
         val currentDeviceName = android.os.Build.MODEL
+        val telemetryEnabled = SettingsStorage.isDeviceTelemetryEnabled(true)
 
         lifecycleScope.launch {
             try {
@@ -92,6 +94,12 @@ class DevicesFragment : Fragment() {
                 if (response.isSuccessful && response.body() != null) {
                     val dtos = response.body()!!
                     val devices = dtos.map { dto ->
+                        val effectiveOnline = if (dto.id == currentDeviceId && !telemetryEnabled) {
+                            false
+                        } else {
+                            dto.isOnline
+                        }
+
                         Device(
                             id = dto.id,
                             name = dto.name,
@@ -103,8 +111,10 @@ class DevicesFragment : Fragment() {
                             publicKey = dto.publicKey,
                             publicKeyAlgorithm = dto.publicKeyAlgorithm,
                             batteryLevel = dto.batteryLevel,
-                            isOnline = dto.isOnline,
+                            isOnline = effectiveOnline,
+                            isAvailable = dto.isAvailable,
                             isSynced = dto.isSynced,
+                            cpuLoadPercent = dto.cpuLoadPercent,
                             wifiUploadSpeed = dto.wifiUploadSpeed,
                             wifiDownloadSpeed = dto.wifiDownloadSpeed,
                             lastSeen = System.currentTimeMillis()

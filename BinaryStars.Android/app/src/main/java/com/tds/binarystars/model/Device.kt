@@ -12,7 +12,9 @@ data class Device(
     val publicKeyAlgorithm: String? = null,
     val batteryLevel: Int,
     val isOnline: Boolean,
+    val isAvailable: Boolean = true,
     val isSynced: Boolean,
+    val cpuLoadPercent: Int? = null,
     val wifiUploadSpeed: String,
     val wifiDownloadSpeed: String,
     val lastSeen: Long = System.currentTimeMillis()
