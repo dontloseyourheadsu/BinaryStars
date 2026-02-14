@@ -41,6 +41,13 @@ interface ApiService {
     @DELETE("devices/{id}")
     suspend fun unlinkDevice(@Path("id") deviceId: String): Response<Void>
 
+    /** Update telemetry for a linked device. */
+    @PUT("devices/{id}/telemetry")
+    suspend fun updateDeviceTelemetry(
+        @Path("id") deviceId: String,
+        @Body request: UpdateDeviceTelemetryRequest
+    ): Response<DeviceDto>
+
     // Notes endpoints
     /** List notes for the authenticated user. */
     @GET("notes")

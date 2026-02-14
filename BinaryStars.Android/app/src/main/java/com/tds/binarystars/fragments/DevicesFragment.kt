@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -24,8 +26,15 @@ import android.annotation.SuppressLint
 import android.widget.Button
 import android.widget.ImageView
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.storage.SettingsStorage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 class DevicesFragment : Fragment() {
+
+    private companion object {
+        private const val POLL_INTERVAL_MS = 10_000L
+    }
 
     /**
      * Inflates the devices list UI.
@@ -50,6 +59,15 @@ class DevicesFragment : Fragment() {
         }
         
         refreshDevices()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    delay(POLL_INTERVAL_MS)
+                    refreshDevices()
+                }
+            }
+        }
     }
 
     @SuppressLint("HardwareIds")
@@ -85,6 +103,7 @@ class DevicesFragment : Fragment() {
         val context = requireContext()
         val currentDeviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
         val currentDeviceName = android.os.Build.MODEL
+        val telemetryEnabled = SettingsStorage.isDeviceTelemetryEnabled(true)
 
         lifecycleScope.launch {
             try {
@@ -92,6 +111,12 @@ class DevicesFragment : Fragment() {
                 if (response.isSuccessful && response.body() != null) {
                     val dtos = response.body()!!
                     val devices = dtos.map { dto ->
+                        val effectiveOnline = if (dto.id == currentDeviceId && !telemetryEnabled) {
+                            false
+                        } else {
+                            dto.isOnline
+                        }
+
                         Device(
                             id = dto.id,
                             name = dto.name,
@@ -103,8 +128,10 @@ class DevicesFragment : Fragment() {
                             publicKey = dto.publicKey,
                             publicKeyAlgorithm = dto.publicKeyAlgorithm,
                             batteryLevel = dto.batteryLevel,
-                            isOnline = dto.isOnline,
+                            isOnline = effectiveOnline,
+                            isAvailable = dto.isAvailable,
                             isSynced = dto.isSynced,
+                            cpuLoadPercent = dto.cpuLoadPercent,
                             wifiUploadSpeed = dto.wifiUploadSpeed,
                             wifiDownloadSpeed = dto.wifiDownloadSpeed,
                             lastSeen = System.currentTimeMillis()
@@ -122,8 +149,12 @@ class DevicesFragment : Fragment() {
                     }
 
                     // Setup RecyclerViews for online/offline sections
-                    rvOnline.adapter = DevicesAdapter(onlineDevices)
-                    rvOffline.adapter = DevicesAdapter(offlineDevices)
+                    rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
+                        openDeviceDetail(device)
+                    }
+                    rvOffline.adapter = DevicesAdapter(offlineDevices) { device ->
+                        openDeviceDetail(device)
+                    }
                     
                     // Setup Button
                     if (isRegistered) {
@@ -147,5 +178,12 @@ class DevicesFragment : Fragment() {
                // e.printStackTrace()
             }
         }
+    }
+
+    private fun openDeviceDetail(device: Device) {
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, DeviceDetailFragment.newInstance(device))
+            .addToBackStack(null)
+            .commit()
     }
 }

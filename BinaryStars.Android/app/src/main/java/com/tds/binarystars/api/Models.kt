@@ -58,10 +58,23 @@ data class DeviceDto(
     val publicKeyAlgorithm: String?,
     val batteryLevel: Int,
     val isOnline: Boolean,
+    val isAvailable: Boolean = true,
     val isSynced: Boolean,
+    val cpuLoadPercent: Int? = null,
     val wifiUploadSpeed: String,
     val wifiDownloadSpeed: String,
     val lastSeen: String
+)
+
+/** Device telemetry update request payload. */
+data class UpdateDeviceTelemetryRequest(
+    val batteryLevel: Int,
+    val cpuLoadPercent: Int?,
+    val isOnline: Boolean,
+    val isAvailable: Boolean,
+    val isSynced: Boolean,
+    val wifiUploadSpeed: String,
+    val wifiDownloadSpeed: String
 )
 
 /** Transfer status values returned by the API. */

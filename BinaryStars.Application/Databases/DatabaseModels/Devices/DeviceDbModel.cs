@@ -73,6 +73,16 @@ public class DeviceDbModel
     public required string WifiDownloadSpeed { get; set; }
 
     /// <summary>
+    /// Gets or sets the optional CPU load percentage.
+    /// </summary>
+    public int? CpuLoadPercent { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether telemetry/data sharing is enabled.
+    /// </summary>
+    public bool IsAvailable { get; set; }
+
+    /// <summary>
     /// Gets or sets the timestamp when the device was last seen.
     /// </summary>
     public DateTimeOffset LastSeen { get; set; }

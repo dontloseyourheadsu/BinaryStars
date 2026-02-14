@@ -118,6 +118,25 @@ public class DevicesController : ControllerBase
         return BadRequest(result.Errors);
     }
 
+    /// <summary>
+    /// Updates telemetry and availability for a linked device.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="request">Telemetry payload.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The updated device.</returns>
+    [HttpPut("{deviceId}/telemetry")]
+    public async Task<IActionResult> UpdateTelemetry(string deviceId, [FromBody] UpdateDeviceTelemetryRequest request, CancellationToken cancellationToken)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var result = await _devicesWriteService.UpdateTelemetryAsync(userId, deviceId, request, cancellationToken);
+
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return BadRequest(result.Errors);
+    }
+
     private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
     {
         var user = await _accountRepository.FindByIdAsync(userId);

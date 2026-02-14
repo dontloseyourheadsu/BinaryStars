@@ -26,6 +26,25 @@ public record RegisterDeviceRequest(
     string? PublicKeyAlgorithm);
 
 /// <summary>
+/// Request payload for updating device telemetry.
+/// </summary>
+/// <param name="BatteryLevel">Battery level (0-100).</param>
+/// <param name="CpuLoadPercent">Optional CPU load percentage.</param>
+/// <param name="IsOnline">Whether the device is online.</param>
+/// <param name="IsAvailable">Whether telemetry/data sharing is enabled.</param>
+/// <param name="IsSynced">Whether the device is synced.</param>
+/// <param name="WifiUploadSpeed">Current upload speed text.</param>
+/// <param name="WifiDownloadSpeed">Current download speed text.</param>
+public record UpdateDeviceTelemetryRequest(
+    int BatteryLevel,
+    int? CpuLoadPercent,
+    bool IsOnline,
+    bool IsAvailable,
+    bool IsSynced,
+    string WifiUploadSpeed,
+    string WifiDownloadSpeed);
+
+/// <summary>
 /// Write-only device operations exposed by the application layer.
 /// </summary>
 public interface IDevicesWriteService
@@ -47,6 +66,16 @@ public interface IDevicesWriteService
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A success or failure result.</returns>
     Task<Result> UnlinkDeviceAsync(Guid userId, string deviceId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Updates telemetry for a linked device.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="request">The telemetry payload.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The updated device or a failure result.</returns>
+    Task<Result<Device>> UpdateTelemetryAsync(Guid userId, string deviceId, UpdateDeviceTelemetryRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -121,7 +150,9 @@ public class DevicesWriteService : IDevicesWriteService
             UserId = userId,
             BatteryLevel = 0,
             IsOnline = true,
+            IsAvailable = true,
             IsSynced = false,
+            CpuLoadPercent = null,
             WifiDownloadSpeed = "0 Mbps",
             WifiUploadSpeed = "0 Mbps",
             Type = DeviceType.Android,
@@ -132,6 +163,31 @@ public class DevicesWriteService : IDevicesWriteService
         await _deviceRepository.SaveChangesAsync(cancellationToken);
 
         return Result<Device>.Success(MapToDomain(newDevice));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<Device>> UpdateTelemetryAsync(Guid userId, string deviceId, UpdateDeviceTelemetryRequest request, CancellationToken cancellationToken)
+    {
+        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (device == null)
+            return Result<Device>.Failure("Device not found.");
+
+        if (device.UserId != userId)
+            return Result<Device>.Failure("Unauthorized.");
+
+        device.BatteryLevel = Math.Clamp(request.BatteryLevel, 0, 100);
+        device.CpuLoadPercent = request.CpuLoadPercent.HasValue
+            ? Math.Clamp(request.CpuLoadPercent.Value, 0, 100)
+            : null;
+        device.IsOnline = request.IsOnline;
+        device.IsAvailable = request.IsAvailable;
+        device.IsSynced = request.IsSynced;
+        device.WifiUploadSpeed = string.IsNullOrWhiteSpace(request.WifiUploadSpeed) ? "Not available" : request.WifiUploadSpeed;
+        device.WifiDownloadSpeed = string.IsNullOrWhiteSpace(request.WifiDownloadSpeed) ? "Not available" : request.WifiDownloadSpeed;
+        device.LastSeen = DateTimeOffset.UtcNow;
+
+        await _deviceRepository.SaveChangesAsync(cancellationToken);
+        return Result<Device>.Success(MapToDomain(device));
     }
 
     /// <inheritdoc />
@@ -170,6 +226,8 @@ public class DevicesWriteService : IDevicesWriteService
             dbModel.IsSynced,
             dbModel.WifiUploadSpeed,
             dbModel.WifiDownloadSpeed,
+            dbModel.CpuLoadPercent,
+            dbModel.IsAvailable,
             dbModel.LastSeen,
             dbModel.PublicKey,
             dbModel.PublicKeyAlgorithm,

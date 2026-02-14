@@ -17,6 +17,7 @@ object SettingsStorage {
     private const val KEY_DARK_MODE = "dark_mode"
     private const val KEY_LOCATION_UPDATES_ENABLED = "location_updates_enabled"
     private const val KEY_LOCATION_UPDATE_MINUTES = "location_update_minutes"
+    private const val KEY_DEVICE_TELEMETRY_ENABLED = "device_telemetry_enabled"
 
     private var dbHelper: SettingsDbHelper? = null
 
@@ -96,6 +97,31 @@ object SettingsStorage {
         cursor.use {
             if (it.moveToFirst()) {
                 return it.getString(0).toIntOrNull() ?: defaultValue
+            }
+        }
+        return defaultValue
+    }
+
+    /** Persists whether this device accepts telemetry/status requests. */
+    fun setDeviceTelemetryEnabled(enabled: Boolean) {
+        val db = dbHelper?.writableDatabase ?: return
+        val value = if (enabled) "1" else "0"
+        db.execSQL(
+            "INSERT OR REPLACE INTO $TABLE_SETTINGS ($COLUMN_KEY, $COLUMN_VALUE) VALUES (?, ?)",
+            arrayOf(KEY_DEVICE_TELEMETRY_ENABLED, value)
+        )
+    }
+
+    /** Reads whether this device accepts telemetry/status requests. */
+    fun isDeviceTelemetryEnabled(defaultValue: Boolean = true): Boolean {
+        val db = dbHelper?.readableDatabase ?: return defaultValue
+        val cursor = db.rawQuery(
+            "SELECT $COLUMN_VALUE FROM $TABLE_SETTINGS WHERE $COLUMN_KEY = ? LIMIT 1",
+            arrayOf(KEY_DEVICE_TELEMETRY_ENABLED)
+        )
+        cursor.use {
+            if (it.moveToFirst()) {
+                return it.getString(0) == "1"
             }
         }
         return defaultValue

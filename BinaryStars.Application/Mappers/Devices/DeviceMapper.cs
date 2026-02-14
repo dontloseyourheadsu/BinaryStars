@@ -26,6 +26,8 @@ public static class DeviceMapper
             model.IsSynced,
             model.WifiUploadSpeed,
             model.WifiDownloadSpeed,
+            model.CpuLoadPercent,
+            model.IsAvailable,
             model.LastSeen,
             model.PublicKey,
             model.PublicKeyAlgorithm,
@@ -56,6 +58,8 @@ public static class DeviceMapper
             IsSynced = domain.IsSynced,
             WifiUploadSpeed = domain.WifiUploadSpeed,
             WifiDownloadSpeed = domain.WifiDownloadSpeed,
+            CpuLoadPercent = domain.CpuLoadPercent,
+            IsAvailable = domain.IsAvailable,
             LastSeen = domain.LastSeen,
             UserId = userId
         };
