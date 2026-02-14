@@ -122,8 +122,12 @@ class DevicesFragment : Fragment() {
                     }
 
                     // Setup RecyclerViews for online/offline sections
-                    rvOnline.adapter = DevicesAdapter(onlineDevices)
-                    rvOffline.adapter = DevicesAdapter(offlineDevices)
+                    rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
+                        openDeviceDetail(device)
+                    }
+                    rvOffline.adapter = DevicesAdapter(offlineDevices) { device ->
+                        openDeviceDetail(device)
+                    }
                     
                     // Setup Button
                     if (isRegistered) {
@@ -147,5 +151,12 @@ class DevicesFragment : Fragment() {
                // e.printStackTrace()
             }
         }
+    }
+
+    private fun openDeviceDetail(device: Device) {
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, DeviceDetailFragment.newInstance(device))
+            .addToBackStack(null)
+            .commit()
     }
 }

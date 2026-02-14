@@ -15,7 +15,10 @@ import com.tds.binarystars.model.DeviceType
 /**
  * Recycler adapter for the devices list.
  */
-class DevicesAdapter(private val devices: List<Device>) : RecyclerView.Adapter<DevicesAdapter.DeviceViewHolder>() {
+class DevicesAdapter(
+    private val devices: List<Device>,
+    private val onDeviceClick: (Device) -> Unit
+) : RecyclerView.Adapter<DevicesAdapter.DeviceViewHolder>() {
 
     class DeviceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val icon: ImageView = view.findViewById(R.id.ivIcon)
@@ -54,6 +57,10 @@ class DevicesAdapter(private val devices: List<Device>) : RecyclerView.Adapter<D
         when (device.type) {
             DeviceType.LINUX -> holder.icon.setImageResource(R.drawable.ic_computer)
             DeviceType.ANDROID -> holder.icon.setImageResource(R.drawable.ic_smartphone)
+        }
+
+        holder.itemView.setOnClickListener {
+            onDeviceClick(device)
         }
     }
 
