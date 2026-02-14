@@ -89,11 +89,15 @@
                     android:padding="12dp"
                     android:layout_margin="4dp">
                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="CPU Load"
                         android:textSize="12sp"
                         android:textColor="@color/carbon_text_muted"/>
                     <TextView
                         android:id="@+id/tvCpu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="12%"
                         android:textSize="18sp"
                         android:textStyle="bold"
@@ -110,11 +114,15 @@
                     android:padding="12dp"
                     android:layout_margin="4dp">
                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="RAM Usage"
                         android:textSize="12sp"
                         android:textColor="@color/carbon_text_muted"/>
                     <TextView
                         android:id="@+id/tvRam"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="4.2 GB"
                         android:textSize="18sp"
                         android:textStyle="bold"
@@ -131,11 +139,15 @@
                     android:padding="12dp"
                     android:layout_margin="4dp">
                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="Up Speed"
                         android:textSize="12sp"
                         android:textColor="@color/carbon_text_muted"/>
                     <TextView
                         android:id="@+id/tvUpSpeed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="1.2 MB/s"
                         android:textSize="18sp"
                         android:textStyle="bold"
@@ -152,11 +164,15 @@
                     android:padding="12dp"
                     android:layout_margin="4dp">
                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="Down Speed"
                         android:textSize="12sp"
                         android:textColor="@color/carbon_text_muted"/>
                     <TextView
                         android:id="@+id/tvDownSpeed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="5.4 MB/s"
                         android:textSize="18sp"
                         android:textStyle="bold"
@@ -173,11 +189,15 @@
                     android:padding="12dp"
                     android:layout_margin="4dp">
                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="Uptime"
                         android:textSize="12sp"
                         android:textColor="@color/carbon_text_muted"/>
                     <TextView
                         android:id="@+id/tvUptime"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="4d 2h"
                         android:textSize="18sp"
                         android:textStyle="bold"
@@ -194,11 +214,15 @@
                     android:padding="12dp"
                     android:layout_margin="4dp">
                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="Battery"
                         android:textSize="12sp"
                         android:textColor="@color/carbon_text_muted"/>
                     <TextView
                         android:id="@+id/tvBattery"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="85%"
                         android:textSize="18sp"
                         android:textStyle="bold"
@@ -237,10 +261,14 @@
                      app:layout_constraintBottom_toBottomOf="parent">
                      
                      <TextView
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
                          android:text="Share my location"
                          android:textSize="16sp"
                          android:textColor="@color/carbon_text_main"/>
                      <TextView
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
                          android:text="Allow this device to see me"
                          android:textSize="13sp"
                          android:textColor="@color/carbon_text_muted"/>
@@ -281,10 +309,14 @@
                      app:layout_constraintBottom_toBottomOf="parent">
                      
                      <TextView
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
                          android:text="Locate Device"
                          android:textSize="16sp"
                          android:textColor="@color/carbon_text_main"/>
                      <TextView
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
                          android:text="View on Map tab"
                          android:textSize="13sp"
                          android:textColor="@color/carbon_text_muted"/>
