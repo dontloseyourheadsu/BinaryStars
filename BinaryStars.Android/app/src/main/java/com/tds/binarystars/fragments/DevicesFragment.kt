@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -25,8 +27,14 @@ import android.widget.Button
 import android.widget.ImageView
 import com.tds.binarystars.MainActivity
 import com.tds.binarystars.storage.SettingsStorage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 class DevicesFragment : Fragment() {
+
+    private companion object {
+        private const val POLL_INTERVAL_MS = 10_000L
+    }
 
     /**
      * Inflates the devices list UI.
@@ -51,6 +59,15 @@ class DevicesFragment : Fragment() {
         }
         
         refreshDevices()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    delay(POLL_INTERVAL_MS)
+                    refreshDevices()
+                }
+            }
+        }
     }
 
     @SuppressLint("HardwareIds")

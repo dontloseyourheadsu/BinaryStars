@@ -13,9 +13,12 @@ import android.widget.ImageView
 import android.widget.Switch
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.tds.binarystars.R
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.api.UpdateDeviceTelemetryRequest
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
@@ -23,6 +26,7 @@ import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.util.NetworkUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.RandomAccessFile
@@ -44,13 +48,13 @@ class DeviceDetailFragment : Fragment() {
         val name = arguments?.getString(ARG_NAME).orEmpty()
         val type = arguments?.getString(ARG_TYPE).orEmpty()
         val ipAddress = arguments?.getString(ARG_IP_ADDRESS).orEmpty()
-        val batteryLevel = arguments?.getInt(ARG_BATTERY_LEVEL) ?: -1
-        val isOnline = arguments?.getBoolean(ARG_IS_ONLINE) ?: false
-        val isSynced = arguments?.getBoolean(ARG_IS_SYNCED) ?: false
-        val isAvailable = arguments?.getBoolean(ARG_IS_AVAILABLE) ?: true
-        val fallbackCpuLoadPercent = arguments?.getInt(ARG_CPU_LOAD_PERCENT)?.takeIf { it >= 0 }
-        val uploadSpeed = arguments?.getString(ARG_UPLOAD_SPEED).orEmpty()
-        val downloadSpeed = arguments?.getString(ARG_DOWNLOAD_SPEED).orEmpty()
+        var batteryLevel = arguments?.getInt(ARG_BATTERY_LEVEL) ?: -1
+        var isOnline = arguments?.getBoolean(ARG_IS_ONLINE) ?: false
+        var isSynced = arguments?.getBoolean(ARG_IS_SYNCED) ?: false
+        var isAvailable = arguments?.getBoolean(ARG_IS_AVAILABLE) ?: true
+        var fallbackCpuLoadPercent = arguments?.getInt(ARG_CPU_LOAD_PERCENT)?.takeIf { it >= 0 }
+        var uploadSpeed = arguments?.getString(ARG_UPLOAD_SPEED).orEmpty()
+        var downloadSpeed = arguments?.getString(ARG_DOWNLOAD_SPEED).orEmpty()
         val deviceId = arguments?.getString(ARG_DEVICE_ID).orEmpty()
         val isAndroidDevice = type.equals("Android", ignoreCase = true)
         val isCurrentDevice = deviceId == Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
@@ -144,6 +148,64 @@ class DeviceDetailFragment : Fragment() {
             tvConnection = tvConnection,
             tvBattery = tvBattery
         )
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    delay(POLL_INTERVAL_MS)
+
+                    if (!isCurrentDevice) {
+                        try {
+                            val response = ApiClient.apiService.getDevices()
+                            if (response.isSuccessful) {
+                                val dto = response.body()?.firstOrNull { it.id == deviceId }
+                                if (dto != null) {
+                                    batteryLevel = dto.batteryLevel
+                                    isOnline = dto.isOnline
+                                    isAvailable = dto.isAvailable
+                                    isSynced = dto.isSynced
+                                    fallbackCpuLoadPercent = dto.cpuLoadPercent
+                                    uploadSpeed = dto.wifiUploadSpeed
+                                    downloadSpeed = dto.wifiDownloadSpeed
+
+                                    val serverType = when (dto.type) {
+                                        DeviceTypeDto.Linux -> "Linux"
+                                        DeviceTypeDto.Android -> "Android"
+                                    }
+                                    tvSubtitle.text = listOf(serverType, dto.ipAddress).joinToString(" • ")
+                                }
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
+
+                    val telemetryEnabled = if (isCurrentDevice) {
+                        SettingsStorage.isDeviceTelemetryEnabled(true)
+                    } else {
+                        isAvailable
+                    }
+
+                    populateDeviceStats(
+                        isCurrentDevice = isCurrentDevice,
+                        deviceId = deviceId,
+                        isAndroidDevice = isAndroidDevice,
+                        fallbackCpuLoadPercent = fallbackCpuLoadPercent,
+                        fallbackBatteryLevel = batteryLevel,
+                        fallbackUploadSpeed = uploadSpeed,
+                        fallbackDownloadSpeed = downloadSpeed,
+                        isOnline = isOnline,
+                        isSynced = isSynced,
+                        telemetryEnabled = telemetryEnabled,
+                        tvCpu = tvCpu,
+                        tvRam = tvRam,
+                        tvUpSpeed = tvUpSpeed,
+                        tvDownSpeed = tvDownSpeed,
+                        tvConnection = tvConnection,
+                        tvBattery = tvBattery
+                    )
+                }
+            }
+        }
     }
 
     private fun populateDeviceStats(
@@ -329,6 +391,7 @@ class DeviceDetailFragment : Fragment() {
     private data class CpuStat(val total: Long, val idle: Long)
 
     companion object {
+        private const val POLL_INTERVAL_MS = 10_000L
         private const val ARG_DEVICE_ID = "arg_device_id"
         private const val ARG_NAME = "arg_name"
         private const val ARG_TYPE = "arg_type"
