@@ -12,6 +12,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.GridLayoutManager
 import com.tds.binarystars.R
 import com.tds.binarystars.adapter.DevicesAdapter
 import com.tds.binarystars.api.ApiClient
@@ -34,6 +35,11 @@ class DevicesFragment : Fragment() {
 
     private companion object {
         private const val POLL_INTERVAL_MS = 10_000L
+        private const val TABLET_MIN_WIDTH_DP = 600
+    }
+
+    private fun isTabletLayout(): Boolean {
+        return resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
     }
 
     /**
@@ -96,8 +102,9 @@ class DevicesFragment : Fragment() {
         contentView.visibility = View.VISIBLE
         noConnectionView.visibility = View.GONE
 
-        rvOnline.layoutManager = LinearLayoutManager(context)
-        rvOffline.layoutManager = LinearLayoutManager(context)
+        val isTablet = isTabletLayout()
+        rvOnline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
+        rvOffline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
 
         // Get Current Device ID
         val context = requireContext()

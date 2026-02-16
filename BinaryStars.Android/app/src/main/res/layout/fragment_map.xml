@@ -119,7 +119,7 @@
                         <org.maplibre.android.maps.MapView
                             android:id="@+id/mapView"
                             android:layout_width="match_parent"
-                            android:layout_height="280dp" />
+                            android:layout_height="@dimen/map_preview_height" />
 
                         <TextView
                             android:layout_width="match_parent"

@@ -22,6 +22,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.GridLayoutManager
 import com.tds.binarystars.R
 import com.tds.binarystars.adapter.FileTransfersAdapter
 import com.tds.binarystars.adapter.TransferAction
@@ -66,6 +67,13 @@ class FilesFragment : Fragment() {
     private var pendingMoveItem: TransferUiItem? = null
     private lateinit var bluetoothManager: BluetoothTransferManager
     private var bluetoothAvailableDevices: Set<String> = emptySet()
+    private companion object {
+        private const val TABLET_MIN_WIDTH_DP = 600
+    }
+
+    private fun isTabletLayout(): Boolean {
+        return resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
+    }
 
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -148,7 +156,11 @@ class FilesFragment : Fragment() {
             }
         }
 
-        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.layoutManager = if (isTabletLayout()) {
+            GridLayoutManager(requireContext(), 2)
+        } else {
+            LinearLayoutManager(requireContext())
+        }
         recyclerView.adapter = adapter
 
         sendButton.setOnClickListener { pickFileLauncher.launch("*/*") }
