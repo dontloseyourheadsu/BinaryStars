@@ -12,6 +12,7 @@ import android.widget.ImageView
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.GridLayoutManager
 import com.tds.binarystars.R
 import com.tds.binarystars.activities.NoteDetailActivity
 import com.tds.binarystars.activities.CreateNoteActivity
@@ -36,6 +37,13 @@ class NotesFragment : Fragment() {
     private lateinit var noConnectionView: View
     private lateinit var retryButton: Button
     private var notes: MutableList<NoteResponse> = mutableListOf()
+    private companion object {
+        private const val TABLET_MIN_WIDTH_DP = 600
+    }
+
+    private fun isTabletLayout(): Boolean {
+        return resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
+    }
 
     /**
      * Inflates the notes list UI.
@@ -78,7 +86,11 @@ class NotesFragment : Fragment() {
             startActivity(intent)
         }
 
-        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.layoutManager = if (isTabletLayout()) {
+            GridLayoutManager(requireContext(), 2)
+        } else {
+            LinearLayoutManager(requireContext())
+        }
         recyclerView.adapter = adapter
 
         createNoteBtn.setOnClickListener {

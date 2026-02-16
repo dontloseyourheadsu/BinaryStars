@@ -19,6 +19,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.core.content.ContextCompat
@@ -51,6 +52,13 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
     private val items = mutableListOf<ChatListItem>()
     private var bluetoothAvailableDevices: Set<String> = emptySet()
     private var lastNameLookup: Map<String, String> = emptyMap()
+    private companion object {
+        private const val TABLET_MIN_WIDTH_DP = 600
+    }
+
+    private fun isTabletLayout(): Boolean {
+        return resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
+    }
 
     private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
         bluetoothAvailableDevices = devices.keys
@@ -106,7 +114,11 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
             openChat(item.deviceId, item.deviceName)
         }
 
-        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.layoutManager = if (isTabletLayout()) {
+            GridLayoutManager(requireContext(), 2)
+        } else {
+            LinearLayoutManager(requireContext())
+        }
         recyclerView.adapter = adapter
 
         newChatButton.setOnClickListener {
