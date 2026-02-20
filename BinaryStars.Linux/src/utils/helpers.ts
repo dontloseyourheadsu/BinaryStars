@@ -1,4 +1,4 @@
-import type { FileTransferStatus, ChatMessage, MessageDto } from "../types";
+import type { FileTransferStatus, ChatMessage } from "../types";
 import { getApiBaseUrl } from "../api";
 
 export function formatSize(sizeBytes: number): string {

@@ -1,15 +1,15 @@
-import { ChangeEvent, FormEvent, ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import "./App.css";
-import { api, getApiBaseUrl, tokenStore } from "./api";
+import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
+import { getLocalDeviceInfo } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type {
   AccountProfile,
   ChatMessage,
   Device,
   FileTransfer,
-  FileTransferStatus,
   LocationPoint,
   MessageDto,
   Note,
@@ -46,6 +46,7 @@ function App() {
   const [isDark, setIsDark] = useState(settingsStore.getDarkMode(false));
   const [locationEnabled, setLocationEnabled] = useState(settingsStore.getLocationEnabled(false));
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
+  const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
@@ -233,14 +234,34 @@ function App() {
   }, [isAuthed, selectedMapDeviceId]);
 
   const linkCurrentDevice = async (): Promise<void> => {
+    const local = await getLocalDeviceInfo();
+    const alias = deviceAlias.trim() || local.hostname;
+    if (alias !== deviceAlias) {
+      setDeviceAlias(alias);
+      setDeviceName(alias);
+    }
+
     await api.registerDevice({
       id: myDeviceId,
-      name: deviceAlias,
-      ipAddress: "127.0.0.1",
-      ipv6Address: "::1",
+      name: alias,
+      ipAddress: local.ip_address,
+      ipv6Address: local.ipv6_address,
       publicKey: "local-linux-key",
       publicKeyAlgorithm: "RSA",
     });
+
+    await api.updateTelemetry(myDeviceId, {
+      batteryLevel: local.battery_level ?? 100,
+      cpuLoadPercent: local.cpu_load_percent ?? 0,
+      isOnline: true,
+      isAvailable: true,
+      isSynced: true,
+      wifiUploadSpeed: local.wifi_upload_speed,
+      wifiDownloadSpeed: local.wifi_download_speed,
+    });
+
+    setLocalMemoryLoadPercent(local.memory_load_percent ?? null);
+
     await refreshDevices();
   };
 
@@ -402,6 +423,59 @@ function App() {
     setDrawerOpen(false);
   };
 
+  const currentDevice = devices.find((entry) => entry.id === myDeviceId) ?? null;
+
+  useEffect(() => {
+    if (!isAuthed || !currentDevice) {
+      return;
+    }
+
+    const runTelemetrySync = async (): Promise<void> => {
+      try {
+        const local = await getLocalDeviceInfo();
+        await api.updateTelemetry(myDeviceId, {
+          batteryLevel: local.battery_level ?? 100,
+          cpuLoadPercent: local.cpu_load_percent ?? 0,
+          isOnline: true,
+          isAvailable: true,
+          isSynced: true,
+          wifiUploadSpeed: local.wifi_upload_speed,
+          wifiDownloadSpeed: local.wifi_download_speed,
+        });
+
+        setLocalMemoryLoadPercent(local.memory_load_percent ?? null);
+
+        setDevices((prev) => prev.map((device) => {
+          if (device.id !== myDeviceId) {
+            return device;
+          }
+
+          return {
+            ...device,
+            ipAddress: local.ip_address,
+            batteryLevel: local.battery_level ?? device.batteryLevel,
+            isOnline: true,
+            isAvailable: true,
+            isSynced: true,
+            cpuLoadPercent: local.cpu_load_percent ?? device.cpuLoadPercent,
+            wifiUploadSpeed: local.wifi_upload_speed,
+            wifiDownloadSpeed: local.wifi_download_speed,
+            lastSeen: new Date().toISOString(),
+          };
+        }));
+      } catch {
+        // ignore telemetry sync failures to avoid breaking the UI
+      }
+    };
+
+    void runTelemetrySync();
+    const timer = window.setInterval(() => {
+      void runTelemetrySync();
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, [isAuthed, currentDevice, myDeviceId]);
+
   if (!isAuthed) {
     return (
       <>
@@ -416,9 +490,20 @@ function App() {
     );
   }
 
-  const currentDevice = devices.find((entry) => entry.id === myDeviceId) ?? null;
   const onlineDevices = devices.filter((entry) => entry.isOnline);
   const offlineDevices = devices.filter((entry) => !entry.isOnline);
+
+  const formatBattery = (device: Device): string => {
+    return device.batteryLevel >= 0 ? `${device.batteryLevel}%` : "Not available";
+  };
+
+  const formatRam = (device: Device): string => {
+    if (device.id !== myDeviceId) {
+      return "Not available";
+    }
+
+    return localMemoryLoadPercent != null ? `${localMemoryLoadPercent}%` : "Not available";
+  };
 
   return (
     <div className="app-shell">
@@ -455,6 +540,12 @@ function App() {
                   <button className="row-card" key={device.id} onClick={() => openChat(device.id)} type="button">
                     <strong>{device.name}</strong>
                     <span className="muted">{device.type} · {device.ipAddress}</span>
+                    <span className="muted">
+                      CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
+                    </span>
+                    <span className="muted">
+                      RAM {formatRam(device)} · Battery {formatBattery(device)}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -467,6 +558,12 @@ function App() {
                   <button className="row-card" key={device.id} onClick={() => openChat(device.id)} type="button">
                     <strong>{device.name}</strong>
                     <span className="muted">{device.type} · Last seen {new Date(device.lastSeen).toLocaleString()}</span>
+                    <span className="muted">
+                      CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
+                    </span>
+                    <span className="muted">
+                      RAM {formatRam(device)} · Battery {formatBattery(device)}
+                    </span>
                   </button>
                 ))}
               </div>
