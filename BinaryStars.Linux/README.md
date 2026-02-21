@@ -55,21 +55,48 @@ To change base URL, set:
 
 - `VITE_API_BASE_URL`
 
+For OAuth desktop setup (used by PKCE/browser flow), set:
+
+- `VITE_GOOGLE_CLIENT_ID`
+- `VITE_GOOGLE_REDIRECT_URI` (recommended loopback callback)
+- `VITE_MICROSOFT_CLIENT_ID`
+- `VITE_MICROSOFT_TENANT_ID` (use `common` or a specific tenant id)
+- `VITE_MICROSOFT_REDIRECT_URI` (recommended loopback callback)
+- `VITE_MICROSOFT_SCOPE` (optional; defaults to `api://<MICROSOFT_CLIENT_ID>/access_as_user openid profile email offline_access`)
+
 Example:
 
 ```bash
 VITE_API_BASE_URL=https://your-api-host/api npm run tauri dev
 ```
 
+Example `.env.local`:
+
+```bash
+VITE_API_BASE_URL=http://localhost:5004/api
+VITE_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+VITE_GOOGLE_REDIRECT_URI=http://127.0.0.1:53123/callback
+VITE_MICROSOFT_CLIENT_ID=YOUR_MICROSOFT_CLIENT_ID
+VITE_MICROSOFT_TENANT_ID=common
+VITE_MICROSOFT_REDIRECT_URI=http://127.0.0.1:53124/callback
+VITE_MICROSOFT_SCOPE=api://YOUR_MICROSOFT_CLIENT_ID/access_as_user openid profile email offline_access
+```
+
+Important:
+
+- Do **not** store `client_secret` in the Linux/Tauri frontend.
+- Desktop apps should use OAuth public client + PKCE.
+
 ## OAuth Setup (Google + Microsoft for Linux/Tauri)
 
 BinaryStars Linux supports the same providers as Android. The current Linux client uses the API `/auth/login/external` exchange and expects you to provide a provider token.
+BinaryStars Linux now supports desktop OAuth PKCE directly from the app for Google and Microsoft (open browser → complete provider sign-in → callback captured locally → token sent to API).
 
 ### 1) Google OAuth Setup
 
 1. Open Google Cloud Console → **APIs & Services** → **Credentials**.
 2. Create OAuth client credentials for your Linux desktop flow.
-3. Configure redirect URI(s) for desktop browser sign-in (loopback is recommended for desktop apps).
+3. Configure redirect URI(s) for desktop browser sign-in (loopback is recommended for desktop apps, for example `http://127.0.0.1:53123/callback`).
 4. Copy your Google client ID.
 
 ### 2) Microsoft OAuth Setup (Azure / Entra ID)
@@ -83,16 +110,20 @@ BinaryStars Linux supports the same providers as Android. The current Linux clie
 
 ### 3) Using OAuth in the Linux App
 
-The login page includes:
+The login page includes 3 sign-in methods:
+
+- Email/Password (`/api/auth/login`)
+- Continue with Google (`/api/auth/login/external`)
+- Continue with Microsoft (`/api/auth/login/external`)
+
+For external providers, the app starts PKCE, opens the system browser, receives the loopback callback, exchanges the code for token, and then authenticates against your API.
+
+If the external account does not exist yet, the app prompts for username and completes first-time registration through `/api/auth/login/external`.
+
+The login page also includes:
 
 - `Continue with Google`
 - `Continue with Microsoft`
-
-Each button prompts for a provider token. After obtaining the token from your configured desktop OAuth flow, paste it into the prompt. The app sends it to:
-
-- `POST /api/auth/login/external`
-
-and stores the returned BinaryStars JWT.
 
 ## Detailed OAuth (PKCE) desktop flow
 
