@@ -221,6 +221,7 @@ async fn oauth_get_provider_token(
     provider: String,
     client_id: String,
     redirect_uri: String,
+    google_client_secret: Option<String>,
     microsoft_tenant_id: Option<String>,
     microsoft_scope: Option<String>,
 ) -> Result<String, String> {
@@ -341,10 +342,93 @@ async fn oauth_get_provider_token(
             }
         }
 
-        let response_body = if oauth_error.is_some() {
-            "Authentication failed. You can close this window."
+        let callback_validation_error = if let Some(error) = oauth_error {
+            Some(format!("OAuth provider returned error: {}", error))
+        } else if let Some(callback_state) = callback_state {
+            if callback_state != state {
+                Some("OAuth state validation failed".to_string())
+            } else if auth_code.is_none() {
+                Some("OAuth callback missing authorization code".to_string())
+            } else {
+                None
+            }
         } else {
+            Some("OAuth callback missing state".to_string())
+        };
+
+        if let Some(error) = callback_validation_error {
+            let response_body = "Authentication failed. You can close this window and return to BinaryStars.";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .map_err(|e| format!("Failed writing OAuth callback response: {}", e))?;
+            return Err(error);
+        }
+
+        let code = auth_code.ok_or_else(|| "OAuth callback missing authorization code".to_string())?;
+
+        let http_client = Client::builder()
+            .timeout(Duration::from_secs(45))
+            .build()
+            .map_err(|e| format!("Failed creating HTTP client: {}", e))?;
+
+        let mut token_form = vec![
+            ("grant_type", "authorization_code"),
+            ("code", code.as_str()),
+            ("redirect_uri", redirect_uri.as_str()),
+            ("client_id", client_id.as_str()),
+            ("code_verifier", code_verifier.as_str()),
+        ];
+        if matches!(provider, OAuthProvider::Google) {
+            if let Some(secret) = google_client_secret
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+            {
+                token_form.push(("client_secret", secret));
+            }
+        }
+        if matches!(provider, OAuthProvider::Microsoft) {
+            token_form.push(("scope", scope.as_str()));
+        }
+
+        let token_result: Result<String, String> = (|| {
+            let token_response = http_client
+                .post(token_url)
+                .form(&token_form)
+                .send()
+                .map_err(|e| format!("Token exchange request failed: {}", e))?;
+
+            let token_payload: OAuthTokenResponse = token_response
+                .json()
+                .map_err(|e| format!("Invalid token exchange response: {}", e))?;
+
+            if let Some(error) = token_payload.error {
+                let description = token_payload
+                    .error_description
+                    .unwrap_or_else(|| "Unknown OAuth token exchange error".to_string());
+                return Err(format!("OAuth token exchange failed: {} ({})", error, description));
+            }
+
+            match provider {
+                OAuthProvider::Google => token_payload
+                    .id_token
+                    .ok_or_else(|| "Google token exchange did not return id_token".to_string()),
+                OAuthProvider::Microsoft => token_payload
+                    .access_token
+                    .or(token_payload.id_token)
+                    .ok_or_else(|| "Microsoft token exchange did not return access_token/id_token".to_string()),
+            }
+        })();
+
+        let response_body = if token_result.is_ok() {
             "Authentication completed. You can close this window and return to BinaryStars."
+        } else {
+            "Authentication failed. You can close this window and return to BinaryStars."
         };
 
         let response = format!(
@@ -356,55 +440,7 @@ async fn oauth_get_provider_token(
             .write_all(response.as_bytes())
             .map_err(|e| format!("Failed writing OAuth callback response: {}", e))?;
 
-        if let Some(error) = oauth_error {
-            return Err(format!("OAuth provider returned error: {}", error));
-        }
-
-        let callback_state = callback_state.ok_or_else(|| "OAuth callback missing state".to_string())?;
-        if callback_state != state {
-            return Err("OAuth state validation failed".to_string());
-        }
-
-        let code = auth_code.ok_or_else(|| "OAuth callback missing authorization code".to_string())?;
-
-        let http_client = Client::builder()
-            .timeout(Duration::from_secs(45))
-            .build()
-            .map_err(|e| format!("Failed creating HTTP client: {}", e))?;
-
-        let token_response = http_client
-            .post(token_url)
-            .form(&[
-                ("grant_type", "authorization_code"),
-                ("code", code.as_str()),
-                ("redirect_uri", redirect_uri.as_str()),
-                ("client_id", client_id.as_str()),
-                ("code_verifier", code_verifier.as_str()),
-                ("scope", scope.as_str()),
-            ])
-            .send()
-            .map_err(|e| format!("Token exchange request failed: {}", e))?;
-
-        let token_payload: OAuthTokenResponse = token_response
-            .json()
-            .map_err(|e| format!("Invalid token exchange response: {}", e))?;
-
-        if let Some(error) = token_payload.error {
-            let description = token_payload
-                .error_description
-                .unwrap_or_else(|| "Unknown OAuth token exchange error".to_string());
-            return Err(format!("OAuth token exchange failed: {} ({})", error, description));
-        }
-
-        match provider {
-            OAuthProvider::Google => token_payload
-                .id_token
-                .ok_or_else(|| "Google token exchange did not return id_token".to_string()),
-            OAuthProvider::Microsoft => token_payload
-                .access_token
-                .or(token_payload.id_token)
-                .ok_or_else(|| "Microsoft token exchange did not return access_token/id_token".to_string()),
-        }
+        token_result
     })
     .await
     .map_err(|e| format!("OAuth task failed: {}", e))?

@@ -59,6 +59,7 @@ For OAuth desktop setup (used by PKCE/browser flow), set:
 
 - `VITE_GOOGLE_CLIENT_ID`
 - `VITE_GOOGLE_REDIRECT_URI` (recommended loopback callback)
+- `VITE_GOOGLE_CLIENT_SECRET` (optional; only needed if your Google OAuth client requires it during token exchange)
 - `VITE_MICROSOFT_CLIENT_ID`
 - `VITE_MICROSOFT_TENANT_ID` (use `common` or a specific tenant id)
 - `VITE_MICROSOFT_REDIRECT_URI` (recommended loopback callback)
@@ -76,6 +77,7 @@ Example `.env.local`:
 VITE_API_BASE_URL=http://localhost:5004/api
 VITE_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
 VITE_GOOGLE_REDIRECT_URI=http://127.0.0.1:53123/callback
+VITE_GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
 VITE_MICROSOFT_CLIENT_ID=YOUR_MICROSOFT_CLIENT_ID
 VITE_MICROSOFT_TENANT_ID=common
 VITE_MICROSOFT_REDIRECT_URI=http://127.0.0.1:53124/callback
@@ -84,8 +86,8 @@ VITE_MICROSOFT_SCOPE=api://YOUR_MICROSOFT_CLIENT_ID/access_as_user openid profil
 
 Important:
 
-- Do **not** store `client_secret` in the Linux/Tauri frontend.
-- Desktop apps should use OAuth public client + PKCE.
+- Prefer OAuth public clients + PKCE (no client secret) for desktop apps.
+- If your Google credential type still requires `client_secret`, set `VITE_GOOGLE_CLIENT_SECRET` for local/dev use and keep it out of git.
 
 ## OAuth Setup (Google + Microsoft for Linux/Tauri)
 
