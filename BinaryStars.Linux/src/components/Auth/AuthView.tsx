@@ -14,8 +14,17 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [oauthHint, setOauthHint] = useState("");
 
   const readApiError = (error: unknown): string => {
+    if (typeof error === "string" && error.trim().length > 0) {
+      return error;
+    }
+
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+
     if (typeof error !== "object" || error === null) {
       return "Authentication failed";
     }
@@ -35,6 +44,7 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
   const getProviderToken = async (provider: "google" | "microsoft"): Promise<string> => {
     const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").trim();
     const googleRedirectUri = (import.meta.env.VITE_GOOGLE_REDIRECT_URI ?? "").trim();
+    const googleClientSecret = (import.meta.env.VITE_GOOGLE_CLIENT_SECRET ?? "").trim();
     const microsoftClientId = (import.meta.env.VITE_MICROSOFT_CLIENT_ID ?? "").trim();
     const microsoftTenantId = (import.meta.env.VITE_MICROSOFT_TENANT_ID ?? "common").trim();
     const microsoftScope = (import.meta.env.VITE_MICROSOFT_SCOPE ?? "").trim();
@@ -51,6 +61,7 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
         provider,
         clientId: googleClientId,
         redirectUri: googleRedirectUri,
+        googleClientSecret,
       });
     }
 
@@ -93,6 +104,7 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
   const externalLogin = async (provider: "google" | "microsoft") => {
     setBusy(true);
     setError("");
+    setOauthHint("Check your browser to continue sign-in, then return to BinaryStars.");
     let providerToken = "";
     try {
       providerToken = (await getProviderToken(provider)).trim();
@@ -120,6 +132,7 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
         setError(message || "External login failed");
       }
     } finally {
+      setOauthHint("");
       setBusy(false);
     }
   };
@@ -174,6 +187,7 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
             Continue with Microsoft
           </button>
         </div>
+        {oauthHint && <p>{oauthHint}</p>}
         <button
           className="text-btn"
           onClick={() => setRegisterMode((value) => !value)}
