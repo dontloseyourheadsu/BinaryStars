@@ -15,6 +15,7 @@ using System.Text.Json.Serialization;
 using BinaryStars.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
+const string CorsPolicyName = "BinaryStarsClient";
 
 // Configure Serilog
 builder.Host.UseSerilog((context, configuration) =>
@@ -65,6 +66,23 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(CorsPolicyName, policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost",
+                "http://localhost:1420",
+                "http://127.0.0.1",
+                "http://127.0.0.1:1420",
+                "tauri://localhost",
+                "http://tauri.localhost",
+                "https://tauri.localhost")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 // Add Authentication configuration
 builder.Services.AddAuthentication(options =>
@@ -142,6 +160,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseWebSockets();
+
+app.UseCors(CorsPolicyName);
 
 app.UseAuthentication();
 app.UseAuthorization();
