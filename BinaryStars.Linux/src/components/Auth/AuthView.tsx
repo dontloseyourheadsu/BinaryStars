@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { api, tokenStore } from "../../api";
 
 type Props = {
@@ -13,6 +14,61 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  const readApiError = (error: unknown): string => {
+    if (typeof error !== "object" || error === null) {
+      return "Authentication failed";
+    }
+
+    const candidate = error as { response?: { data?: unknown }; message?: string };
+    const payload = candidate.response?.data;
+    if (Array.isArray(payload) && payload.length > 0) {
+      const first = payload[0];
+      if (typeof first === "string" && first.trim().length > 0) {
+        return first;
+      }
+    }
+
+    return candidate.message ?? "Authentication failed";
+  };
+
+  const getProviderToken = async (provider: "google" | "microsoft"): Promise<string> => {
+    const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").trim();
+    const googleRedirectUri = (import.meta.env.VITE_GOOGLE_REDIRECT_URI ?? "").trim();
+    const microsoftClientId = (import.meta.env.VITE_MICROSOFT_CLIENT_ID ?? "").trim();
+    const microsoftTenantId = (import.meta.env.VITE_MICROSOFT_TENANT_ID ?? "common").trim();
+    const microsoftScope = (import.meta.env.VITE_MICROSOFT_SCOPE ?? "").trim();
+    const microsoftRedirectUri = (
+      import.meta.env.VITE_MICROSOFT_REDIRECT_URI ?? googleRedirectUri
+    ).trim();
+
+    if (provider === "google") {
+      if (!googleClientId || !googleRedirectUri) {
+        throw new Error("Google OAuth is not configured. Set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_REDIRECT_URI.");
+      }
+
+      return invoke<string>("oauth_get_provider_token", {
+        provider,
+        clientId: googleClientId,
+        redirectUri: googleRedirectUri,
+      });
+    }
+
+    if (!microsoftClientId || !microsoftRedirectUri) {
+      throw new Error(
+        "Microsoft OAuth is not configured. Set VITE_MICROSOFT_CLIENT_ID and VITE_MICROSOFT_REDIRECT_URI.",
+      );
+    }
+
+    return invoke<string>("oauth_get_provider_token", {
+      provider,
+      clientId: microsoftClientId,
+      redirectUri: microsoftRedirectUri,
+      microsoftTenantId,
+      microsoftScope:
+        microsoftScope || `api://${microsoftClientId}/access_as_user openid profile email offline_access`,
+    });
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -35,20 +91,34 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
   };
 
   const externalLogin = async (provider: "google" | "microsoft") => {
-    const token = window.prompt(
-      `Paste ${provider} OAuth token. Configure OAuth in README first and use a browser flow to obtain a token.`,
-    );
-    if (!token) {
-      return;
-    }
     setBusy(true);
     setError("");
+    let providerToken = "";
     try {
-      const auth = await api.externalLogin(provider, token.trim());
+      providerToken = (await getProviderToken(provider)).trim();
+      const auth = await api.externalLogin(provider, providerToken);
+
       tokenStore.setToken(auth.accessToken, auth.expiresIn);
       onLoggedIn();
     } catch (error) {
-      setError(error instanceof Error ? error.message : "External login failed");
+      const message = readApiError(error);
+
+      if (message.toLowerCase().includes("registration required")) {
+        const username = window.prompt("Choose a username to create your account:", "");
+        if (!username || !username.trim()) {
+          setError("Username is required to complete registration.");
+        } else {
+          try {
+            const auth = await api.externalLogin(provider, providerToken, username.trim());
+            tokenStore.setToken(auth.accessToken, auth.expiresIn);
+            onLoggedIn();
+          } catch (innerError) {
+            setError(readApiError(innerError));
+          }
+        }
+      } else {
+        setError(message || "External login failed");
+      }
     } finally {
       setBusy(false);
     }

@@ -57,15 +57,28 @@ public class ExternalIdentityValidator
 
     private async Task<ExternalIdentityValidationResult> ValidateGoogleAsync(string token, CancellationToken cancellationToken)
     {
-        var clientId = _configuration["Authentication:Google:ClientId"];
-        if (string.IsNullOrWhiteSpace(clientId))
+        var audiences = _configuration
+            .GetSection("Authentication:Google:ClientIds")
+            .Get<string[]>()?
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList() ?? new List<string>();
+
+        var singleClientId = _configuration["Authentication:Google:ClientId"];
+        if (!string.IsNullOrWhiteSpace(singleClientId) && !audiences.Contains(singleClientId.Trim(), StringComparer.Ordinal))
+        {
+            audiences.Add(singleClientId.Trim());
+        }
+
+        if (audiences.Count == 0)
             return ExternalIdentityValidationResult.Failure("Google client id missing");
 
         try
         {
             var payload = await GoogleJsonWebSignature.ValidateAsync(token, new GoogleJsonWebSignature.ValidationSettings
             {
-                Audience = new List<string> { clientId }
+                Audience = audiences
             });
 
             if (payload?.Email is null)
