@@ -112,6 +112,9 @@ export const api = {
   }): Promise<void> {
     await http.put(`/devices/${encodeURIComponent(deviceId)}/telemetry`, payload);
   },
+  async sendHeartbeat(deviceId: string): Promise<void> {
+    await http.post(`/devices/${encodeURIComponent(deviceId)}/heartbeat`);
+  },
   async getNotes(): Promise<Note[]> {
     const response = await http.get<Note[]>("/notes");
     return response.data;

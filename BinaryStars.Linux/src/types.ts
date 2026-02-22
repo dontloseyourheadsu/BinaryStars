@@ -101,3 +101,12 @@ export interface MessagingEnvelope {
   type: string;
   payload: unknown;
 }
+
+export interface DevicePresenceEvent {
+  id: string;
+  userId: string;
+  deviceId: string;
+  isOnline: boolean;
+  lastSeen: string;
+  occurredAt: string;
+}
