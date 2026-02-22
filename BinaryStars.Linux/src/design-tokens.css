@@ -1,0 +1,51 @@
+/* Design tokens mapped from Android theme/colors and dimens */
+:root{
+  /* Colors (Android mappings) */
+  --color-primary-dark: #090040;
+  --color-primary-purple: #471396;
+  --color-accent-purple: #B13BFF;
+  --color-accent-yellow: #FFCC00;
+
+  --color-carbon-bg-app: #F2F3F5;
+  --color-carbon-bg-panel: #FFFFFF;
+  --color-carbon-primary: #5865F2;
+  --color-carbon-text-main: #060607;
+  --color-carbon-text-muted: #4F5660;
+  --color-carbon-border: #E3E5E8;
+  --color-status-online: #23A559;
+  --color-status-offline: #80848E;
+
+  /* Dimensions */
+  --nav-drawer-width: 250px;
+  --map-preview-height: 280px;
+
+  /* Typography */
+  --font-sans: Roboto, Inter, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial;
+}
+
+/* Dark theme overrides */
+:root[data-theme="dark"]{
+  --color-carbon-bg-app: #202225;
+  --color-carbon-bg-panel: #2F3136;
+  --color-carbon-text-main: #DCDDDE;
+  --color-carbon-text-muted: #B9BBBE;
+  --color-carbon-border: #202225;
+}
+
+/* Helper mapping for existing App.css variables */
+:root{
+  --primary-dark: var(--color-primary-dark);
+  --primary-purple: var(--color-primary-purple);
+  --accent-purple: var(--color-accent-purple);
+  --bg-app: var(--color-carbon-bg-app);
+  --bg-panel: var(--color-carbon-bg-panel);
+  --text-main: var(--color-carbon-text-main);
+  --text-muted: var(--color-carbon-text-muted);
+  --border: var(--color-carbon-border);
+  --carbon-primary: var(--color-carbon-primary);
+  --status-online: var(--color-status-online);
+  --status-offline: var(--color-status-offline);
+  --nav-width: var(--nav-drawer-width);
+  --map-height: var(--map-preview-height);
+  font-family: var(--font-sans);
+}
