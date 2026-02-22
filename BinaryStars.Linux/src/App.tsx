@@ -1,5 +1,10 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { Icon } from 'leaflet';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import "./App.css";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
@@ -23,9 +28,18 @@ import Sidebar from "./components/UI/Sidebar";
 import { formatSize, statusLabel, toWsUrl, upsertMessage } from "./utils/helpers";
 
 function App() {
+  // Fix Leaflet default icon paths for Vite
+  delete (Icon.Default as unknown as { prototype?: { _getIconUrl?: unknown } }).prototype?._getIconUrl;
+  Icon.Default.mergeOptions({
+    iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
+  });
+
   const [isAuthed, setIsAuthed] = useState(Boolean(tokenStore.getToken()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [activeTab, setActiveTab] = useState<Tab>("Devices");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -47,15 +61,28 @@ function App() {
   const [locationEnabled, setLocationEnabled] = useState(settingsStore.getLocationEnabled(false));
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
+  const [mapDetailOpen, setMapDetailOpen] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
+  const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const myDeviceId = getDeviceId();
 
   useEffect(() => {
     document.documentElement.dataset.theme = isDark ? "dark" : "light";
     settingsStore.setDarkMode(isDark);
   }, [isDark]);
+
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
 
   const selectedMapDevice = useMemo(
     () => devices.find((entry) => entry.id === selectedMapDeviceId) ?? null,
@@ -233,6 +260,12 @@ function App() {
     void refreshMapHistory(selectedMapDeviceId);
   }, [isAuthed, selectedMapDeviceId]);
 
+  useEffect(() => {
+    if (!selectedMapDeviceId) {
+      setMapDetailOpen(false);
+    }
+  }, [selectedMapDeviceId]);
+
   const linkCurrentDevice = async (): Promise<void> => {
     const local = await getLocalDeviceInfo();
     const alias = deviceAlias.trim() || local.hostname;
@@ -358,6 +391,35 @@ function App() {
     setNoteType(note.contentType);
   };
 
+  const wrapSelection = (before: string, after = before) => {
+    const el = noteContentRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const selected = noteContent.slice(start, end);
+    const next = noteContent.slice(0, start) + before + selected + after + noteContent.slice(end);
+    setNoteContent(next);
+    // restore selection inside the wrapped text
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + before.length, start + before.length + selected.length);
+    });
+  };
+
+  const insertAtSelection = (text: string) => {
+    const el = noteContentRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const next = noteContent.slice(0, start) + text + noteContent.slice(end);
+    setNoteContent(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const cursor = start + text.length;
+      el.setSelectionRange(cursor, cursor);
+    });
+  };
+
   const deleteNote = async (noteId: string): Promise<void> => {
     await api.deleteNote(noteId);
     if (editingNoteId === noteId) {
@@ -410,6 +472,13 @@ function App() {
       isOutgoing: true,
     };
     setMessages((prev) => upsertMessage(prev, storedMessage));
+  };
+
+  const clearCurrentChat = (): void => {
+    if (!selectedChatDeviceId) {
+      return;
+    }
+    setMessages((prev) => prev.filter((entry) => entry.deviceId !== selectedChatDeviceId));
   };
 
   const signOut = (): void => {
@@ -476,6 +545,32 @@ function App() {
     return () => window.clearInterval(timer);
   }, [isAuthed, currentDevice, myDeviceId]);
 
+  useEffect(() => {
+    if (!isAuthed || devices.length === 0) {
+      return;
+    }
+    const hasCurrentDevice = devices.some((entry) => entry.id === myDeviceId);
+    if (!hasCurrentDevice) {
+      const shouldLink = window.confirm("Do you want to link this device to your account?");
+      if (shouldLink) {
+        void linkCurrentDevice();
+      }
+    }
+  }, [devices, isAuthed, myDeviceId]);
+
+  useEffect(() => {
+    if (!isAuthed || transfers.length === 0) {
+      return;
+    }
+    const hasPendingIncoming = transfers.some((entry) => !entry.isSender && entry.status === "Available");
+    if (hasPendingIncoming) {
+      const openFiles = window.confirm("You have files ready to download. Open Files tab now?");
+      if (openFiles) {
+        setActiveTab("Files");
+      }
+    }
+  }, [isAuthed, transfers]);
+
   if (!isAuthed) {
     return (
       <>
@@ -530,16 +625,27 @@ function App() {
           </div>
         </header>
 
-        {activeTab === "Devices" && (
+        {!online && (
+          <section className="panel no-connection">
+            <p className="no-connection-title">No connection</p>
+            <p className="muted">Connect to the internet to load data.</p>
+            <button onClick={() => void initSession()} type="button">Retry</button>
+          </section>
+        )}
+
+        {online && activeTab === "Devices" && (
           <section className="panel-stack">
             <div className="panel">
-              <h3>Online — {onlineDevices.length}</h3>
+              <p className="section-label">Online — {onlineDevices.length}</p>
               {onlineDevices.length === 0 && <p className="muted">No devices online.</p>}
               <div className="list">
                 {onlineDevices.map((device) => (
                   <button className="row-card" key={device.id} onClick={() => openChat(device.id)} type="button">
-                    <strong>{device.name}</strong>
-                    <span className="muted">{device.type} · {device.ipAddress}</span>
+                    <div className="item-head">
+                      <span className={`status-dot ${device.isOnline ? "online" : "offline"}`} />
+                      <strong>{device.name}</strong>
+                    </div>
+                    <span className="muted">{device.type} • {device.ipAddress}</span>
                     <span className="muted">
                       CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
                     </span>
@@ -551,13 +657,16 @@ function App() {
               </div>
             </div>
             <div className="panel">
-              <h3>Offline — {offlineDevices.length}</h3>
+              <p className="section-label">Offline — {offlineDevices.length}</p>
               {offlineDevices.length === 0 && <p className="muted">No offline devices.</p>}
               <div className="list">
                 {offlineDevices.map((device) => (
                   <button className="row-card" key={device.id} onClick={() => openChat(device.id)} type="button">
-                    <strong>{device.name}</strong>
-                    <span className="muted">{device.type} · Last seen {new Date(device.lastSeen).toLocaleString()}</span>
+                    <div className="item-head">
+                      <span className={`status-dot ${device.isOnline ? "online" : "offline"}`} />
+                      <strong>{device.name}</strong>
+                    </div>
+                    <span className="muted">{device.type} • Last seen {new Date(device.lastSeen).toLocaleString()}</span>
                     <span className="muted">
                       CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
                     </span>
@@ -592,7 +701,7 @@ function App() {
           </section>
         )}
 
-        {activeTab === "Files" && (
+        {online && activeTab === "Files" && (
           <section className="panel-stack">
             <div className="panel">
               <div className="split-row">
@@ -605,7 +714,7 @@ function App() {
                 </button>
               </div>
               <input hidden onChange={(event) => void onPickFile(event)} ref={filePickerRef} type="file" />
-              {transfers.length === 0 && <p className="muted">No transfers yet.</p>}
+              {transfers.length === 0 && <p className="empty-state">No transfers yet.</p>}
               <div className="list">
                 {transfers.map((transfer) => (
                   <article className="row-card static" key={transfer.id}>
@@ -632,7 +741,7 @@ function App() {
           </section>
         )}
 
-        {activeTab === "Notes" && (
+        {online && activeTab === "Notes" && (
           <section className="panel-grid">
             <div className="panel">
               <div className="split-row">
@@ -649,6 +758,7 @@ function App() {
                 </button>
               </div>
               <div className="list">
+                {notes.length === 0 && <p className="empty-state">No notes yet. Create one to get started!</p>}
                 {notes.map((note) => (
                   <article className="row-card static" key={note.id}>
                     <button className="link-row" onClick={() => openNote(note)} type="button">
@@ -680,11 +790,41 @@ function App() {
               </label>
               <label>
                 Content
-                <textarea onChange={(event) => setNoteContent(event.target.value)} rows={10} value={noteContent} />
+                <div className="md-toolbar">
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('**')}><b>B</b></button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('*')}><i>I</i></button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('__')}>U</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('~~')}>S</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('# ', '')}>H1</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('## ', '')}>H2</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('### ', '')}>H3</button>
+                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('- item\n')}>•</button>
+                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('1. item\n')}>1.</button>
+                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('- [ ] task\n')}>☑</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('```\n', '\n```')}>{'{ }'}</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('`')}>`</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('> ', '')}>❝</button>
+                  <button className="editor-icon" type="button" onClick={() => wrapSelection('[', '](url)')}>🔗</button>
+                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('\n---\n')}>—</button>
+                </div>
+                <textarea ref={noteContentRef} onChange={(event) => setNoteContent(event.target.value)} rows={10} value={noteContent} />
               </label>
-              <button onClick={() => void saveNote()} type="button">
-                Save Note
-              </button>
+              <div className="split-row">
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setEditingNoteId(null);
+                    setNoteName("");
+                    setNoteContent("");
+                  }}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button onClick={() => void saveNote()} type="button">
+                  Save
+                </button>
+              </div>
               {noteType === "Markdown" && (
                 <div className="markdown-preview">
                   <ReactMarkdown>{noteContent || "_Preview_"}</ReactMarkdown>
@@ -694,7 +834,7 @@ function App() {
           </section>
         )}
 
-        {activeTab === "Messaging" && (
+        {online && activeTab === "Messaging" && (
           <section className="panel-grid">
             <div className="panel">
               <div className="split-row">
@@ -711,6 +851,7 @@ function App() {
                 </button>
               </div>
               <div className="list">
+                {chatSummaries.length === 0 && <p className="empty-state">No chats yet. Start one to send a message.</p>}
                 {chatSummaries.map((summary) => (
                   <button
                     className={`row-card ${summary.deviceId === selectedChatDeviceId ? "active" : ""}`}
@@ -725,7 +866,10 @@ function App() {
               </div>
             </div>
             <div className="panel">
-              <h3>{chatDevice ? chatDevice.name : "Select a chat"}</h3>
+              <div className="split-row">
+                <h3>{chatDevice ? chatDevice.name : "Select a chat"}</h3>
+                <button className="ghost" onClick={clearCurrentChat} type="button">Clear</button>
+              </div>
               <div className="chat-box">
                 {chatMessages.map((message) => (
                   <div className={`bubble ${message.isOutgoing ? "out" : "in"}`} key={message.id}>
@@ -740,16 +884,17 @@ function App() {
                   placeholder="Write a message"
                   value={newMessage}
                 />
-                <button disabled={!selectedChatDeviceId} onClick={() => void sendChatMessage()} type="button">
-                  Send
+                <button className="send-btn" disabled={!selectedChatDeviceId} onClick={() => void sendChatMessage()} type="button">
+                  ➤
                 </button>
               </div>
             </div>
           </section>
         )}
 
-        {activeTab === "Map" && (
+        {online && activeTab === "Map" && (
           <section className="panel-grid">
+            {!mapDetailOpen && (
             <div className="panel">
               <h3>Devices</h3>
               <div className="list">
@@ -757,7 +902,10 @@ function App() {
                   <button
                     className={`row-card ${selectedMapDeviceId === device.id ? "active" : ""}`}
                     key={device.id}
-                    onClick={() => setSelectedMapDeviceId(device.id)}
+                    onClick={() => {
+                      setSelectedMapDeviceId(device.id);
+                      setMapDetailOpen(true);
+                    }}
                     type="button"
                   >
                     <strong>{device.name}</strong>
@@ -765,7 +913,44 @@ function App() {
                   </button>
                 ))}
               </div>
+              {devices.length === 0 && <p className="empty-state">No devices available</p>}
+            </div>
+            )}
+            {mapDetailOpen && (
+            <div className="panel">
               <div className="split-row">
+                <button className="ghost" onClick={() => setMapDetailOpen(false)} type="button">Back</button>
+                <h3>{selectedMapDevice?.name ?? "Map"}</h3>
+                <button onClick={() => selectedMapDeviceId && void refreshMapHistory(selectedMapDeviceId)} type="button">Live</button>
+              </div>
+              <div className="map-wrap">
+                {latestPoint ? (
+                  <MapContainer center={[latestPoint.latitude, latestPoint.longitude]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <Marker position={[latestPoint.latitude, latestPoint.longitude]}>
+                      <Popup>{selectedMapDevice?.name ?? 'Device'}</Popup>
+                    </Marker>
+                  </MapContainer>
+                ) : (
+                  <div className="map-empty">No location history available</div>
+                )}
+              </div>
+              <p className="section-label">Location History</p>
+              <div className="list compact">
+                {history.map((point) => (
+                  <article className="row-card static" key={point.id}>
+                    <strong>{point.title}</strong>
+                    <span className="muted">
+                      {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} · {new Date(point.recordedAt).toLocaleString()}
+                    </span>
+                  </article>
+                ))}
+              </div>
+              <p className="section-label">Location Updates</p>
+              <div className="panel inset-panel">
                 <label className="inline">
                   Share location in background
                   <input
@@ -793,47 +978,26 @@ function App() {
                 </select>
               </div>
             </div>
-            <div className="panel">
-              <h3>{selectedMapDevice?.name ?? "Map"}</h3>
-              <div className="map-wrap">
-                {latestPoint ? (
-                  <iframe
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${latestPoint.longitude - 0.01}%2C${latestPoint.latitude - 0.01}%2C${latestPoint.longitude + 0.01}%2C${latestPoint.latitude + 0.01}&layer=mapnik&marker=${latestPoint.latitude}%2C${latestPoint.longitude}`}
-                    title="Device location map"
-                  />
-                ) : (
-                  <div className="map-empty">No location history available</div>
-                )}
-              </div>
-              <div className="list compact">
-                {history.map((point) => (
-                  <article className="row-card static" key={point.id}>
-                    <strong>{point.title}</strong>
-                    <span className="muted">
-                      {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} · {new Date(point.recordedAt).toLocaleString()}
-                    </span>
-                  </article>
-                ))}
-              </div>
-            </div>
+            )}
           </section>
         )}
 
-        {activeTab === "Settings" && (
+        {online && activeTab === "Settings" && (
           <section className="panel-grid">
             <div className="panel">
-              <h3>Account</h3>
+              <p className="section-label">Account</p>
               <p>
                 <strong>{profile?.username ?? "Unknown"}</strong>
               </p>
               <p className="muted">{profile?.email ?? "Unknown"}</p>
-              <p className="muted">Plan: {profile?.role ?? "Unknown"}</p>
+              <p className="muted">Plan: <span className="plan-badge">{profile?.role ?? "Unknown"}</span></p>
+              <button className="ghost" type="button">Upgrade</button>
               <button onClick={signOut} type="button">
                 Sign out
               </button>
             </div>
             <div className="panel">
-              <h3>Appearance</h3>
+              <p className="section-label">Appearance</p>
               <label className="inline">
                 Dark mode
                 <input checked={isDark} onChange={(event) => setIsDark(event.target.checked)} type="checkbox" />
