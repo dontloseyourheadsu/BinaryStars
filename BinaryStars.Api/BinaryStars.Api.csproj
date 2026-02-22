@@ -67,6 +67,7 @@
     <Compile Include="Services/MessagingJson.cs" />
     <Compile Include="Services/MessagingKafkaService.cs" />
     <Compile Include="Services/MessagingWebSocketHandler.cs" />
+    <Compile Include="Services/DevicePresenceMonitorService.cs" />
   </ItemGroup>
 
   <ItemGroup>
