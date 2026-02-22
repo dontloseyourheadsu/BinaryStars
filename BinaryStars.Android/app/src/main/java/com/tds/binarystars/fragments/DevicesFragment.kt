@@ -27,11 +27,13 @@ import android.annotation.SuppressLint
 import android.widget.Button
 import android.widget.ImageView
 import com.tds.binarystars.MainActivity
+import com.tds.binarystars.messaging.MessagingEventListener
+import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.storage.SettingsStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
-class DevicesFragment : Fragment() {
+class DevicesFragment : Fragment(), MessagingEventListener {
 
     private companion object {
         private const val POLL_INTERVAL_MS = 10_000L
@@ -74,6 +76,32 @@ class DevicesFragment : Fragment() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        MessagingSocketManager.addListener(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        MessagingSocketManager.removeListener(this)
+    }
+
+    override fun onChatUpdated(deviceId: String) {
+        // No-op.
+    }
+
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {
+        refreshDevices()
+    }
+
+    override fun onConnectionStateChanged(isConnected: Boolean) {
+        // No-op.
+    }
+
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
+        refreshDevices()
     }
 
     @SuppressLint("HardwareIds")

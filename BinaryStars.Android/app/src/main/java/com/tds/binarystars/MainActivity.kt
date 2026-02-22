@@ -22,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import com.tds.binarystars.crypto.CryptoManager
 import androidx.drawerlayout.widget.DrawerLayout
 import com.tds.binarystars.messaging.MessagingSocketManager
+import com.tds.binarystars.presence.PresenceHeartbeatManager
 import androidx.core.view.GravityCompat
 
 class MainActivity : AppCompatActivity() {
@@ -40,6 +41,7 @@ class MainActivity : AppCompatActivity() {
 
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         MessagingSocketManager.connect(this, deviceId)
+        PresenceHeartbeatManager.start(deviceId)
 
         drawerLayout = findViewById(R.id.drawer_layout)
 
@@ -104,6 +106,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         MessagingSocketManager.disconnect()
+        PresenceHeartbeatManager.stop()
     }
 
     /**

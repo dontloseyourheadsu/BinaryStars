@@ -6,6 +6,7 @@ import android.os.Looper
 import com.google.gson.Gson
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.DeviceRemovedEventDto
+import com.tds.binarystars.api.DevicePresenceEventDto
 import com.tds.binarystars.api.MessagingEnvelopeDto
 import com.tds.binarystars.api.MessagingMessageDto
 import com.tds.binarystars.api.SendMessageRequestDto
@@ -123,6 +124,10 @@ object MessagingSocketManager {
                 val payload = gson.fromJson(envelope.payload, DeviceRemovedEventDto::class.java)
                 handleDeviceRemoved(context, payload)
             }
+            "device_presence" -> {
+                val payload = gson.fromJson(envelope.payload, DevicePresenceEventDto::class.java)
+                notifyPresenceChanged(payload.deviceId, payload.isOnline, payload.lastSeen)
+            }
         }
     }
 
@@ -187,6 +192,12 @@ object MessagingSocketManager {
             listeners.forEach { it.onConnectionStateChanged(connected) }
         }
     }
+
+    private fun notifyPresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
+        mainHandler.post {
+            listeners.forEach { it.onDevicePresenceChanged(deviceId, isOnline, lastSeen) }
+        }
+    }
 }
 
 /**
@@ -196,4 +207,5 @@ interface MessagingEventListener {
     fun onChatUpdated(deviceId: String)
     fun onDeviceRemoved(deviceId: String, isSelf: Boolean)
     fun onConnectionStateChanged(isConnected: Boolean)
+    fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String)
 }

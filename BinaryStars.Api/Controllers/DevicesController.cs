@@ -132,7 +132,31 @@ public class DevicesController : ControllerBase
         var result = await _devicesWriteService.UpdateTelemetryAsync(userId, deviceId, request, cancellationToken);
 
         if (result.IsSuccess)
+        {
+            await NotifyPresenceChangedAsync(userId, result.Value, cancellationToken);
             return Ok(result.Value);
+        }
+
+        return BadRequest(result.Errors);
+    }
+
+    /// <summary>
+    /// Records a heartbeat for a linked device and marks it online.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The updated device.</returns>
+    [HttpPost("{deviceId}/heartbeat")]
+    public async Task<IActionResult> Heartbeat(string deviceId, CancellationToken cancellationToken)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var result = await _devicesWriteService.HeartbeatAsync(userId, deviceId, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            await NotifyPresenceChangedAsync(userId, result.Value, cancellationToken);
+            return Ok(result.Value);
+        }
 
         return BadRequest(result.Errors);
     }
@@ -150,6 +174,29 @@ public class DevicesController : ControllerBase
     private async Task NotifyConnectedDevicesAsync(Guid userId, DeviceRemovedEvent removalEvent, CancellationToken cancellationToken)
     {
         var payload = MessagingJson.SerializeEnvelope("device_removed", removalEvent);
+        var bytes = Encoding.UTF8.GetBytes(payload);
+        var connections = _connectionManager.GetByUser(userId);
+
+        foreach (var connection in connections)
+        {
+            if (connection.Socket.State != WebSocketState.Open)
+                continue;
+
+            await connection.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+        }
+    }
+
+    private async Task NotifyPresenceChangedAsync(Guid userId, BinaryStars.Domain.Devices.Device device, CancellationToken cancellationToken)
+    {
+        var presenceEvent = new DevicePresenceEvent(
+            Guid.NewGuid().ToString("D"),
+            userId,
+            device.Id,
+            device.IsOnline,
+            device.LastSeen,
+            DateTimeOffset.UtcNow);
+
+        var payload = MessagingJson.SerializeEnvelope("device_presence", presenceEvent);
         var bytes = Encoding.UTF8.GetBytes(payload);
         var connections = _connectionManager.GetByUser(userId);
 

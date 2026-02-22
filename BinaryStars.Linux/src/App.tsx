@@ -1,10 +1,8 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { Icon } from 'leaflet';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import { Icon } from "leaflet";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "./App.css";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
@@ -13,19 +11,24 @@ import { cacheStore, settingsStore } from "./storage";
 import type {
   AccountProfile,
   ChatMessage,
+  DevicePresenceEvent,
   Device,
   FileTransfer,
   LocationPoint,
   MessageDto,
   Note,
 } from "./types";
-
-type Tab = "Devices" | "Files" | "Notes" | "Messaging" | "Map" | "Settings";
-
-const tabs: Tab[] = ["Devices", "Files", "Notes", "Messaging", "Map", "Settings"];
 import AuthView from "./components/Auth/AuthView";
 import Sidebar from "./components/UI/Sidebar";
-import { formatSize, statusLabel, toWsUrl, upsertMessage } from "./utils/helpers";
+import { toWsUrl, upsertMessage } from "./utils/helpers";
+import DevicesTab from "./components/tabs/DevicesTab";
+import FilesTab from "./components/tabs/FilesTab";
+import NotesTab from "./components/tabs/NotesTab";
+import MessagingTab from "./components/tabs/MessagingTab";
+import MapTab from "./components/tabs/MapTab";
+import SettingsTab from "./components/tabs/SettingsTab";
+import { Tab, tabs } from "./components/tabs/types";
+import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
 
 function App() {
   // Fix Leaflet default icon paths for Vite
@@ -194,7 +197,24 @@ function App() {
     socket.onmessage = (event) => {
       try {
         const envelope = JSON.parse(event.data as string) as { type: string; payload: unknown };
-        if (envelope.type.toLowerCase() !== "message") {
+        const messageType = envelope.type.toLowerCase();
+        if (messageType === "device_presence") {
+          const payload = envelope.payload as DevicePresenceEvent;
+          setDevices((prev) => prev.map((device) => {
+            if (device.id !== payload.deviceId) {
+              return device;
+            }
+
+            return {
+              ...device,
+              isOnline: payload.isOnline,
+              lastSeen: payload.lastSeen,
+            };
+          }));
+          return;
+        }
+
+        if (messageType !== "message") {
           return;
         }
         const payload = envelope.payload as MessageDto;
@@ -218,6 +238,8 @@ function App() {
       wsRef.current = null;
     };
   }, [isAuthed, myDeviceId]);
+
+  usePresenceHeartbeat(isAuthed, myDeviceId);
 
   useEffect(() => {
     if (!isAuthed || !locationEnabled) {
@@ -634,385 +656,104 @@ function App() {
         )}
 
         {online && activeTab === "Devices" && (
-          <section className="panel-stack">
-            <div className="panel">
-              <p className="section-label">Online — {onlineDevices.length}</p>
-              {onlineDevices.length === 0 && <p className="muted">No devices online.</p>}
-              <div className="list">
-                {onlineDevices.map((device) => (
-                  <button className="row-card" key={device.id} onClick={() => openChat(device.id)} type="button">
-                    <div className="item-head">
-                      <span className={`status-dot ${device.isOnline ? "online" : "offline"}`} />
-                      <strong>{device.name}</strong>
-                    </div>
-                    <span className="muted">{device.type} • {device.ipAddress}</span>
-                    <span className="muted">
-                      CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
-                    </span>
-                    <span className="muted">
-                      RAM {formatRam(device)} · Battery {formatBattery(device)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="panel">
-              <p className="section-label">Offline — {offlineDevices.length}</p>
-              {offlineDevices.length === 0 && <p className="muted">No offline devices.</p>}
-              <div className="list">
-                {offlineDevices.map((device) => (
-                  <button className="row-card" key={device.id} onClick={() => openChat(device.id)} type="button">
-                    <div className="item-head">
-                      <span className={`status-dot ${device.isOnline ? "online" : "offline"}`} />
-                      <strong>{device.name}</strong>
-                    </div>
-                    <span className="muted">{device.type} • Last seen {new Date(device.lastSeen).toLocaleString()}</span>
-                    <span className="muted">
-                      CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
-                    </span>
-                    <span className="muted">
-                      RAM {formatRam(device)} · Battery {formatBattery(device)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="split-row">
-                <input
-                  aria-label="Device name"
-                  placeholder="Device name"
-                  value={deviceAlias}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setDeviceAlias(value);
-                    setDeviceName(value);
-                  }}
-                />
-                {currentDevice ? (
-                  <button onClick={() => void unlinkCurrentDevice()} type="button">
-                    Unlink This Device
-                  </button>
-                ) : (
-                  <button onClick={() => void linkCurrentDevice()} type="button">
-                    Link This Device
-                  </button>
-                )}
-              </div>
-            </div>
-          </section>
+          <DevicesTab
+            onlineDevices={onlineDevices}
+            offlineDevices={offlineDevices}
+            currentDevice={currentDevice}
+            deviceAlias={deviceAlias}
+            onDeviceAliasChange={(value) => {
+              setDeviceAlias(value);
+              setDeviceName(value);
+            }}
+            onOpenChat={openChat}
+            onLinkCurrentDevice={() => void linkCurrentDevice()}
+            onUnlinkCurrentDevice={() => void unlinkCurrentDevice()}
+            formatRam={formatRam}
+            formatBattery={formatBattery}
+          />
         )}
 
         {online && activeTab === "Files" && (
-          <section className="panel-stack">
-            <div className="panel">
-              <div className="split-row">
-                <h3>File Transfers</h3>
-                <button
-                  onClick={() => filePickerRef.current?.click()}
-                  type="button"
-                >
-                  Send
-                </button>
-              </div>
-              <input hidden onChange={(event) => void onPickFile(event)} ref={filePickerRef} type="file" />
-              {transfers.length === 0 && <p className="empty-state">No transfers yet.</p>}
-              <div className="list">
-                {transfers.map((transfer) => (
-                  <article className="row-card static" key={transfer.id}>
-                    <strong>{transfer.fileName}</strong>
-                    <span className="muted">
-                      {formatSize(transfer.sizeBytes)} · {statusLabel(transfer.status, transfer.isSender)}
-                    </span>
-                    <div className="chip-row">
-                      {!transfer.isSender && transfer.status === "Available" && (
-                        <button onClick={() => void downloadTransfer(transfer)} type="button">
-                          Download
-                        </button>
-                      )}
-                      {!transfer.isSender && transfer.status === "Available" && (
-                        <button className="ghost" onClick={() => void rejectTransfer(transfer)} type="button">
-                          Reject
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
+          <FilesTab
+            transfers={transfers}
+            filePickerRef={filePickerRef}
+            onPickFile={(event) => void onPickFile(event)}
+            onDownloadTransfer={(transfer) => void downloadTransfer(transfer)}
+            onRejectTransfer={(transfer) => void rejectTransfer(transfer)}
+          />
         )}
 
         {online && activeTab === "Notes" && (
-          <section className="panel-grid">
-            <div className="panel">
-              <div className="split-row">
-                <h3>Notes</h3>
-                <button
-                  onClick={() => {
-                    setEditingNoteId(null);
-                    setNoteName("");
-                    setNoteContent("");
-                  }}
-                  type="button"
-                >
-                  + New
-                </button>
-              </div>
-              <div className="list">
-                {notes.length === 0 && <p className="empty-state">No notes yet. Create one to get started!</p>}
-                {notes.map((note) => (
-                  <article className="row-card static" key={note.id}>
-                    <button className="link-row" onClick={() => openNote(note)} type="button">
-                      <strong>{note.name}</strong>
-                      <span className="muted">{note.contentType} · {new Date(note.updatedAt).toLocaleString()}</span>
-                    </button>
-                    <button className="ghost" onClick={() => void deleteNote(note.id)} type="button">
-                      Delete
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <div className="panel">
-              <h3>{editingNoteId ? "Edit Note" : "Create Note"}</h3>
-              <label>
-                Name
-                <input value={noteName} onChange={(event) => setNoteName(event.target.value)} />
-              </label>
-              <label>
-                Type
-                <select
-                  onChange={(event) => setNoteType(event.target.value as "Plaintext" | "Markdown")}
-                  value={noteType}
-                >
-                  <option value="Plaintext">Plaintext</option>
-                  <option value="Markdown">Markdown</option>
-                </select>
-              </label>
-              <label>
-                Content
-                <div className="md-toolbar">
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('**')}><b>B</b></button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('*')}><i>I</i></button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('__')}>U</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('~~')}>S</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('# ', '')}>H1</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('## ', '')}>H2</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('### ', '')}>H3</button>
-                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('- item\n')}>•</button>
-                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('1. item\n')}>1.</button>
-                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('- [ ] task\n')}>☑</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('```\n', '\n```')}>{'{ }'}</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('`')}>`</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('> ', '')}>❝</button>
-                  <button className="editor-icon" type="button" onClick={() => wrapSelection('[', '](url)')}>🔗</button>
-                  <button className="editor-icon" type="button" onClick={() => insertAtSelection('\n---\n')}>—</button>
-                </div>
-                <textarea ref={noteContentRef} onChange={(event) => setNoteContent(event.target.value)} rows={10} value={noteContent} />
-              </label>
-              <div className="split-row">
-                <button
-                  className="ghost"
-                  onClick={() => {
-                    setEditingNoteId(null);
-                    setNoteName("");
-                    setNoteContent("");
-                  }}
-                  type="button"
-                >
-                  Cancel
-                </button>
-                <button onClick={() => void saveNote()} type="button">
-                  Save
-                </button>
-              </div>
-              {noteType === "Markdown" && (
-                <div className="markdown-preview">
-                  <ReactMarkdown>{noteContent || "_Preview_"}</ReactMarkdown>
-                </div>
-              )}
-            </div>
-          </section>
+          <NotesTab
+            notes={notes}
+            editingNoteId={editingNoteId}
+            noteName={noteName}
+            noteContent={noteContent}
+            noteType={noteType}
+            noteContentRef={noteContentRef}
+            setNoteName={setNoteName}
+            setNoteContent={setNoteContent}
+            setNoteType={setNoteType}
+            onOpenNote={openNote}
+            onDeleteNote={(noteId) => void deleteNote(noteId)}
+            onSaveNote={() => void saveNote()}
+            onResetEditor={() => {
+              setEditingNoteId(null);
+              setNoteName("");
+              setNoteContent("");
+            }}
+            onWrapSelection={wrapSelection}
+            onInsertAtSelection={insertAtSelection}
+          />
         )}
 
         {online && activeTab === "Messaging" && (
-          <section className="panel-grid">
-            <div className="panel">
-              <div className="split-row">
-                <h3>Chats</h3>
-                <button
-                  onClick={() => {
-                    if (devices.length > 0) {
-                      setSelectedChatDeviceId(devices[0].id);
-                    }
-                  }}
-                  type="button"
-                >
-                  New
-                </button>
-              </div>
-              <div className="list">
-                {chatSummaries.length === 0 && <p className="empty-state">No chats yet. Start one to send a message.</p>}
-                {chatSummaries.map((summary) => (
-                  <button
-                    className={`row-card ${summary.deviceId === selectedChatDeviceId ? "active" : ""}`}
-                    key={summary.deviceId}
-                    onClick={() => setSelectedChatDeviceId(summary.deviceId)}
-                    type="button"
-                  >
-                    <strong>{summary.name}</strong>
-                    <span className="muted">{summary.lastMessage.body}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="panel">
-              <div className="split-row">
-                <h3>{chatDevice ? chatDevice.name : "Select a chat"}</h3>
-                <button className="ghost" onClick={clearCurrentChat} type="button">Clear</button>
-              </div>
-              <div className="chat-box">
-                {chatMessages.map((message) => (
-                  <div className={`bubble ${message.isOutgoing ? "out" : "in"}`} key={message.id}>
-                    <p>{message.body}</p>
-                    <small>{new Date(message.sentAt).toLocaleTimeString()}</small>
-                  </div>
-                ))}
-              </div>
-              <div className="split-row">
-                <input
-                  onChange={(event) => setNewMessage(event.target.value)}
-                  placeholder="Write a message"
-                  value={newMessage}
-                />
-                <button className="send-btn" disabled={!selectedChatDeviceId} onClick={() => void sendChatMessage()} type="button">
-                  ➤
-                </button>
-              </div>
-            </div>
-          </section>
+          <MessagingTab
+            devices={devices}
+            chatSummaries={chatSummaries}
+            chatDevice={chatDevice}
+            chatMessages={chatMessages}
+            selectedChatDeviceId={selectedChatDeviceId}
+            newMessage={newMessage}
+            onSelectChat={setSelectedChatDeviceId}
+            onSetNewMessage={setNewMessage}
+            onClearCurrentChat={clearCurrentChat}
+            onSendChatMessage={() => void sendChatMessage()}
+          />
         )}
 
         {online && activeTab === "Map" && (
-          <section className="panel-grid">
-            {!mapDetailOpen && (
-            <div className="panel">
-              <h3>Devices</h3>
-              <div className="list">
-                {devices.map((device) => (
-                  <button
-                    className={`row-card ${selectedMapDeviceId === device.id ? "active" : ""}`}
-                    key={device.id}
-                    onClick={() => {
-                      setSelectedMapDeviceId(device.id);
-                      setMapDetailOpen(true);
-                    }}
-                    type="button"
-                  >
-                    <strong>{device.name}</strong>
-                    <span className="muted">{device.isOnline ? "Online" : "Offline"}</span>
-                  </button>
-                ))}
-              </div>
-              {devices.length === 0 && <p className="empty-state">No devices available</p>}
-            </div>
-            )}
-            {mapDetailOpen && (
-            <div className="panel">
-              <div className="split-row">
-                <button className="ghost" onClick={() => setMapDetailOpen(false)} type="button">Back</button>
-                <h3>{selectedMapDevice?.name ?? "Map"}</h3>
-                <button onClick={() => selectedMapDeviceId && void refreshMapHistory(selectedMapDeviceId)} type="button">Live</button>
-              </div>
-              <div className="map-wrap">
-                {latestPoint ? (
-                  <MapContainer center={[latestPoint.latitude, latestPoint.longitude]} zoom={13} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <Marker position={[latestPoint.latitude, latestPoint.longitude]}>
-                      <Popup>{selectedMapDevice?.name ?? 'Device'}</Popup>
-                    </Marker>
-                  </MapContainer>
-                ) : (
-                  <div className="map-empty">No location history available</div>
-                )}
-              </div>
-              <p className="section-label">Location History</p>
-              <div className="list compact">
-                {history.map((point) => (
-                  <article className="row-card static" key={point.id}>
-                    <strong>{point.title}</strong>
-                    <span className="muted">
-                      {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} · {new Date(point.recordedAt).toLocaleString()}
-                    </span>
-                  </article>
-                ))}
-              </div>
-              <p className="section-label">Location Updates</p>
-              <div className="panel inset-panel">
-                <label className="inline">
-                  Share location in background
-                  <input
-                    checked={locationEnabled}
-                    onChange={(event) => {
-                      const enabled = event.target.checked;
-                      setLocationEnabled(enabled);
-                      settingsStore.setLocationEnabled(enabled);
-                    }}
-                    type="checkbox"
-                  />
-                </label>
-                <select
-                  aria-label="Location update interval"
-                  onChange={(event) => {
-                    const minutes = Number(event.target.value);
-                    setLocationMinutes(minutes);
-                    settingsStore.setLocationMinutes(minutes);
-                  }}
-                  value={locationMinutes}
-                >
-                  <option value={15}>15 minutes</option>
-                  <option value={30}>30 minutes</option>
-                  <option value={60}>60 minutes</option>
-                </select>
-              </div>
-            </div>
-            )}
-          </section>
+          <MapTab
+            devices={devices}
+            selectedMapDevice={selectedMapDevice}
+            selectedMapDeviceId={selectedMapDeviceId}
+            latestPoint={latestPoint}
+            history={history}
+            mapDetailOpen={mapDetailOpen}
+            locationEnabled={locationEnabled}
+            locationMinutes={locationMinutes}
+            onSelectMapDevice={setSelectedMapDeviceId}
+            onSetMapDetailOpen={setMapDetailOpen}
+            onRefreshMapHistory={(deviceId) => void refreshMapHistory(deviceId)}
+            onSetLocationEnabled={(enabled) => {
+              setLocationEnabled(enabled);
+              settingsStore.setLocationEnabled(enabled);
+            }}
+            onSetLocationMinutes={(minutes) => {
+              setLocationMinutes(minutes);
+              settingsStore.setLocationMinutes(minutes);
+            }}
+          />
         )}
 
         {online && activeTab === "Settings" && (
-          <section className="panel-grid">
-            <div className="panel">
-              <p className="section-label">Account</p>
-              <p>
-                <strong>{profile?.username ?? "Unknown"}</strong>
-              </p>
-              <p className="muted">{profile?.email ?? "Unknown"}</p>
-              <p className="muted">Plan: <span className="plan-badge">{profile?.role ?? "Unknown"}</span></p>
-              <button className="ghost" type="button">Upgrade</button>
-              <button onClick={signOut} type="button">
-                Sign out
-              </button>
-            </div>
-            <div className="panel">
-              <p className="section-label">Appearance</p>
-              <label className="inline">
-                Dark mode
-                <input checked={isDark} onChange={(event) => setIsDark(event.target.checked)} type="checkbox" />
-              </label>
-              <h3>Connected devices ({devices.length})</h3>
-              <div className="list compact">
-                {devices.map((device) => (
-                  <article className="row-card static" key={device.id}>
-                    <strong>{device.name}</strong>
-                    <span className="muted">{device.id}</span>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
+          <SettingsTab
+            profile={profile}
+            devices={devices}
+            isDark={isDark}
+            onSetIsDark={setIsDark}
+            onSignOut={signOut}
+          />
         )}
       </section>
     </div>

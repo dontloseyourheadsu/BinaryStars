@@ -76,6 +76,15 @@ public interface IDevicesWriteService
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The updated device or a failure result.</returns>
     Task<Result<Device>> UpdateTelemetryAsync(Guid userId, string deviceId, UpdateDeviceTelemetryRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Updates heartbeat for a linked device without changing telemetry preferences.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The updated device or a failure result.</returns>
+    Task<Result<Device>> HeartbeatAsync(Guid userId, string deviceId, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -184,6 +193,23 @@ public class DevicesWriteService : IDevicesWriteService
         device.IsSynced = request.IsSynced;
         device.WifiUploadSpeed = string.IsNullOrWhiteSpace(request.WifiUploadSpeed) ? "Not available" : request.WifiUploadSpeed;
         device.WifiDownloadSpeed = string.IsNullOrWhiteSpace(request.WifiDownloadSpeed) ? "Not available" : request.WifiDownloadSpeed;
+        device.LastSeen = DateTimeOffset.UtcNow;
+
+        await _deviceRepository.SaveChangesAsync(cancellationToken);
+        return Result<Device>.Success(MapToDomain(device));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<Device>> HeartbeatAsync(Guid userId, string deviceId, CancellationToken cancellationToken)
+    {
+        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (device == null)
+            return Result<Device>.Failure("Device not found.");
+
+        if (device.UserId != userId)
+            return Result<Device>.Failure("Unauthorized.");
+
+        device.IsOnline = true;
         device.LastSeen = DateTimeOffset.UtcNow;
 
         await _deviceRepository.SaveChangesAsync(cancellationToken);

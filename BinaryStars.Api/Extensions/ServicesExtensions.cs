@@ -51,6 +51,7 @@ public static class ServicesExtensions
         services.AddSingleton<MessagingConnectionManager>();
         services.AddScoped<MessagingKafkaService>();
         services.AddScoped<MessagingWebSocketHandler>();
+        services.AddHostedService<DevicePresenceMonitorService>();
 
         // Validators
         services.AddScoped<AuthValidator>();

@@ -177,6 +177,11 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
         // No-op for now
     }
 
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
+        // Presence updates can affect chat name/device picks; refresh list from API/cache.
+        loadChats()
+    }
+
     override fun onBluetoothConnectionChanged(deviceId: String, isConnected: Boolean, isConnecting: Boolean) {
         // No-op for now
     }

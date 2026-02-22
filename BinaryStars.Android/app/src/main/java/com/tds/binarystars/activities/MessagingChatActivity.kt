@@ -221,6 +221,10 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
         // No-op for now
     }
 
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
+        // Chat screen does not need direct presence rendering right now.
+    }
+
     override fun onBluetoothConnectionChanged(deviceId: String, isConnected: Boolean, isConnecting: Boolean) {
         if (deviceId != this.deviceId) return
         bluetoothConnected = isConnected

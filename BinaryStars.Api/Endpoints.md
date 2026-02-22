@@ -106,6 +106,12 @@ POST /api/devices/register
 
 DELETE /api/devices/{deviceId}
 
+### Device Heartbeat
+
+POST /api/devices/{deviceId}/heartbeat
+
+Records device liveness and marks the device online.
+
 ## Notes
 
 ### List Notes
