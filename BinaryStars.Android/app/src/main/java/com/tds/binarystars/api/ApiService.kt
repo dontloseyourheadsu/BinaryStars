@@ -48,6 +48,10 @@ interface ApiService {
         @Body request: UpdateDeviceTelemetryRequest
     ): Response<DeviceDto>
 
+    /** Send a liveness heartbeat for a linked device. */
+    @POST("devices/{id}/heartbeat")
+    suspend fun sendDeviceHeartbeat(@Path("id") deviceId: String): Response<DeviceDto>
+
     // Notes endpoints
     /** List notes for the authenticated user. */
     @GET("notes")

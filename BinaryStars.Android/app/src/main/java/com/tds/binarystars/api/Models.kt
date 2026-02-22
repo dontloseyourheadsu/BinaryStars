@@ -220,3 +220,13 @@ data class DeviceRemovedEventDto(
     val removedDeviceId: String,
     val occurredAt: String
 )
+
+/** Device online/offline presence event payload. */
+data class DevicePresenceEventDto(
+    val id: String,
+    val userId: String,
+    val deviceId: String,
+    val isOnline: Boolean,
+    val lastSeen: String,
+    val occurredAt: String
+)
