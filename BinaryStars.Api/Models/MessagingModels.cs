@@ -46,6 +46,23 @@ public record DeviceRemovedEvent(
     DateTimeOffset OccurredAt);
 
 /// <summary>
+/// Event emitted when a device online presence changes.
+/// </summary>
+/// <param name="Id">The event identifier.</param>
+/// <param name="UserId">The owning user identifier.</param>
+/// <param name="DeviceId">The device identifier.</param>
+/// <param name="IsOnline">Whether the device is online.</param>
+/// <param name="LastSeen">The latest heartbeat timestamp for the device.</param>
+/// <param name="OccurredAt">The timestamp the event occurred.</param>
+public record DevicePresenceEvent(
+    string Id,
+    Guid UserId,
+    string DeviceId,
+    bool IsOnline,
+    DateTimeOffset LastSeen,
+    DateTimeOffset OccurredAt);
+
+/// <summary>
 /// Envelope used for websocket payloads.
 /// </summary>
 /// <param name="Type">The payload type string.</param>

@@ -55,6 +55,14 @@ public class DeviceRepository : IDeviceRepository
     }
 
     /// <inheritdoc />
+    public Task<List<DeviceDbModel>> GetStaleOnlineDevicesAsync(DateTimeOffset lastSeenCutoff, CancellationToken cancellationToken)
+    {
+        return _context.Devices
+            .Where(d => d.IsOnline && d.LastSeen < lastSeenCutoff)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         return _context.SaveChangesAsync(cancellationToken);

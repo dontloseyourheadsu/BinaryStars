@@ -46,6 +46,14 @@ public interface IDeviceRepository
     Task<int> GetCountByUserIdAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets devices currently marked online that are stale by last-seen cutoff.
+    /// </summary>
+    /// <param name="lastSeenCutoff">The latest acceptable last-seen timestamp.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>Matching stale online devices.</returns>
+    Task<List<DeviceDbModel>> GetStaleOnlineDevicesAsync(DateTimeOffset lastSeenCutoff, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Persists pending changes.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
