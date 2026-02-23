@@ -3,6 +3,7 @@ package com.tds.binarystars.storage
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.appcompat.app.AppCompatDelegate
 
 /**
  * Simple SQLite-backed store for app settings.
@@ -15,6 +16,7 @@ object SettingsStorage {
     private const val COLUMN_VALUE = "value"
 
     private const val KEY_DARK_MODE = "dark_mode"
+    private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_LOCATION_UPDATES_ENABLED = "location_updates_enabled"
     private const val KEY_LOCATION_UPDATE_MINUTES = "location_update_minutes"
     private const val KEY_DEVICE_TELEMETRY_ENABLED = "device_telemetry_enabled"
@@ -30,27 +32,50 @@ object SettingsStorage {
 
     /** Persists the dark mode setting. */
     fun setDarkModeEnabled(enabled: Boolean) {
-        val db = dbHelper?.writableDatabase ?: return
-        val value = if (enabled) "1" else "0"
-        db.execSQL(
-            "INSERT OR REPLACE INTO $TABLE_SETTINGS ($COLUMN_KEY, $COLUMN_VALUE) VALUES (?, ?)",
-            arrayOf(KEY_DARK_MODE, value)
-        )
+        setThemeMode(if (enabled) ThemeMode.DARK else ThemeMode.LIGHT)
     }
 
     /** Reads the dark mode setting. */
     fun isDarkModeEnabled(defaultValue: Boolean = false): Boolean {
+        return getThemeMode(if (defaultValue) ThemeMode.DARK else ThemeMode.LIGHT) == ThemeMode.DARK
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        val db = dbHelper?.writableDatabase ?: return
+        db.execSQL(
+            "INSERT OR REPLACE INTO $TABLE_SETTINGS ($COLUMN_KEY, $COLUMN_VALUE) VALUES (?, ?)",
+            arrayOf(KEY_THEME_MODE, mode.storageValue)
+        )
+    }
+
+    fun getThemeMode(defaultValue: ThemeMode = ThemeMode.SYSTEM): ThemeMode {
         val db = dbHelper?.readableDatabase ?: return defaultValue
-        val cursor = db.rawQuery(
+
+        val modeCursor = db.rawQuery(
+            "SELECT $COLUMN_VALUE FROM $TABLE_SETTINGS WHERE $COLUMN_KEY = ? LIMIT 1",
+            arrayOf(KEY_THEME_MODE)
+        )
+        modeCursor.use {
+            if (it.moveToFirst()) {
+                return ThemeMode.fromStorage(it.getString(0)) ?: defaultValue
+            }
+        }
+
+        val legacyCursor = db.rawQuery(
             "SELECT $COLUMN_VALUE FROM $TABLE_SETTINGS WHERE $COLUMN_KEY = ? LIMIT 1",
             arrayOf(KEY_DARK_MODE)
         )
-        cursor.use {
+        legacyCursor.use {
             if (it.moveToFirst()) {
-                return it.getString(0) == "1"
+                return if (it.getString(0) == "1") ThemeMode.DARK else ThemeMode.LIGHT
             }
         }
+
         return defaultValue
+    }
+
+    fun getAppCompatNightMode(defaultValue: ThemeMode = ThemeMode.SYSTEM): Int {
+        return getThemeMode(defaultValue).appCompatValue
     }
 
     /** Persists location update enablement. */
@@ -138,6 +163,18 @@ object SettingsStorage {
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
             // No-op for now
+        }
+    }
+
+    enum class ThemeMode(val storageValue: String, val appCompatValue: Int) {
+        SYSTEM("system", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM),
+        LIGHT("light", AppCompatDelegate.MODE_NIGHT_NO),
+        DARK("dark", AppCompatDelegate.MODE_NIGHT_YES);
+
+        companion object {
+            fun fromStorage(value: String?): ThemeMode? {
+                return entries.firstOrNull { it.storageValue == value }
+            }
         }
     }
 }

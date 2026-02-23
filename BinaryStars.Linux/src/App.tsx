@@ -8,6 +8,7 @@ import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
 import { getLocalDeviceInfo } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
+import type { ThemeMode } from "./storage";
 import type {
   AccountProfile,
   ChatMessage,
@@ -29,6 +30,24 @@ import MapTab from "./components/tabs/MapTab";
 import SettingsTab from "./components/tabs/SettingsTab";
 import { Tab, tabs } from "./components/tabs/types";
 import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
+
+type EffectiveTheme = "light" | "dark";
+
+function getSystemTheme(): EffectiveTheme {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return "light";
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+async function applyNativeWindowTheme(theme: EffectiveTheme): Promise<void> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().setTheme(theme);
+  } catch {
+    // no-op when running in browser or on unsupported platforms
+  }
+}
 
 function App() {
   // Fix Leaflet default icon paths for Vite
@@ -60,7 +79,8 @@ function App() {
   const [noteType, setNoteType] = useState<"Plaintext" | "Markdown">("Plaintext");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [deviceAlias, setDeviceAlias] = useState(getDeviceName());
-  const [isDark, setIsDark] = useState(settingsStore.getDarkMode(false));
+  const [themeMode, setThemeMode] = useState<ThemeMode>(settingsStore.getThemeMode("system"));
+  const [systemTheme, setSystemTheme] = useState<EffectiveTheme>(getSystemTheme());
   const [locationEnabled, setLocationEnabled] = useState(settingsStore.getLocationEnabled(false));
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
@@ -71,10 +91,31 @@ function App() {
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const myDeviceId = getDeviceId();
 
+  const resolvedTheme: EffectiveTheme = themeMode === "system" ? systemTheme : themeMode;
+
   useEffect(() => {
-    document.documentElement.dataset.theme = isDark ? "dark" : "light";
-    settingsStore.setDarkMode(isDark);
-  }, [isDark]);
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const onThemeChange = (event: MediaQueryListEvent): void => {
+      setSystemTheme(event.matches ? "dark" : "light");
+    };
+
+    setSystemTheme(mediaQuery.matches ? "dark" : "light");
+    mediaQuery.addEventListener("change", onThemeChange);
+    return () => {
+      mediaQuery.removeEventListener("change", onThemeChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
+    settingsStore.setThemeMode(themeMode);
+    void applyNativeWindowTheme(resolvedTheme);
+  }, [resolvedTheme, themeMode]);
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -624,28 +665,28 @@ function App() {
 
   return (
     <div className="app-shell">
-      {error && <div className="banner error">{error}</div>}
-      <Sidebar
-        tabs={tabs}
-        activeTab={activeTab}
-        onSelect={(t) => {
-          setActiveTab(t as Tab);
-          setDrawerOpen(false);
-        }}
-        drawerOpen={drawerOpen}
-      />
-      <section className="content">
-        <header className="page-header">
-          <button className="menu-btn" onClick={() => setDrawerOpen((value) => !value)} type="button">
-            ☰
-          </button>
-          <h2>{activeTab}</h2>
-          <div className="header-actions">
-            <button disabled={busy} onClick={() => void initSession()} type="button">
-              Refresh
+        {error && <div className="banner error">{error}</div>}
+        <Sidebar
+          tabs={tabs}
+          activeTab={activeTab}
+          onSelect={(t) => {
+            setActiveTab(t as Tab);
+            setDrawerOpen(false);
+          }}
+          drawerOpen={drawerOpen}
+        />
+        <section className="content">
+          <header className="page-header">
+            <button className="menu-btn" onClick={() => setDrawerOpen((value) => !value)} type="button">
+              ☰
             </button>
-          </div>
-        </header>
+            <h2>{activeTab}</h2>
+            <div className="header-actions">
+              <button disabled={busy} onClick={() => void initSession()} type="button">
+                Refresh
+              </button>
+            </div>
+          </header>
 
         {!online && (
           <section className="panel no-connection">
@@ -750,8 +791,8 @@ function App() {
           <SettingsTab
             profile={profile}
             devices={devices}
-            isDark={isDark}
-            onSetIsDark={setIsDark}
+            themeMode={themeMode}
+            onSetThemeMode={setThemeMode}
             onSignOut={signOut}
           />
         )}

@@ -25,6 +25,8 @@
 }
 
 :root[data-theme="dark"] {
+  --primary-purple: #CFA2FF;
+  --accent-purple: #E4C6FF;
   --bg-app: #202225;
   --bg-panel: #2f3136;
   --text-main: #dcddde;

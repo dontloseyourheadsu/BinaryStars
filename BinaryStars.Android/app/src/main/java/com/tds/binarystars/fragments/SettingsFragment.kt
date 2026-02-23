@@ -5,9 +5,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.content.Intent
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.Switch
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatDelegate
@@ -28,7 +30,7 @@ class SettingsFragment : Fragment() {
     private lateinit var contentView: View
     private lateinit var noConnectionView: View
     private lateinit var retryButton: Button
-    private lateinit var switchTheme: Switch
+    private lateinit var spinnerTheme: Spinner
     private lateinit var tvUsername: TextView
     private lateinit var tvPlanStatus: TextView
     private lateinit var tvEmail: TextView
@@ -61,7 +63,7 @@ class SettingsFragment : Fragment() {
         noConnectionView = view.findViewById(R.id.viewNoConnection)
         retryButton = view.findViewById(R.id.btnRetry)
 
-        switchTheme = view.findViewById(R.id.switchTheme)
+        spinnerTheme = view.findViewById(R.id.spinnerTheme)
         tvUsername = view.findViewById(R.id.tvUsername)
         tvPlanStatus = view.findViewById(R.id.tvPlanStatus)
         tvEmail = view.findViewById(R.id.tvEmail)
@@ -71,16 +73,32 @@ class SettingsFragment : Fragment() {
         btnSignOut = view.findViewById(R.id.btnSignOut)
         
         // Initialize state
-        val isDarkModeEnabled = SettingsStorage.isDarkModeEnabled(false)
-        switchTheme.isChecked = isDarkModeEnabled
-        
-        switchTheme.setOnCheckedChangeListener { _, isChecked ->
-             if (isChecked) {
-                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-             } else {
-                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-             }
-            SettingsStorage.setDarkModeEnabled(isChecked)
+        val themeModes = listOf(
+            SettingsStorage.ThemeMode.SYSTEM,
+            SettingsStorage.ThemeMode.LIGHT,
+            SettingsStorage.ThemeMode.DARK,
+        )
+        val adapter = ArrayAdapter.createFromResource(
+            requireContext(),
+            R.array.theme_mode_labels,
+            android.R.layout.simple_spinner_item,
+        )
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinnerTheme.adapter = adapter
+
+        val selectedTheme = SettingsStorage.getThemeMode(SettingsStorage.ThemeMode.SYSTEM)
+        spinnerTheme.setSelection(themeModes.indexOf(selectedTheme).coerceAtLeast(0), false)
+
+        spinnerTheme.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, selectedView: View?, position: Int, id: Long) {
+                val nextMode = themeModes.getOrNull(position) ?: SettingsStorage.ThemeMode.SYSTEM
+                AppCompatDelegate.setDefaultNightMode(nextMode.appCompatValue)
+                SettingsStorage.setThemeMode(nextMode)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                // no-op
+            }
         }
 
         btnUpgradePlan.setOnClickListener {

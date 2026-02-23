@@ -3,4 +3,10 @@
     <array name="preloaded_fonts" translatable="false">
         <item>@font/material_symbols_outlined</item>
     </array>
+
+    <string-array name="theme_mode_labels">
+        <item>System</item>
+        <item>Light</item>
+        <item>Dark</item>
+    </string-array>
 </resources>

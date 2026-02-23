@@ -1,14 +1,15 @@
 import type { AccountProfile, Device } from "../../types";
+import type { ThemeMode } from "../../storage";
 
 type Props = {
   profile: AccountProfile | null;
   devices: Device[];
-  isDark: boolean;
-  onSetIsDark: (value: boolean) => void;
+  themeMode: ThemeMode;
+  onSetThemeMode: (value: ThemeMode) => void;
   onSignOut: () => void;
 };
 
-export default function SettingsTab({ profile, devices, isDark, onSetIsDark, onSignOut }: Props) {
+export default function SettingsTab({ profile, devices, themeMode, onSetThemeMode, onSignOut }: Props) {
   return (
     <section className="panel-grid">
       <div className="panel">
@@ -24,8 +25,16 @@ export default function SettingsTab({ profile, devices, isDark, onSetIsDark, onS
       <div className="panel">
         <p className="section-label">Appearance</p>
         <label className="inline">
-          Dark mode
-          <input checked={isDark} onChange={(event) => onSetIsDark(event.target.checked)} type="checkbox" />
+          Theme
+          <select
+            aria-label="Theme mode"
+            value={themeMode}
+            onChange={(event) => onSetThemeMode(event.target.value as ThemeMode)}
+          >
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
         </label>
         <h3>Connected devices ({devices.length})</h3>
         <div className="list compact">

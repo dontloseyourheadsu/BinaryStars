@@ -5,8 +5,8 @@
     
     <!-- Brand Colors -->
     <color name="primary_dark">#090040</color>
-    <color name="primary_purple">#471396</color>
-    <color name="accent_purple">#B13BFF</color>
+    <color name="primary_purple">#CFA2FF</color>
+    <color name="accent_purple">#E4C6FF</color>
     <color name="accent_yellow">#FFCC00</color>
 
     <!-- Carbon/Discord Style - Dark Theme Implementation -->
