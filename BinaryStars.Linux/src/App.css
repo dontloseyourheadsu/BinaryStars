@@ -306,6 +306,12 @@ button.ghost,
   padding: 16px;
 }
 
+.device-detail-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .panel h3 {
   margin: 0;
 }
@@ -488,6 +494,10 @@ button.ghost,
 
 @media (max-width: 1024px) {
   .panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .device-detail-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -73,6 +73,7 @@ function App() {
   const [history, setHistory] = useState<LocationPoint[]>([]);
   const [selectedMapDeviceId, setSelectedMapDeviceId] = useState("");
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
+  const [selectedDeviceDetailId, setSelectedDeviceDetailId] = useState("");
   const [newMessage, setNewMessage] = useState("");
   const [noteName, setNoteName] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -143,6 +144,11 @@ function App() {
   const chatMessages = useMemo(
     () => messages.filter((entry) => entry.deviceId === selectedChatDeviceId),
     [messages, selectedChatDeviceId],
+  );
+
+  const selectedDeviceDetail = useMemo(
+    () => devices.find((entry) => entry.id === selectedDeviceDetailId) ?? null,
+    [devices, selectedDeviceDetailId],
   );
 
   const chatSummaries = useMemo(() => {
@@ -329,6 +335,16 @@ function App() {
     }
   }, [selectedMapDeviceId]);
 
+  useEffect(() => {
+    if (!selectedDeviceDetailId) {
+      return;
+    }
+    const exists = devices.some((entry) => entry.id === selectedDeviceDetailId);
+    if (!exists) {
+      setSelectedDeviceDetailId("");
+    }
+  }, [devices, selectedDeviceDetailId]);
+
   const linkCurrentDevice = async (): Promise<void> => {
     const local = await getLocalDeviceInfo();
     const alias = deviceAlias.trim() || local.hostname;
@@ -498,6 +514,10 @@ function App() {
     setActiveTab("Messaging");
   };
 
+  const openDeviceDetail = (deviceId: string): void => {
+    setSelectedDeviceDetailId(deviceId);
+  };
+
   const sendChatMessage = async (): Promise<void> => {
     if (!selectedChatDeviceId || !newMessage.trim()) {
       return;
@@ -551,6 +571,7 @@ function App() {
     setProfile(null);
     setDevices([]);
     setSelectedChatDeviceId("");
+    setSelectedDeviceDetailId("");
     setHistory([]);
     setDrawerOpen(false);
   };
@@ -701,11 +722,14 @@ function App() {
             onlineDevices={onlineDevices}
             offlineDevices={offlineDevices}
             currentDevice={currentDevice}
+            selectedDevice={selectedDeviceDetail}
             deviceAlias={deviceAlias}
             onDeviceAliasChange={(value) => {
               setDeviceAlias(value);
               setDeviceName(value);
             }}
+            onSelectDevice={openDeviceDetail}
+            onCloseDeviceDetail={() => setSelectedDeviceDetailId("")}
             onOpenChat={openChat}
             onLinkCurrentDevice={() => void linkCurrentDevice()}
             onUnlinkCurrentDevice={() => void unlinkCurrentDevice()}
