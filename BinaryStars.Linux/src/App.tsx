@@ -8,6 +8,7 @@ import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
 import { getLocalDeviceInfo } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
+import type { ThemeMode } from "./storage";
 import type {
   AccountProfile,
   ChatMessage,
@@ -29,6 +30,31 @@ import MapTab from "./components/tabs/MapTab";
 import SettingsTab from "./components/tabs/SettingsTab";
 import { Tab, tabs } from "./components/tabs/types";
 import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
+
+type EffectiveTheme = "light" | "dark";
+type TauriWindowControls = {
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<void>;
+  close: () => Promise<void>;
+  isMaximized: () => Promise<boolean>;
+  onResized: (handler: () => void | Promise<void>) => Promise<() => void>;
+};
+
+function getSystemTheme(): EffectiveTheme {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return "light";
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+async function applyNativeWindowTheme(theme: EffectiveTheme): Promise<void> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().setTheme(theme);
+  } catch {
+    // no-op when running in browser or on unsupported platforms
+  }
+}
 
 function App() {
   // Fix Leaflet default icon paths for Vite
@@ -60,21 +86,91 @@ function App() {
   const [noteType, setNoteType] = useState<"Plaintext" | "Markdown">("Plaintext");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [deviceAlias, setDeviceAlias] = useState(getDeviceName());
-  const [isDark, setIsDark] = useState(settingsStore.getDarkMode(false));
+  const [themeMode, setThemeMode] = useState<ThemeMode>(settingsStore.getThemeMode("system"));
+  const [systemTheme, setSystemTheme] = useState<EffectiveTheme>(getSystemTheme());
   const [locationEnabled, setLocationEnabled] = useState(settingsStore.getLocationEnabled(false));
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const tauriWindowRef = useRef<TauriWindowControls | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const myDeviceId = getDeviceId();
+  const [useCustomWindowChrome, setUseCustomWindowChrome] = useState(false);
+  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+
+  const resolvedTheme: EffectiveTheme = themeMode === "system" ? systemTheme : themeMode;
 
   useEffect(() => {
-    document.documentElement.dataset.theme = isDark ? "dark" : "light";
-    settingsStore.setDarkMode(isDark);
-  }, [isDark]);
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const onThemeChange = (event: MediaQueryListEvent): void => {
+      setSystemTheme(event.matches ? "dark" : "light");
+    };
+
+    setSystemTheme(mediaQuery.matches ? "dark" : "light");
+    mediaQuery.addEventListener("change", onThemeChange);
+    return () => {
+      mediaQuery.removeEventListener("change", onThemeChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
+    settingsStore.setThemeMode(themeMode);
+    void applyNativeWindowTheme(resolvedTheme);
+  }, [resolvedTheme, themeMode]);
+
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenResize: (() => void) | null = null;
+
+    const setupWindowChrome = async (): Promise<void> => {
+      const isLinuxHost = typeof navigator !== "undefined" && /Linux/i.test(navigator.userAgent);
+      if (!isLinuxHost) {
+        return;
+      }
+
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const currentWindow = getCurrentWindow() as unknown as TauriWindowControls;
+        tauriWindowRef.current = currentWindow;
+
+        const maximized = await currentWindow.isMaximized();
+        if (!isMounted) {
+          return;
+        }
+
+        setIsWindowMaximized(maximized);
+        setUseCustomWindowChrome(true);
+
+        unlistenResize = await currentWindow.onResized(async () => {
+          const next = await currentWindow.isMaximized();
+          if (isMounted) {
+            setIsWindowMaximized(next);
+          }
+        });
+      } catch {
+        // no-op when not running inside Tauri desktop
+      }
+    };
+
+    void setupWindowChrome();
+
+    return () => {
+      isMounted = false;
+      tauriWindowRef.current = null;
+      if (unlistenResize) {
+        unlistenResize();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -595,7 +691,54 @@ function App() {
 
   if (!isAuthed) {
     return (
-      <>
+      <div className="window-shell">
+        {useCustomWindowChrome && (
+          <header className="window-titlebar">
+            <div className="window-drag-region" data-tauri-drag-region>
+              <span className="window-title">BinaryStars Linux</span>
+            </div>
+            <div className="window-controls">
+              <button
+                aria-label="Minimize window"
+                className="window-control"
+                onClick={() => {
+                  void tauriWindowRef.current?.minimize();
+                }}
+                type="button"
+              >
+                −
+              </button>
+              <button
+                aria-label={isWindowMaximized ? "Restore window" : "Maximize window"}
+                className="window-control"
+                onClick={() => {
+                  void (async () => {
+                    const currentWindow = tauriWindowRef.current;
+                    if (!currentWindow) {
+                      return;
+                    }
+                    await currentWindow.toggleMaximize();
+                    const next = await currentWindow.isMaximized();
+                    setIsWindowMaximized(next);
+                  })();
+                }}
+                type="button"
+              >
+                {isWindowMaximized ? "❐" : "□"}
+              </button>
+              <button
+                aria-label="Close window"
+                className="window-control close"
+                onClick={() => {
+                  void tauriWindowRef.current?.close();
+                }}
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+          </header>
+        )}
         {error && <div className="banner error">{error}</div>}
         <AuthView
           busy={busy}
@@ -603,7 +746,7 @@ function App() {
           setBusy={setBusy}
           setError={setError}
         />
-      </>
+      </div>
     );
   }
 
@@ -623,29 +766,77 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
-      {error && <div className="banner error">{error}</div>}
-      <Sidebar
-        tabs={tabs}
-        activeTab={activeTab}
-        onSelect={(t) => {
-          setActiveTab(t as Tab);
-          setDrawerOpen(false);
-        }}
-        drawerOpen={drawerOpen}
-      />
-      <section className="content">
-        <header className="page-header">
-          <button className="menu-btn" onClick={() => setDrawerOpen((value) => !value)} type="button">
-            ☰
-          </button>
-          <h2>{activeTab}</h2>
-          <div className="header-actions">
-            <button disabled={busy} onClick={() => void initSession()} type="button">
-              Refresh
+    <div className="window-shell">
+      {useCustomWindowChrome && (
+        <header className="window-titlebar">
+          <div className="window-drag-region" data-tauri-drag-region>
+            <span className="window-title">BinaryStars Linux</span>
+          </div>
+          <div className="window-controls">
+            <button
+              aria-label="Minimize window"
+              className="window-control"
+              onClick={() => {
+                void tauriWindowRef.current?.minimize();
+              }}
+              type="button"
+            >
+              −
+            </button>
+            <button
+              aria-label={isWindowMaximized ? "Restore window" : "Maximize window"}
+              className="window-control"
+              onClick={() => {
+                void (async () => {
+                  const currentWindow = tauriWindowRef.current;
+                  if (!currentWindow) {
+                    return;
+                  }
+                  await currentWindow.toggleMaximize();
+                  const next = await currentWindow.isMaximized();
+                  setIsWindowMaximized(next);
+                })();
+              }}
+              type="button"
+            >
+              {isWindowMaximized ? "❐" : "□"}
+            </button>
+            <button
+              aria-label="Close window"
+              className="window-control close"
+              onClick={() => {
+                void tauriWindowRef.current?.close();
+              }}
+              type="button"
+            >
+              ✕
             </button>
           </div>
         </header>
+      )}
+      <div className={`app-shell${useCustomWindowChrome ? " with-window-chrome" : ""}`}>
+        {error && <div className="banner error">{error}</div>}
+        <Sidebar
+          tabs={tabs}
+          activeTab={activeTab}
+          onSelect={(t) => {
+            setActiveTab(t as Tab);
+            setDrawerOpen(false);
+          }}
+          drawerOpen={drawerOpen}
+        />
+        <section className="content">
+          <header className="page-header">
+            <button className="menu-btn" onClick={() => setDrawerOpen((value) => !value)} type="button">
+              ☰
+            </button>
+            <h2>{activeTab}</h2>
+            <div className="header-actions">
+              <button disabled={busy} onClick={() => void initSession()} type="button">
+                Refresh
+              </button>
+            </div>
+          </header>
 
         {!online && (
           <section className="panel no-connection">
@@ -746,16 +937,17 @@ function App() {
           />
         )}
 
-        {online && activeTab === "Settings" && (
-          <SettingsTab
-            profile={profile}
-            devices={devices}
-            isDark={isDark}
-            onSetIsDark={setIsDark}
-            onSignOut={signOut}
-          />
-        )}
-      </section>
+          {online && activeTab === "Settings" && (
+            <SettingsTab
+              profile={profile}
+              devices={devices}
+              themeMode={themeMode}
+              onSetThemeMode={setThemeMode}
+              onSignOut={signOut}
+            />
+          )}
+        </section>
+      </div>
     </div>
   );
 }

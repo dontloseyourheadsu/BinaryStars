@@ -25,6 +25,8 @@
 
 /* Dark theme overrides */
 :root[data-theme="dark"]{
+  --color-primary-purple: #CFA2FF;
+  --color-accent-purple: #E4C6FF;
   --color-carbon-bg-app: #202225;
   --color-carbon-bg-panel: #2F3136;
   --color-carbon-text-main: #DCDDDE;

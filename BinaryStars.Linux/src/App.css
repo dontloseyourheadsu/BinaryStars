@@ -25,6 +25,8 @@
 }
 
 :root[data-theme="dark"] {
+  --primary-purple: #CFA2FF;
+  --accent-purple: #E4C6FF;
   --bg-app: #202225;
   --bg-panel: #2f3136;
   --text-main: #dcddde;
@@ -40,6 +42,73 @@ body {
   margin: 0;
   background: var(--bg-app);
   color: var(--text-main);
+}
+
+.window-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+}
+
+.window-titlebar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.window-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-drag-region {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.window-control {
+  width: 30px;
+  height: 28px;
+  min-width: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+}
+
+.window-control:hover {
+  background: color-mix(in srgb, var(--primary-purple) 12%, var(--bg-panel));
+  color: var(--text-main);
+}
+
+.window-control.close:hover {
+  background: #e11d48;
+  color: #fff;
 }
 
 .auth-shell {
@@ -169,6 +238,10 @@ button.ghost,
   display: grid;
   grid-template-columns: var(--nav-width) 1fr;
   background: var(--bg-app);
+}
+
+.app-shell.with-window-chrome {
+  min-height: calc(100vh - 40px);
 }
 
 .sidebar {
