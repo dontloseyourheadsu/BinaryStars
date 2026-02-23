@@ -183,7 +183,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Dark Mode"
+                        android:text="Theme"
                         android:textColor="@color/carbon_text_main"
                         android:textSize="16sp"
                         android:textStyle="bold"/>
@@ -191,15 +191,16 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Adjust app theme"
+                        android:text="Choose System, Light, or Dark"
                         android:textColor="@color/carbon_text_muted"
                         android:textSize="12sp"/>
                 </LinearLayout>
 
-                <Switch
-                    android:id="@+id/switchTheme"
+                <Spinner
+                    android:id="@+id/spinnerTheme"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="wrap_content"
+                    android:minWidth="132dp" />
             </LinearLayout>
             </LinearLayout>
         </ScrollView>

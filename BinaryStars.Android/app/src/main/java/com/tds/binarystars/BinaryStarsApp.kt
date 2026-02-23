@@ -28,9 +28,8 @@ class BinaryStarsApp : Application() {
             LocationUpdateScheduler.schedule(this, minutes)
         }
 
-        val isDarkModeEnabled = SettingsStorage.isDarkModeEnabled(false)
         AppCompatDelegate.setDefaultNightMode(
-            if (isDarkModeEnabled) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+            SettingsStorage.getAppCompatNightMode(SettingsStorage.ThemeMode.SYSTEM)
         )
     }
 }
