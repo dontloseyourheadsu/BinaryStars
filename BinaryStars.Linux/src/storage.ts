@@ -3,7 +3,8 @@ import type { ChatMessage, FileTransfer, Note } from "./types";
 const NOTES_KEY = "binarystars.notes.cache";
 const TRANSFERS_KEY = "binarystars.transfers.cache";
 const MESSAGES_KEY = "binarystars.messages.cache";
-const THEME_KEY = "binarystars.theme.dark";
+const THEME_KEY = "binarystars.theme.mode";
+const LEGACY_THEME_DARK_KEY = "binarystars.theme.dark";
 const LOCATION_ENABLED_KEY = "binarystars.location.enabled";
 const LOCATION_INTERVAL_KEY = "binarystars.location.minutes";
 
@@ -45,12 +46,24 @@ export const cacheStore = {
 };
 
 export const settingsStore = {
-  getDarkMode(defaultValue: boolean): boolean {
+  getThemeMode(defaultValue: ThemeMode = "system"): ThemeMode {
     const raw = localStorage.getItem(THEME_KEY);
-    return raw == null ? defaultValue : raw === "1";
+    if (raw === "light" || raw === "dark" || raw === "system") {
+      return raw;
+    }
+
+    const legacy = localStorage.getItem(LEGACY_THEME_DARK_KEY);
+    if (legacy === "1") {
+      return "dark";
+    }
+    if (legacy === "0") {
+      return "light";
+    }
+
+    return defaultValue;
   },
-  setDarkMode(enabled: boolean): void {
-    localStorage.setItem(THEME_KEY, enabled ? "1" : "0");
+  setThemeMode(mode: ThemeMode): void {
+    localStorage.setItem(THEME_KEY, mode);
   },
   getLocationEnabled(defaultValue: boolean): boolean {
     const raw = localStorage.getItem(LOCATION_ENABLED_KEY);
@@ -68,3 +81,5 @@ export const settingsStore = {
     localStorage.setItem(LOCATION_INTERVAL_KEY, String(minutes));
   },
 };
+
+export type ThemeMode = "light" | "dark" | "system";
