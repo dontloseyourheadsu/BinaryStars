@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.storage.ChatStorage
+import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.storage.FileTransferStorage
 import com.tds.binarystars.storage.NotesStorage
 import com.tds.binarystars.storage.SettingsStorage
@@ -21,6 +22,7 @@ class BinaryStarsApp : Application() {
         ChatStorage.init(this)
         NotesStorage.init(this)
         FileTransferStorage.init(this)
+        DeviceCacheStorage.init(this)
         MapLibre.getInstance(this)
 
         if (SettingsStorage.areLocationUpdatesEnabled(false)) {
