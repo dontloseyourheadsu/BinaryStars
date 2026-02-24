@@ -1,5 +1,8 @@
 package com.tds.binarystars.fragments
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -13,10 +16,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
+import androidx.core.content.ContextCompat
 import com.tds.binarystars.R
 import com.tds.binarystars.adapter.DevicesAdapter
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.DeviceTypeDto
+import com.tds.binarystars.bluetooth.BluetoothChatManager
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 import kotlinx.coroutines.launch
@@ -43,6 +50,28 @@ class DevicesFragment : Fragment(), MessagingEventListener {
 
     private fun isTabletLayout(): Boolean {
         return resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
+    }
+
+    private var bluetoothAvailableDevices: Set<String> = emptySet()
+
+    private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
+        bluetoothAvailableDevices = devices.keys
+        refreshDevices()
+    }
+
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.any { it }
+        if (granted) {
+            startBluetoothFeatures()
+        }
+    }
+
+    private val enableBluetoothLauncher = registerForActivityResult(StartActivityForResult()) {
+        if (BluetoothChatManager.isEnabled()) {
+            startBluetoothFeatures()
+        }
     }
 
     /**
@@ -89,6 +118,16 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         MessagingSocketManager.removeListener(this)
     }
 
+    override fun onStart() {
+        super.onStart()
+        ensureBluetoothReady()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stopBluetoothFeatures()
+    }
+
     override fun onChatUpdated(deviceId: String) {
         // No-op.
     }
@@ -132,7 +171,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         }
 
         if (!NetworkUtils.isOnline(requireContext())) {
-            val cachedDevices = DeviceCacheStorage.getDevices()
+            val cachedDevices = withBluetoothPresence(DeviceCacheStorage.getDevices())
             if (cachedDevices.isNotEmpty()) {
                 applyDevicesToUi(
                     devices = cachedDevices,
@@ -162,7 +201,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                 val response = ApiClient.apiService.getDevices()
                 if (response.isSuccessful && response.body() != null) {
                     val dtos = response.body()!!
-                    val devices = dtos.map { dto ->
+                    val devices = withBluetoothPresence(dtos.map { dto ->
                         val effectiveOnline = if (dto.id == currentDeviceId && !telemetryEnabled) {
                             false
                         } else {
@@ -188,7 +227,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                             wifiDownloadSpeed = dto.wifiDownloadSpeed,
                             lastSeen = System.currentTimeMillis()
                         )
-                    }
+                    })
 
                     DeviceCacheStorage.saveDevices(devices)
                     applyDevicesToUi(
@@ -205,7 +244,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                     Toast.makeText(context, "Failed to load devices: ${response.code()}", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                val cachedDevices = DeviceCacheStorage.getDevices()
+                val cachedDevices = withBluetoothPresence(DeviceCacheStorage.getDevices())
                 if (cachedDevices.isNotEmpty()) {
                     applyDevicesToUi(
                         devices = cachedDevices,
@@ -232,8 +271,8 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         tvHeaderSubtitle: TextView?,
         fromCache: Boolean
     ) {
-        val onlineDevices = devices.filter { it.isOnline }
-        val offlineDevices = devices.filter { !it.isOnline }
+        val onlineDevices = devices.filter { it.isOnline || it.isBluetoothOnline }
+        val offlineDevices = devices.filter { !it.isOnline && !it.isBluetoothOnline }
         val isRegistered = devices.any { it.id == currentDeviceId }
 
         tvHeaderSubtitle?.text = if (fromCache) {
@@ -262,6 +301,55 @@ class DevicesFragment : Fragment(), MessagingEventListener {
             } else {
                 (activity as? MainActivity)?.registerDevice(currentDeviceId, currentDeviceName)
             }
+        }
+    }
+
+    private fun withBluetoothPresence(devices: List<Device>): List<Device> {
+        return devices.map { device ->
+            device.copy(isBluetoothOnline = bluetoothAvailableDevices.contains(device.name))
+        }
+    }
+
+    private fun ensureBluetoothReady() {
+        if (!BluetoothChatManager.isSupported()) {
+            bluetoothAvailableDevices = emptySet()
+            return
+        }
+        if (!hasBluetoothPermissions()) {
+            requestBluetoothPermissions()
+            return
+        }
+        if (!BluetoothChatManager.isEnabled()) {
+            enableBluetoothLauncher.launch(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        }
+        startBluetoothFeatures()
+    }
+
+    private fun startBluetoothFeatures() {
+        BluetoothChatManager.acquireDiscovery(requireContext(), bluetoothDiscoveryListener)
+    }
+
+    private fun stopBluetoothFeatures() {
+        BluetoothChatManager.releaseDiscovery(requireContext(), bluetoothDiscoveryListener)
+    }
+
+    private fun hasBluetoothPermissions(): Boolean {
+        val permissions = requiredBluetoothPermissions()
+        return permissions.all { permission ->
+            ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestBluetoothPermissions() {
+        bluetoothPermissionLauncher.launch(requiredBluetoothPermissions())
+    }
+
+    private fun requiredBluetoothPermissions(): Array<String> {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 

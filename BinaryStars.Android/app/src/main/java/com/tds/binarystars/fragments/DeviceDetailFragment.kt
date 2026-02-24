@@ -55,6 +55,7 @@ class DeviceDetailFragment : Fragment() {
         var fallbackCpuLoadPercent = arguments?.getInt(ARG_CPU_LOAD_PERCENT)?.takeIf { it >= 0 }
         var uploadSpeed = arguments?.getString(ARG_UPLOAD_SPEED).orEmpty()
         var downloadSpeed = arguments?.getString(ARG_DOWNLOAD_SPEED).orEmpty()
+        val isBluetoothOnline = arguments?.getBoolean(ARG_IS_BLUETOOTH_ONLINE) ?: false
         val deviceId = arguments?.getString(ARG_DEVICE_ID).orEmpty()
         val isAndroidDevice = type.equals("Android", ignoreCase = true)
         val isCurrentDevice = deviceId == Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
@@ -119,6 +120,7 @@ class DeviceDetailFragment : Fragment() {
                         isOnline = isOnline,
                         isSynced = isSynced,
                         telemetryEnabled = true,
+                        isBluetoothOnline = isBluetoothOnline,
                         tvCpu = tvCpu,
                         tvRam = tvRam,
                         tvUpSpeed = tvUpSpeed,
@@ -141,6 +143,7 @@ class DeviceDetailFragment : Fragment() {
             isOnline = isOnline,
             isSynced = isSynced,
             telemetryEnabled = telemetryEnabled,
+            isBluetoothOnline = isBluetoothOnline,
             tvCpu = tvCpu,
             tvRam = tvRam,
             tvUpSpeed = tvUpSpeed,
@@ -196,6 +199,7 @@ class DeviceDetailFragment : Fragment() {
                         isOnline = isOnline,
                         isSynced = isSynced,
                         telemetryEnabled = telemetryEnabled,
+                        isBluetoothOnline = isBluetoothOnline,
                         tvCpu = tvCpu,
                         tvRam = tvRam,
                         tvUpSpeed = tvUpSpeed,
@@ -219,6 +223,7 @@ class DeviceDetailFragment : Fragment() {
         isOnline: Boolean,
         isSynced: Boolean,
         telemetryEnabled: Boolean,
+        isBluetoothOnline: Boolean,
         tvCpu: TextView,
         tvRam: TextView,
         tvUpSpeed: TextView,
@@ -231,7 +236,12 @@ class DeviceDetailFragment : Fragment() {
             isOnline -> "Online"
             else -> "Offline"
         }
-        tvConnection.text = if (isSynced) "$connectionText • Synced" else "$connectionText • Not Synced"
+        val bluetoothText = if (isBluetoothOnline) " • Bluetooth online" else ""
+        tvConnection.text = if (isSynced) {
+            "$connectionText$bluetoothText • Synced"
+        } else {
+            "$connectionText$bluetoothText • Not Synced"
+        }
 
         if (!telemetryEnabled) {
             tvCpu.text = "Not available"
@@ -400,6 +410,7 @@ class DeviceDetailFragment : Fragment() {
         private const val ARG_IS_ONLINE = "arg_is_online"
         private const val ARG_IS_AVAILABLE = "arg_is_available"
         private const val ARG_IS_SYNCED = "arg_is_synced"
+        private const val ARG_IS_BLUETOOTH_ONLINE = "arg_is_bluetooth_online"
         private const val ARG_CPU_LOAD_PERCENT = "arg_cpu_load_percent"
         private const val ARG_UPLOAD_SPEED = "arg_upload_speed"
         private const val ARG_DOWNLOAD_SPEED = "arg_download_speed"
@@ -421,6 +432,7 @@ class DeviceDetailFragment : Fragment() {
                     putBoolean(ARG_IS_ONLINE, device.isOnline)
                     putBoolean(ARG_IS_AVAILABLE, device.isAvailable)
                     putBoolean(ARG_IS_SYNCED, device.isSynced)
+                    putBoolean(ARG_IS_BLUETOOTH_ONLINE, device.isBluetoothOnline)
                     putInt(ARG_CPU_LOAD_PERCENT, device.cpuLoadPercent ?: -1)
                     putString(ARG_UPLOAD_SPEED, device.wifiUploadSpeed)
                     putString(ARG_DOWNLOAD_SPEED, device.wifiDownloadSpeed)

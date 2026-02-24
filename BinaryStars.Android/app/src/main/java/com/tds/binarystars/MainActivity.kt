@@ -177,6 +177,7 @@ class MainActivity : AppCompatActivity() {
                         cpuLoadPercent = dto.cpuLoadPercent,
                         wifiUploadSpeed = dto.wifiUploadSpeed,
                         wifiDownloadSpeed = dto.wifiDownloadSpeed,
+                        isBluetoothOnline = false,
                         lastSeen = System.currentTimeMillis()
                     )
                 }

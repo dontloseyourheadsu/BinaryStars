@@ -17,6 +17,7 @@ data class Device(
     val cpuLoadPercent: Int? = null,
     val wifiUploadSpeed: String,
     val wifiDownloadSpeed: String,
+    val isBluetoothOnline: Boolean = false,
     val lastSeen: Long = System.currentTimeMillis()
 )
 
