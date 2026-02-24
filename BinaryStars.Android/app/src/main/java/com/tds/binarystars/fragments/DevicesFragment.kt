@@ -29,6 +29,7 @@ import android.widget.ImageView
 import com.tds.binarystars.MainActivity
 import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
+import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.storage.SettingsStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -116,28 +117,44 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         val contentView = view.findViewById<View>(R.id.viewContent)
         val noConnectionView = view.findViewById<View>(R.id.viewNoConnection)
         val retryButton = view.findViewById<Button>(R.id.btnRetry)
+        val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
+
+        val isTablet = isTabletLayout()
+        rvOnline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
+        rvOffline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
+
+        val context = requireContext()
+        val currentDeviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        val currentDeviceName = android.os.Build.MODEL
 
         retryButton.setOnClickListener {
             refreshDevices()
         }
 
         if (!NetworkUtils.isOnline(requireContext())) {
-            contentView.visibility = View.GONE
-            noConnectionView.visibility = View.VISIBLE
+            val cachedDevices = DeviceCacheStorage.getDevices()
+            if (cachedDevices.isNotEmpty()) {
+                applyDevicesToUi(
+                    devices = cachedDevices,
+                    currentDeviceId = currentDeviceId,
+                    currentDeviceName = currentDeviceName,
+                    rvOnline = rvOnline,
+                    rvOffline = rvOffline,
+                    btnLinkDevice = btnLinkDevice,
+                    tvHeaderSubtitle = tvHeaderSubtitle,
+                    fromCache = true
+                )
+                contentView.visibility = View.VISIBLE
+                noConnectionView.visibility = View.GONE
+            } else {
+                contentView.visibility = View.GONE
+                noConnectionView.visibility = View.VISIBLE
+            }
             return
         }
 
         contentView.visibility = View.VISIBLE
         noConnectionView.visibility = View.GONE
-
-        val isTablet = isTabletLayout()
-        rvOnline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
-        rvOffline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
-
-        // Get Current Device ID
-        val context = requireContext()
-        val currentDeviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-        val currentDeviceName = android.os.Build.MODEL
         val telemetryEnabled = SettingsStorage.isDeviceTelemetryEnabled(true)
 
         lifecycleScope.launch {
@@ -172,45 +189,78 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                             lastSeen = System.currentTimeMillis()
                         )
                     }
-                    
-                    val onlineDevices = devices.filter { it.isOnline }
-                    val offlineDevices = devices.filter { !it.isOnline }
-                    val isRegistered = devices.any { it.id == currentDeviceId }
-                    
-                    // Update header subtitle if view exists
-                    val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
-                    if (tvHeaderSubtitle != null) {
-                        tvHeaderSubtitle.text = "${onlineDevices.size} devices online"
-                    }
 
-                    // Setup RecyclerViews for online/offline sections
-                    rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
-                        openDeviceDetail(device)
-                    }
-                    rvOffline.adapter = DevicesAdapter(offlineDevices) { device ->
-                        openDeviceDetail(device)
-                    }
-                    
-                    // Setup Button
-                    if (isRegistered) {
-                        btnLinkDevice.text = "Unlink This Device"
-                        btnLinkDevice.visibility = View.VISIBLE
-                        btnLinkDevice.setOnClickListener {
-                            (activity as? MainActivity)?.unlinkDevice(currentDeviceId)
-                        }
-                    } else {
-                        btnLinkDevice.text = "Link This Device"
-                        btnLinkDevice.visibility = View.VISIBLE
-                         btnLinkDevice.setOnClickListener {
-                            (activity as? MainActivity)?.registerDevice(currentDeviceId, currentDeviceName)
-                        }
-                    }
+                    DeviceCacheStorage.saveDevices(devices)
+                    applyDevicesToUi(
+                        devices = devices,
+                        currentDeviceId = currentDeviceId,
+                        currentDeviceName = currentDeviceName,
+                        rvOnline = rvOnline,
+                        rvOffline = rvOffline,
+                        btnLinkDevice = btnLinkDevice,
+                        tvHeaderSubtitle = tvHeaderSubtitle,
+                        fromCache = false
+                    )
                 } else {
                     Toast.makeText(context, "Failed to load devices: ${response.code()}", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-               // Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-               // e.printStackTrace()
+                val cachedDevices = DeviceCacheStorage.getDevices()
+                if (cachedDevices.isNotEmpty()) {
+                    applyDevicesToUi(
+                        devices = cachedDevices,
+                        currentDeviceId = currentDeviceId,
+                        currentDeviceName = currentDeviceName,
+                        rvOnline = rvOnline,
+                        rvOffline = rvOffline,
+                        btnLinkDevice = btnLinkDevice,
+                        tvHeaderSubtitle = tvHeaderSubtitle,
+                        fromCache = true
+                    )
+                }
+            }
+        }
+    }
+
+    private fun applyDevicesToUi(
+        devices: List<Device>,
+        currentDeviceId: String,
+        currentDeviceName: String,
+        rvOnline: RecyclerView,
+        rvOffline: RecyclerView,
+        btnLinkDevice: Button,
+        tvHeaderSubtitle: TextView?,
+        fromCache: Boolean
+    ) {
+        val onlineDevices = devices.filter { it.isOnline }
+        val offlineDevices = devices.filter { !it.isOnline }
+        val isRegistered = devices.any { it.id == currentDeviceId }
+
+        tvHeaderSubtitle?.text = if (fromCache) {
+            "Offline mode · ${onlineDevices.size} devices online"
+        } else {
+            "${onlineDevices.size} devices online"
+        }
+
+        rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
+            openDeviceDetail(device)
+        }
+        rvOffline.adapter = DevicesAdapter(offlineDevices) { device ->
+            openDeviceDetail(device)
+        }
+
+        btnLinkDevice.text = if (isRegistered) "Unlink This Device" else "Link This Device"
+        btnLinkDevice.visibility = View.VISIBLE
+        btnLinkDevice.setOnClickListener {
+            if (!NetworkUtils.isOnline(requireContext())) {
+                Toast.makeText(requireContext(), "No connection available", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (isRegistered) {
+                (activity as? MainActivity)?.unlinkDevice(currentDeviceId)
+            } else {
+                (activity as? MainActivity)?.registerDevice(currentDeviceId, currentDeviceName)
             }
         }
     }

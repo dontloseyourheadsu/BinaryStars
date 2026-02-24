@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import android.widget.LinearLayout
+import android.net.ConnectivityManager
+import android.net.Network
 import com.tds.binarystars.fragments.DevicesFragment
 import com.tds.binarystars.fragments.FilesFragment
 import com.tds.binarystars.fragments.MapFragment
@@ -24,10 +26,17 @@ import androidx.drawerlayout.widget.DrawerLayout
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.presence.PresenceHeartbeatManager
 import androidx.core.view.GravityCompat
+import com.tds.binarystars.api.DeviceTypeDto
+import com.tds.binarystars.model.Device
+import com.tds.binarystars.model.DeviceType
+import com.tds.binarystars.storage.DeviceCacheStorage
+import com.tds.binarystars.storage.SettingsStorage
+import com.tds.binarystars.util.NetworkUtils
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var drawerLayout: DrawerLayout
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     /**
      * Sets up the navigation drawer, device registration checks, and messaging socket.
@@ -36,6 +45,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        registerReconnectListener()
+        syncCachedDevicesFromServer()
         checkDeviceRegistration()
         checkPendingTransfers()
 
@@ -104,9 +115,76 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        val connectivityManager = getSystemService(ConnectivityManager::class.java)
+        networkCallback?.let {
+            connectivityManager?.unregisterNetworkCallback(it)
+        }
+        networkCallback = null
         super.onDestroy()
         MessagingSocketManager.disconnect()
         PresenceHeartbeatManager.stop()
+    }
+
+    private fun registerReconnectListener() {
+        val connectivityManager = getSystemService(ConnectivityManager::class.java) ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                runOnUiThread {
+                    syncCachedDevicesFromServer()
+                }
+            }
+        }
+        networkCallback = callback
+        connectivityManager.registerDefaultNetworkCallback(callback)
+    }
+
+    private fun syncCachedDevicesFromServer() {
+        if (!NetworkUtils.isOnline(this)) {
+            return
+        }
+
+        val currentDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        val telemetryEnabled = SettingsStorage.isDeviceTelemetryEnabled(true)
+
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.apiService.getDevices()
+                if (!response.isSuccessful || response.body() == null) {
+                    return@launch
+                }
+
+                val mapped = response.body()!!.map { dto ->
+                    val effectiveOnline = if (dto.id == currentDeviceId && !telemetryEnabled) {
+                        false
+                    } else {
+                        dto.isOnline
+                    }
+
+                    Device(
+                        id = dto.id,
+                        name = dto.name,
+                        type = when (dto.type) {
+                            DeviceTypeDto.Linux -> DeviceType.LINUX
+                            DeviceTypeDto.Android -> DeviceType.ANDROID
+                        },
+                        ipAddress = dto.ipAddress,
+                        publicKey = dto.publicKey,
+                        publicKeyAlgorithm = dto.publicKeyAlgorithm,
+                        batteryLevel = dto.batteryLevel,
+                        isOnline = effectiveOnline,
+                        isAvailable = dto.isAvailable,
+                        isSynced = dto.isSynced,
+                        cpuLoadPercent = dto.cpuLoadPercent,
+                        wifiUploadSpeed = dto.wifiUploadSpeed,
+                        wifiDownloadSpeed = dto.wifiDownloadSpeed,
+                        lastSeen = System.currentTimeMillis()
+                    )
+                }
+
+                DeviceCacheStorage.saveDevices(mapped)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /**
@@ -123,6 +201,10 @@ class MainActivity : AppCompatActivity() {
      * Ensures the current device is registered and prompts the user when needed.
      */
     private fun checkDeviceRegistration() {
+        if (!NetworkUtils.isOnline(this)) {
+            return
+        }
+
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         val deviceName = android.os.Build.MODEL
         // Getting IP requires more complex logic or a helper function. 
@@ -175,6 +257,11 @@ class MainActivity : AppCompatActivity() {
      * Registers the current device with the backend.
      */
     public fun registerDevice(deviceId: String, deviceName: String) {
+         if (!NetworkUtils.isOnline(this)) {
+             Toast.makeText(this, "No connection available", Toast.LENGTH_SHORT).show()
+             return
+         }
+
          // Need real IP logic here, using placeholders for now as implementing full Net logic is out of scope of single file
          val ipAddress = "127.0.0.1" 
          val ipv6Address = "::1"
@@ -187,6 +274,7 @@ class MainActivity : AppCompatActivity() {
                 val response = ApiClient.apiService.registerDevice(req)
                 if (response.isSuccessful) {
                     Toast.makeText(this@MainActivity, "Device Linked Successfully", Toast.LENGTH_SHORT).show()
+                    syncCachedDevicesFromServer()
                     // Reload fragment
                     val currentFragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
                     if (currentFragment is com.tds.binarystars.fragments.DevicesFragment) {
@@ -205,11 +293,17 @@ class MainActivity : AppCompatActivity() {
      * Unlinks a device from the current account.
      */
     public fun unlinkDevice(deviceId: String) {
+        if (!NetworkUtils.isOnline(this)) {
+            Toast.makeText(this, "No connection available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         lifecycleScope.launch {
             try {
                 val response = ApiClient.apiService.unlinkDevice(deviceId)
                 if (response.isSuccessful) {
                     Toast.makeText(this@MainActivity, "Device Unlinked", Toast.LENGTH_SHORT).show()
+                    syncCachedDevicesFromServer()
                     val currentFragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
                     if (currentFragment is com.tds.binarystars.fragments.DevicesFragment) {
                         currentFragment.refreshDevices()
