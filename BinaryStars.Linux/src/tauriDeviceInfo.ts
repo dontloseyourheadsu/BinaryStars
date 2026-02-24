@@ -41,3 +41,15 @@ export async function getLocalDeviceInfo(): Promise<TauriDeviceInfo> {
 
   return invoke<TauriDeviceInfo>("get_device_info");
 }
+
+export async function getBluetoothConnectedDeviceNames(): Promise<string[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  try {
+    return await invoke<string[]>("get_bluetooth_connected_device_names");
+  } catch {
+    return [];
+  }
+}

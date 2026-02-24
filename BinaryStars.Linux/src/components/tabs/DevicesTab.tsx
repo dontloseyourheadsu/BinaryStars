@@ -32,9 +32,11 @@ export default function DevicesTab({
   formatBattery,
 }: Props) {
   if (selectedDevice) {
-    const connectionState = selectedDevice.isAvailable
+    const baseConnectionState = selectedDevice.isAvailable
       ? (selectedDevice.isOnline ? "Online" : "Offline")
       : "Unavailable";
+    const bluetoothState = selectedDevice.isBluetoothOnline ? " • Bluetooth online" : "";
+    const connectionState = `${baseConnectionState}${bluetoothState}`;
     const syncState = selectedDevice.isSynced ? "Synced" : "Not Synced";
     const cpuValue = selectedDevice.type === "Android"
       ? "Not available"
@@ -105,6 +107,7 @@ export default function DevicesTab({
                 <strong>{device.name}</strong>
               </div>
               <span className="muted">{device.type} • {device.ipAddress}</span>
+              {device.isBluetoothOnline && <span className="muted">Bluetooth online</span>}
               <span className="muted">
                 CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
               </span>
@@ -124,6 +127,7 @@ export default function DevicesTab({
                 <strong>{device.name}</strong>
               </div>
               <span className="muted">{device.type} • Last seen {new Date(device.lastSeen).toLocaleString()}</span>
+              {device.isBluetoothOnline && <span className="muted">Bluetooth online</span>}
               <span className="muted">
                 CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
               </span>

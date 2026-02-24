@@ -6,7 +6,7 @@ import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "./App.css";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
-import { getLocalDeviceInfo } from "./tauriDeviceInfo";
+import { getBluetoothConnectedDeviceNames, getLocalDeviceInfo } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { ThemeMode } from "./storage";
 import type {
@@ -86,6 +86,7 @@ function App() {
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
+  const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
@@ -195,7 +196,11 @@ function App() {
 
   const refreshDevices = async (): Promise<void> => {
     const next = await api.getDevices();
-    setDevices(next);
+    const bluetoothSet = new Set(bluetoothConnectedNames);
+    setDevices(next.map((device) => ({
+      ...device,
+      isBluetoothOnline: bluetoothSet.has(device.name),
+    })));
     if (!selectedMapDeviceId && next.length > 0) {
       setSelectedMapDeviceId(next[0].id);
     }
@@ -270,6 +275,32 @@ function App() {
       setError("No connection available");
     });
   }, [isAuthed, online]);
+
+  useEffect(() => {
+    if (!isAuthed) {
+      return;
+    }
+
+    const refreshBluetoothPresence = async (): Promise<void> => {
+      const names = await getBluetoothConnectedDeviceNames();
+      setBluetoothConnectedNames(names);
+    };
+
+    void refreshBluetoothPresence();
+    const timer = window.setInterval(() => {
+      void refreshBluetoothPresence();
+    }, 12_000);
+
+    return () => window.clearInterval(timer);
+  }, [isAuthed]);
+
+  useEffect(() => {
+    const bluetoothSet = new Set(bluetoothConnectedNames);
+    setDevices((prev) => prev.map((device) => ({
+      ...device,
+      isBluetoothOnline: bluetoothSet.has(device.name),
+    })));
+  }, [bluetoothConnectedNames]);
 
   useEffect(() => {
     if (!isAuthed) {
@@ -750,8 +781,8 @@ function App() {
     );
   }
 
-  const onlineDevices = devices.filter((entry) => entry.isOnline);
-  const offlineDevices = devices.filter((entry) => !entry.isOnline);
+  const onlineDevices = devices.filter((entry) => entry.isOnline || entry.isBluetoothOnline === true);
+  const offlineDevices = devices.filter((entry) => !entry.isOnline && entry.isBluetoothOnline !== true);
 
   const formatBattery = (device: Device): string => {
     return device.batteryLevel >= 0 ? `${device.batteryLevel}%` : "Not available";
