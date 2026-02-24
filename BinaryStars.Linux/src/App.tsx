@@ -65,11 +65,11 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>("Devices");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<Device[]>(cacheStore.getDevices());
   const [transfers, setTransfers] = useState<FileTransfer[]>(cacheStore.getTransfers());
   const [notes, setNotes] = useState<Note[]>(cacheStore.getNotes());
   const [messages, setMessages] = useState<ChatMessage[]>(cacheStore.getMessages());
-  const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const [profile, setProfile] = useState<AccountProfile | null>(cacheStore.getProfile());
   const [history, setHistory] = useState<LocationPoint[]>([]);
   const [selectedMapDeviceId, setSelectedMapDeviceId] = useState("");
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
@@ -179,6 +179,14 @@ function App() {
   useEffect(() => {
     cacheStore.setTransfers(transfers);
   }, [transfers]);
+
+  useEffect(() => {
+    cacheStore.setDevices(devices);
+  }, [devices]);
+
+  useEffect(() => {
+    cacheStore.setProfile(profile);
+  }, [profile]);
 
   const refreshProfile = async (): Promise<void> => {
     const next = await api.getProfile();
