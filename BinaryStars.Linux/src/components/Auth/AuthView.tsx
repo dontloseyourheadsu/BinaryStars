@@ -95,7 +95,11 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
       }
       onLoggedIn();
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Authentication failed");
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setError("No connection available");
+      } else {
+        setError(error instanceof Error ? error.message : "Authentication failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -113,7 +117,10 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
       tokenStore.setToken(auth.accessToken, auth.expiresIn);
       onLoggedIn();
     } catch (error) {
-      const message = readApiError(error);
+      const message =
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "No connection available"
+          : readApiError(error);
 
       if (message.toLowerCase().includes("registration required")) {
         const username = window.prompt("Choose a username to create your account:", "");

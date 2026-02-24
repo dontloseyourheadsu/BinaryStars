@@ -32,6 +32,7 @@ export interface Device {
   publicKeyAlgorithm: string | null;
   batteryLevel: number;
   isOnline: boolean;
+  isBluetoothOnline?: boolean;
   isAvailable: boolean;
   isSynced: boolean;
   cpuLoadPercent: number | null;

@@ -1,8 +1,10 @@
-import type { ChatMessage, FileTransfer, Note } from "./types";
+import type { AccountProfile, ChatMessage, Device, FileTransfer, Note } from "./types";
 
 const NOTES_KEY = "binarystars.notes.cache";
 const TRANSFERS_KEY = "binarystars.transfers.cache";
 const MESSAGES_KEY = "binarystars.messages.cache";
+const DEVICES_KEY = "binarystars.devices.cache";
+const PROFILE_KEY = "binarystars.profile.cache";
 const THEME_KEY = "binarystars.theme.mode";
 const LEGACY_THEME_DARK_KEY = "binarystars.theme.dark";
 const LOCATION_ENABLED_KEY = "binarystars.location.enabled";
@@ -42,6 +44,18 @@ export const cacheStore = {
   },
   setMessages(messages: ChatMessage[]): void {
     writeJson(MESSAGES_KEY, messages);
+  },
+  getDevices(): Device[] {
+    return readJson<Device[]>(DEVICES_KEY, []);
+  },
+  setDevices(devices: Device[]): void {
+    writeJson(DEVICES_KEY, devices);
+  },
+  getProfile(): AccountProfile | null {
+    return readJson<AccountProfile | null>(PROFILE_KEY, null);
+  },
+  setProfile(profile: AccountProfile | null): void {
+    writeJson(PROFILE_KEY, profile);
   },
 };
 

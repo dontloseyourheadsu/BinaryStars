@@ -42,7 +42,11 @@ class DevicesAdapter(
              else -> "Unknown"
         }
         
-        holder.statusText.text = "$platformStr • ${device.ipAddress}"
+        holder.statusText.text = if (device.isBluetoothOnline) {
+            "$platformStr • ${device.ipAddress} • Bluetooth online"
+        } else {
+            "$platformStr • ${device.ipAddress}"
+        }
 
         val context = holder.itemView.context
         

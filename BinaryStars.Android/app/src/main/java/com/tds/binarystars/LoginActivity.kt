@@ -48,7 +48,7 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         // Auto-login if a valid token is stored
-        if (!AuthTokenStore.getToken().isNullOrBlank()) {
+        if (AuthTokenStore.hasStoredSession()) {
             startActivity(Intent(this@LoginActivity, MainActivity::class.java))
             finish()
             return
@@ -132,7 +132,12 @@ class LoginActivity : AppCompatActivity() {
                         Toast.makeText(this@LoginActivity, "Login Failed: ${response.code()}", Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(this@LoginActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    val message = if (!com.tds.binarystars.util.NetworkUtils.isOnline(this@LoginActivity)) {
+                        "No connection available"
+                    } else {
+                        "Error: ${e.message}"
+                    }
+                    Toast.makeText(this@LoginActivity, message, Toast.LENGTH_SHORT).show()
                     e.printStackTrace()
                 }
             }
@@ -265,7 +270,11 @@ class LoginActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(logTag, "External login error for provider=$provider", e)
-                toast("Error: ${e.message}")
+                if (!com.tds.binarystars.util.NetworkUtils.isOnline(this@LoginActivity)) {
+                    toast("No connection available")
+                } else {
+                    toast("Error: ${e.message}")
+                }
             }
         }
     }

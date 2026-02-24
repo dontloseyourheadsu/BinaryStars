@@ -6,7 +6,7 @@ import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "./App.css";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
-import { getLocalDeviceInfo } from "./tauriDeviceInfo";
+import { getBluetoothConnectedDeviceNames, getLocalDeviceInfo } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { ThemeMode } from "./storage";
 import type {
@@ -65,11 +65,11 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>("Devices");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<Device[]>(cacheStore.getDevices());
   const [transfers, setTransfers] = useState<FileTransfer[]>(cacheStore.getTransfers());
   const [notes, setNotes] = useState<Note[]>(cacheStore.getNotes());
   const [messages, setMessages] = useState<ChatMessage[]>(cacheStore.getMessages());
-  const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const [profile, setProfile] = useState<AccountProfile | null>(cacheStore.getProfile());
   const [history, setHistory] = useState<LocationPoint[]>([]);
   const [selectedMapDeviceId, setSelectedMapDeviceId] = useState("");
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
@@ -86,6 +86,7 @@ function App() {
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
+  const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
@@ -180,6 +181,14 @@ function App() {
     cacheStore.setTransfers(transfers);
   }, [transfers]);
 
+  useEffect(() => {
+    cacheStore.setDevices(devices);
+  }, [devices]);
+
+  useEffect(() => {
+    cacheStore.setProfile(profile);
+  }, [profile]);
+
   const refreshProfile = async (): Promise<void> => {
     const next = await api.getProfile();
     setProfile(next);
@@ -187,7 +196,11 @@ function App() {
 
   const refreshDevices = async (): Promise<void> => {
     const next = await api.getDevices();
-    setDevices(next);
+    const bluetoothSet = new Set(bluetoothConnectedNames);
+    setDevices(next.map((device) => ({
+      ...device,
+      isBluetoothOnline: bluetoothSet.has(device.name),
+    })));
     if (!selectedMapDeviceId && next.length > 0) {
       setSelectedMapDeviceId(next[0].id);
     }
@@ -209,15 +222,38 @@ function App() {
   };
 
   const initSession = async (): Promise<void> => {
+    const canUseNetwork = typeof navigator === "undefined" || navigator.onLine;
+    if (!canUseNetwork) {
+      setDevices(cacheStore.getDevices());
+      setProfile(cacheStore.getProfile());
+      setError("No connection available. Showing cached data.");
+      setIsAuthed(true);
+      return;
+    }
+
     try {
       setBusy(true);
       await Promise.all([refreshProfile(), refreshDevices(), refreshNotes(), refreshTransfers()]);
       setError("");
       setIsAuthed(true);
     } catch (nextError) {
-      tokenStore.clear();
-      setIsAuthed(false);
-      setError(nextError instanceof Error ? nextError.message : "Failed to load account session");
+      const message = nextError instanceof Error ? nextError.message : "Failed to load account session";
+      const isOfflineError =
+        !online ||
+        message.toLowerCase().includes("network") ||
+        message.toLowerCase().includes("fetch") ||
+        message.toLowerCase().includes("timeout");
+
+      if (isOfflineError) {
+        setDevices(cacheStore.getDevices());
+        setProfile(cacheStore.getProfile());
+        setError("No connection available. Showing cached data.");
+        setIsAuthed(true);
+      } else {
+        tokenStore.clear();
+        setIsAuthed(false);
+        setError(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -229,6 +265,42 @@ function App() {
     }
     void initSession();
   }, [isAuthed]);
+
+  useEffect(() => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    void refreshDevices().catch(() => {
+      setError("No connection available");
+    });
+  }, [isAuthed, online]);
+
+  useEffect(() => {
+    if (!isAuthed) {
+      return;
+    }
+
+    const refreshBluetoothPresence = async (): Promise<void> => {
+      const names = await getBluetoothConnectedDeviceNames();
+      setBluetoothConnectedNames(names);
+    };
+
+    void refreshBluetoothPresence();
+    const timer = window.setInterval(() => {
+      void refreshBluetoothPresence();
+    }, 12_000);
+
+    return () => window.clearInterval(timer);
+  }, [isAuthed]);
+
+  useEffect(() => {
+    const bluetoothSet = new Set(bluetoothConnectedNames);
+    setDevices((prev) => prev.map((device) => ({
+      ...device,
+      isBluetoothOnline: bluetoothSet.has(device.name),
+    })));
+  }, [bluetoothConnectedNames]);
 
   useEffect(() => {
     if (!isAuthed) {
@@ -323,11 +395,19 @@ function App() {
   }, [isAuthed, locationEnabled, locationMinutes, myDeviceId]);
 
   useEffect(() => {
-    if (!selectedMapDeviceId || !isAuthed) {
+    if (!selectedMapDeviceId || !isAuthed || !online) {
       return;
     }
     void refreshMapHistory(selectedMapDeviceId);
-  }, [isAuthed, selectedMapDeviceId]);
+  }, [isAuthed, selectedMapDeviceId, online]);
+
+  const requireOnline = (): boolean => {
+    if (online) {
+      return true;
+    }
+    setError("No connection available");
+    return false;
+  };
 
   useEffect(() => {
     if (!selectedMapDeviceId) {
@@ -346,6 +426,10 @@ function App() {
   }, [devices, selectedDeviceDetailId]);
 
   const linkCurrentDevice = async (): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
     const local = await getLocalDeviceInfo();
     const alias = deviceAlias.trim() || local.hostname;
     if (alias !== deviceAlias) {
@@ -378,11 +462,19 @@ function App() {
   };
 
   const unlinkCurrentDevice = async (): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
     await api.unlinkDevice(myDeviceId);
     await refreshDevices();
   };
 
   const sendFile = async (file: File, targetDeviceId: string): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
     const created = await api.createTransfer({
       fileName: file.name,
       contentType: file.type || "application/octet-stream",
@@ -424,6 +516,10 @@ function App() {
   };
 
   const downloadTransfer = async (transfer: FileTransfer): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
     const blob = await api.downloadTransfer(transfer.id, myDeviceId);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -435,11 +531,19 @@ function App() {
   };
 
   const rejectTransfer = async (transfer: FileTransfer): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
     await api.rejectTransfer(transfer.id, myDeviceId);
     await refreshTransfers();
   };
 
   const saveNote = async (): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
     if (!noteName.trim()) {
       setError("Note name is required");
       return;
@@ -500,6 +604,10 @@ function App() {
   };
 
   const deleteNote = async (noteId: string): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
     await api.deleteNote(noteId);
     if (editingNoteId === noteId) {
       setEditingNoteId(null);
@@ -545,6 +653,10 @@ function App() {
       return;
     }
 
+    if (!requireOnline()) {
+      return;
+    }
+
     const sent = await api.sendMessage(request);
     const storedMessage: ChatMessage = {
       id: sent.id,
@@ -579,7 +691,7 @@ function App() {
   const currentDevice = devices.find((entry) => entry.id === myDeviceId) ?? null;
 
   useEffect(() => {
-    if (!isAuthed || !currentDevice) {
+    if (!isAuthed || !currentDevice || !online) {
       return;
     }
 
@@ -627,7 +739,7 @@ function App() {
     }, 30_000);
 
     return () => window.clearInterval(timer);
-  }, [isAuthed, currentDevice, myDeviceId]);
+  }, [isAuthed, currentDevice, myDeviceId, online]);
 
   useEffect(() => {
     if (!isAuthed || devices.length === 0) {
@@ -669,8 +781,8 @@ function App() {
     );
   }
 
-  const onlineDevices = devices.filter((entry) => entry.isOnline);
-  const offlineDevices = devices.filter((entry) => !entry.isOnline);
+  const onlineDevices = devices.filter((entry) => entry.isOnline || entry.isBluetoothOnline === true);
+  const offlineDevices = devices.filter((entry) => !entry.isOnline && entry.isBluetoothOnline !== true);
 
   const formatBattery = (device: Device): string => {
     return device.batteryLevel >= 0 ? `${device.batteryLevel}%` : "Not available";
@@ -711,13 +823,13 @@ function App() {
 
         {!online && (
           <section className="panel no-connection">
-            <p className="no-connection-title">No connection</p>
-            <p className="muted">Connect to the internet to load data.</p>
+            <p className="no-connection-title">No connection available</p>
+            <p className="muted">Using cached data where available. Online actions are temporarily disabled.</p>
             <button onClick={() => void initSession()} type="button">Retry</button>
           </section>
         )}
 
-        {online && activeTab === "Devices" && (
+        {activeTab === "Devices" && (
           <DevicesTab
             onlineDevices={onlineDevices}
             offlineDevices={offlineDevices}
@@ -738,7 +850,7 @@ function App() {
           />
         )}
 
-        {online && activeTab === "Files" && (
+        {activeTab === "Files" && (
           <FilesTab
             transfers={transfers}
             filePickerRef={filePickerRef}
@@ -748,7 +860,7 @@ function App() {
           />
         )}
 
-        {online && activeTab === "Notes" && (
+        {activeTab === "Notes" && (
           <NotesTab
             notes={notes}
             editingNoteId={editingNoteId}
@@ -772,7 +884,7 @@ function App() {
           />
         )}
 
-        {online && activeTab === "Messaging" && (
+        {activeTab === "Messaging" && (
           <MessagingTab
             devices={devices}
             chatSummaries={chatSummaries}
@@ -787,7 +899,7 @@ function App() {
           />
         )}
 
-        {online && activeTab === "Map" && (
+        {activeTab === "Map" && (
           <MapTab
             devices={devices}
             selectedMapDevice={selectedMapDevice}
@@ -799,7 +911,12 @@ function App() {
             locationMinutes={locationMinutes}
             onSelectMapDevice={setSelectedMapDeviceId}
             onSetMapDetailOpen={setMapDetailOpen}
-            onRefreshMapHistory={(deviceId) => void refreshMapHistory(deviceId)}
+            onRefreshMapHistory={(deviceId) => {
+              if (!requireOnline()) {
+                return;
+              }
+              void refreshMapHistory(deviceId);
+            }}
             onSetLocationEnabled={(enabled) => {
               setLocationEnabled(enabled);
               settingsStore.setLocationEnabled(enabled);
@@ -811,7 +928,7 @@ function App() {
           />
         )}
 
-        {online && activeTab === "Settings" && (
+        {activeTab === "Settings" && (
           <SettingsTab
             profile={profile}
             devices={devices}

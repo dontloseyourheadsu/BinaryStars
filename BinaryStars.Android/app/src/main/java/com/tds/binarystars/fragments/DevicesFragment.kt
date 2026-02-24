@@ -1,5 +1,8 @@
 package com.tds.binarystars.fragments
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -13,10 +16,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
+import androidx.core.content.ContextCompat
 import com.tds.binarystars.R
 import com.tds.binarystars.adapter.DevicesAdapter
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.DeviceTypeDto
+import com.tds.binarystars.bluetooth.BluetoothChatManager
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 import kotlinx.coroutines.launch
@@ -29,6 +36,7 @@ import android.widget.ImageView
 import com.tds.binarystars.MainActivity
 import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
+import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.storage.SettingsStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -42,6 +50,28 @@ class DevicesFragment : Fragment(), MessagingEventListener {
 
     private fun isTabletLayout(): Boolean {
         return resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
+    }
+
+    private var bluetoothAvailableDevices: Set<String> = emptySet()
+
+    private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
+        bluetoothAvailableDevices = devices.keys
+        refreshDevices()
+    }
+
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.any { it }
+        if (granted) {
+            startBluetoothFeatures()
+        }
+    }
+
+    private val enableBluetoothLauncher = registerForActivityResult(StartActivityForResult()) {
+        if (BluetoothChatManager.isEnabled()) {
+            startBluetoothFeatures()
+        }
     }
 
     /**
@@ -88,6 +118,16 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         MessagingSocketManager.removeListener(this)
     }
 
+    override fun onStart() {
+        super.onStart()
+        ensureBluetoothReady()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stopBluetoothFeatures()
+    }
+
     override fun onChatUpdated(deviceId: String) {
         // No-op.
     }
@@ -116,28 +156,44 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         val contentView = view.findViewById<View>(R.id.viewContent)
         val noConnectionView = view.findViewById<View>(R.id.viewNoConnection)
         val retryButton = view.findViewById<Button>(R.id.btnRetry)
+        val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
+
+        val isTablet = isTabletLayout()
+        rvOnline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
+        rvOffline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
+
+        val context = requireContext()
+        val currentDeviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        val currentDeviceName = android.os.Build.MODEL
 
         retryButton.setOnClickListener {
             refreshDevices()
         }
 
         if (!NetworkUtils.isOnline(requireContext())) {
-            contentView.visibility = View.GONE
-            noConnectionView.visibility = View.VISIBLE
+            val cachedDevices = withBluetoothPresence(DeviceCacheStorage.getDevices())
+            if (cachedDevices.isNotEmpty()) {
+                applyDevicesToUi(
+                    devices = cachedDevices,
+                    currentDeviceId = currentDeviceId,
+                    currentDeviceName = currentDeviceName,
+                    rvOnline = rvOnline,
+                    rvOffline = rvOffline,
+                    btnLinkDevice = btnLinkDevice,
+                    tvHeaderSubtitle = tvHeaderSubtitle,
+                    fromCache = true
+                )
+                contentView.visibility = View.VISIBLE
+                noConnectionView.visibility = View.GONE
+            } else {
+                contentView.visibility = View.GONE
+                noConnectionView.visibility = View.VISIBLE
+            }
             return
         }
 
         contentView.visibility = View.VISIBLE
         noConnectionView.visibility = View.GONE
-
-        val isTablet = isTabletLayout()
-        rvOnline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
-        rvOffline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
-
-        // Get Current Device ID
-        val context = requireContext()
-        val currentDeviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-        val currentDeviceName = android.os.Build.MODEL
         val telemetryEnabled = SettingsStorage.isDeviceTelemetryEnabled(true)
 
         lifecycleScope.launch {
@@ -145,7 +201,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                 val response = ApiClient.apiService.getDevices()
                 if (response.isSuccessful && response.body() != null) {
                     val dtos = response.body()!!
-                    val devices = dtos.map { dto ->
+                    val devices = withBluetoothPresence(dtos.map { dto ->
                         val effectiveOnline = if (dto.id == currentDeviceId && !telemetryEnabled) {
                             false
                         } else {
@@ -171,47 +227,129 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                             wifiDownloadSpeed = dto.wifiDownloadSpeed,
                             lastSeen = System.currentTimeMillis()
                         )
-                    }
-                    
-                    val onlineDevices = devices.filter { it.isOnline }
-                    val offlineDevices = devices.filter { !it.isOnline }
-                    val isRegistered = devices.any { it.id == currentDeviceId }
-                    
-                    // Update header subtitle if view exists
-                    val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
-                    if (tvHeaderSubtitle != null) {
-                        tvHeaderSubtitle.text = "${onlineDevices.size} devices online"
-                    }
+                    })
 
-                    // Setup RecyclerViews for online/offline sections
-                    rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
-                        openDeviceDetail(device)
-                    }
-                    rvOffline.adapter = DevicesAdapter(offlineDevices) { device ->
-                        openDeviceDetail(device)
-                    }
-                    
-                    // Setup Button
-                    if (isRegistered) {
-                        btnLinkDevice.text = "Unlink This Device"
-                        btnLinkDevice.visibility = View.VISIBLE
-                        btnLinkDevice.setOnClickListener {
-                            (activity as? MainActivity)?.unlinkDevice(currentDeviceId)
-                        }
-                    } else {
-                        btnLinkDevice.text = "Link This Device"
-                        btnLinkDevice.visibility = View.VISIBLE
-                         btnLinkDevice.setOnClickListener {
-                            (activity as? MainActivity)?.registerDevice(currentDeviceId, currentDeviceName)
-                        }
-                    }
+                    DeviceCacheStorage.saveDevices(devices)
+                    applyDevicesToUi(
+                        devices = devices,
+                        currentDeviceId = currentDeviceId,
+                        currentDeviceName = currentDeviceName,
+                        rvOnline = rvOnline,
+                        rvOffline = rvOffline,
+                        btnLinkDevice = btnLinkDevice,
+                        tvHeaderSubtitle = tvHeaderSubtitle,
+                        fromCache = false
+                    )
                 } else {
                     Toast.makeText(context, "Failed to load devices: ${response.code()}", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-               // Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-               // e.printStackTrace()
+                val cachedDevices = withBluetoothPresence(DeviceCacheStorage.getDevices())
+                if (cachedDevices.isNotEmpty()) {
+                    applyDevicesToUi(
+                        devices = cachedDevices,
+                        currentDeviceId = currentDeviceId,
+                        currentDeviceName = currentDeviceName,
+                        rvOnline = rvOnline,
+                        rvOffline = rvOffline,
+                        btnLinkDevice = btnLinkDevice,
+                        tvHeaderSubtitle = tvHeaderSubtitle,
+                        fromCache = true
+                    )
+                }
             }
+        }
+    }
+
+    private fun applyDevicesToUi(
+        devices: List<Device>,
+        currentDeviceId: String,
+        currentDeviceName: String,
+        rvOnline: RecyclerView,
+        rvOffline: RecyclerView,
+        btnLinkDevice: Button,
+        tvHeaderSubtitle: TextView?,
+        fromCache: Boolean
+    ) {
+        val onlineDevices = devices.filter { it.isOnline || it.isBluetoothOnline }
+        val offlineDevices = devices.filter { !it.isOnline && !it.isBluetoothOnline }
+        val isRegistered = devices.any { it.id == currentDeviceId }
+
+        tvHeaderSubtitle?.text = if (fromCache) {
+            "Offline mode · ${onlineDevices.size} devices online"
+        } else {
+            "${onlineDevices.size} devices online"
+        }
+
+        rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
+            openDeviceDetail(device)
+        }
+        rvOffline.adapter = DevicesAdapter(offlineDevices) { device ->
+            openDeviceDetail(device)
+        }
+
+        btnLinkDevice.text = if (isRegistered) "Unlink This Device" else "Link This Device"
+        btnLinkDevice.visibility = View.VISIBLE
+        btnLinkDevice.setOnClickListener {
+            if (!NetworkUtils.isOnline(requireContext())) {
+                Toast.makeText(requireContext(), "No connection available", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (isRegistered) {
+                (activity as? MainActivity)?.unlinkDevice(currentDeviceId)
+            } else {
+                (activity as? MainActivity)?.registerDevice(currentDeviceId, currentDeviceName)
+            }
+        }
+    }
+
+    private fun withBluetoothPresence(devices: List<Device>): List<Device> {
+        return devices.map { device ->
+            device.copy(isBluetoothOnline = bluetoothAvailableDevices.contains(device.name))
+        }
+    }
+
+    private fun ensureBluetoothReady() {
+        if (!BluetoothChatManager.isSupported()) {
+            bluetoothAvailableDevices = emptySet()
+            return
+        }
+        if (!hasBluetoothPermissions()) {
+            requestBluetoothPermissions()
+            return
+        }
+        if (!BluetoothChatManager.isEnabled()) {
+            enableBluetoothLauncher.launch(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        }
+        startBluetoothFeatures()
+    }
+
+    private fun startBluetoothFeatures() {
+        BluetoothChatManager.acquireDiscovery(requireContext(), bluetoothDiscoveryListener)
+    }
+
+    private fun stopBluetoothFeatures() {
+        BluetoothChatManager.releaseDiscovery(requireContext(), bluetoothDiscoveryListener)
+    }
+
+    private fun hasBluetoothPermissions(): Boolean {
+        val permissions = requiredBluetoothPermissions()
+        return permissions.all { permission ->
+            ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestBluetoothPermissions() {
+        bluetoothPermissionLauncher.launch(requiredBluetoothPermissions())
+    }
+
+    private fun requiredBluetoothPermissions(): Array<String> {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 

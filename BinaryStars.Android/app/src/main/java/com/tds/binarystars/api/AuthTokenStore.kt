@@ -38,6 +38,15 @@ object AuthTokenStore {
         return if (expiresAt > now) token else null
     }
 
+    /** Returns the stored token even if expired, used for offline session continuity. */
+    fun getStoredToken(): String? {
+        val token = prefs?.getString(KEY_ACCESS_TOKEN, null)
+        return token?.takeIf { it.isNotBlank() }
+    }
+
+    /** Indicates whether the app has any persisted login session. */
+    fun hasStoredSession(): Boolean = !getStoredToken().isNullOrBlank()
+
     /**
      * Clears the stored token and expiration data.
      */

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader, Write};
 use std::net::IpAddr;
 use std::net::TcpListener;
+use std::process::Command;
 use std::time::Duration;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rand::{distributions::Alphanumeric, Rng};
@@ -15,9 +16,54 @@ use url::Url;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_device_info, oauth_get_provider_token])
+        .invoke_handler(tauri::generate_handler![
+            get_device_info,
+            oauth_get_provider_token,
+            get_bluetooth_connected_device_names
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn get_bluetooth_connected_device_names() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = Command::new("bluetoothctl")
+            .args(["devices", "Connected"])
+            .output();
+
+        let output = match output {
+            Ok(value) => value,
+            Err(_) => return Ok(Vec::new()),
+        };
+
+        if !output.status.success() {
+            return Ok(Vec::new());
+        }
+
+        let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+        let names = stdout
+            .lines()
+            .filter_map(|line| {
+                if !line.starts_with("Device ") {
+                    return None;
+                }
+                let mut parts = line.split_whitespace();
+                let _device = parts.next();
+                let _mac = parts.next();
+                let name = parts.collect::<Vec<&str>>().join(" ").trim().to_string();
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(name)
+                }
+            })
+            .collect::<Vec<String>>();
+
+        Ok(names)
+    })
+    .await
+    .map_err(|e| format!("spawn error: {}", e))?
 }
 
 #[derive(Deserialize)]
