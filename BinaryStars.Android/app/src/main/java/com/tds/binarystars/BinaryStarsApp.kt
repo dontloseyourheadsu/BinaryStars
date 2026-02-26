@@ -6,6 +6,7 @@ import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.storage.ChatStorage
 import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.storage.FileTransferStorage
+import com.tds.binarystars.storage.LocationCacheStorage
 import com.tds.binarystars.storage.NotesStorage
 import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.location.LocationUpdateScheduler
@@ -23,6 +24,7 @@ class BinaryStarsApp : Application() {
         NotesStorage.init(this)
         FileTransferStorage.init(this)
         DeviceCacheStorage.init(this)
+        LocationCacheStorage.init(this)
         MapLibre.getInstance(this)
 
         if (SettingsStorage.areLocationUpdatesEnabled(false)) {
