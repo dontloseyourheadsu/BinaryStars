@@ -47,11 +47,16 @@ class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Auto-login if a valid token is stored
-        if (AuthTokenStore.hasStoredSession()) {
+        // Auto-login only when the token is still valid
+        if (AuthTokenStore.getToken() != null) {
             startActivity(Intent(this@LoginActivity, MainActivity::class.java))
             finish()
             return
+        }
+
+        // Clear stale/expired sessions so user can authenticate again cleanly
+        if (AuthTokenStore.hasStoredSession()) {
+            AuthTokenStore.clear()
         }
 
         setContentView(R.layout.activity_login)

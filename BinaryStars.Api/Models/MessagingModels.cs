@@ -63,6 +63,27 @@ public record DevicePresenceEvent(
     DateTimeOffset OccurredAt);
 
 /// <summary>
+/// Event emitted when a device reports a fresh location update.
+/// </summary>
+/// <param name="Id">The event identifier.</param>
+/// <param name="UserId">The owning user identifier.</param>
+/// <param name="DeviceId">The source device identifier.</param>
+/// <param name="Latitude">The reported latitude.</param>
+/// <param name="Longitude">The reported longitude.</param>
+/// <param name="AccuracyMeters">Optional GPS accuracy in meters.</param>
+/// <param name="RecordedAt">The timestamp attached to the location sample.</param>
+/// <param name="OccurredAt">The server timestamp when this event was emitted.</param>
+public record LocationUpdateEvent(
+    string Id,
+    Guid UserId,
+    string DeviceId,
+    double Latitude,
+    double Longitude,
+    double? AccuracyMeters,
+    DateTimeOffset RecordedAt,
+    DateTimeOffset OccurredAt);
+
+/// <summary>
 /// Envelope used for websocket payloads.
 /// </summary>
 /// <param name="Type">The payload type string.</param>

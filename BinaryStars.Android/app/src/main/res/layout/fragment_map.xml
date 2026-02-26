@@ -39,9 +39,56 @@
                     android:paddingTop="16dp"
                     android:paddingBottom="8dp" />
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/carbon_bg_panel"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Share this device location in background"
+                            android:textColor="@color/carbon_text_main"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <Switch
+                            android:id="@+id/switchLocationUpdates"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Update interval"
+                        android:textColor="@color/carbon_text_muted"
+                        android:textSize="12sp" />
+
+                    <Spinner
+                        android:id="@+id/spinnerUpdateInterval"
+                        android:layout_width="match_parent"
+                        android:layout_height="40dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@color/bg_light" />
+                </LinearLayout>
+
                 <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/rvDeviceList"
@@ -163,50 +210,13 @@
                             android:paddingTop="16dp"
                             android:paddingBottom="8dp" />
 
-                        <LinearLayout
+                        <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginHorizontal="16dp"
-                            android:background="@color/carbon_bg_panel"
-                            android:orientation="vertical"
-                            android:padding="12dp">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="Share location in background"
-                                    android:textColor="@color/carbon_text_main"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
-
-                                <Switch
-                                    android:id="@+id/switchLocationUpdates"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content" />
-                            </LinearLayout>
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="8dp"
-                                android:text="Update interval"
-                                android:textColor="@color/carbon_text_muted"
-                                android:textSize="12sp" />
-
-                            <Spinner
-                                android:id="@+id/spinnerUpdateInterval"
-                                android:layout_width="match_parent"
-                                android:layout_height="40dp"
-                                android:layout_marginTop="6dp"
-                                android:background="@color/bg_light" />
-                        </LinearLayout>
+                            android:text="Location sharing is managed from the devices list"
+                            android:textColor="@color/carbon_text_muted"
+                            android:textSize="13sp" />
                     </LinearLayout>
                 </androidx.core.widget.NestedScrollView>
             </LinearLayout>

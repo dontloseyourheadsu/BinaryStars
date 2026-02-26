@@ -15,6 +15,7 @@ import type {
   DevicePresenceEvent,
   Device,
   FileTransfer,
+  LocationUpdateEvent,
   LocationPoint,
   MessageDto,
   Note,
@@ -71,6 +72,7 @@ function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(cacheStore.getMessages());
   const [profile, setProfile] = useState<AccountProfile | null>(cacheStore.getProfile());
   const [history, setHistory] = useState<LocationPoint[]>([]);
+  const [mapFocusPoint, setMapFocusPoint] = useState<LocationPoint | null>(null);
   const [selectedMapDeviceId, setSelectedMapDeviceId] = useState("");
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
   const [selectedDeviceDetailId, setSelectedDeviceDetailId] = useState("");
@@ -137,6 +139,15 @@ function App() {
   );
 
   const latestPoint = history[0] ?? null;
+
+  useEffect(() => {
+    if (!latestPoint) {
+      setMapFocusPoint(null);
+      return;
+    }
+
+    setMapFocusPoint(latestPoint);
+  }, [latestPoint, selectedMapDeviceId]);
 
   const chatDevice = useMemo(
     () => devices.find((entry) => entry.id === selectedChatDeviceId) ?? null,
@@ -235,6 +246,25 @@ function App() {
     return [...remote, ...local]
       .sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt))
       .slice(0, 500);
+  };
+
+  const applyLiveLocationUpdate = (payload: LocationUpdateEvent): void => {
+    const currentPoint: LocationPoint = {
+      id: `current-${payload.deviceId}`,
+      title: "Live",
+      recordedAt: payload.recordedAt,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+    };
+
+    setHistory((prev) => {
+      const withoutCurrent = prev.filter((entry) => entry.id !== `current-${payload.deviceId}`);
+      return [currentPoint, ...withoutCurrent].slice(0, 500);
+    });
+
+    if (selectedMapDeviceId === payload.deviceId) {
+      setMapFocusPoint(currentPoint);
+    }
   };
 
   const saveLocalLocationPoint = (payload: {
@@ -448,6 +478,14 @@ function App() {
           return;
         }
 
+        if (messageType === "location_update") {
+          const payload = envelope.payload as LocationUpdateEvent;
+          if (payload.deviceId === selectedMapDeviceId) {
+            applyLiveLocationUpdate(payload);
+          }
+          return;
+        }
+
         if (messageType !== "message") {
           return;
         }
@@ -471,18 +509,49 @@ function App() {
       socket.close();
       wsRef.current = null;
     };
-  }, [isAuthed, myDeviceId]);
+  }, [isAuthed, myDeviceId, selectedMapDeviceId]);
 
   usePresenceHeartbeat(isAuthed, myDeviceId);
 
   useEffect(() => {
-    if (!isAuthed || !locationEnabled) {
+    if (!isAuthed) {
       return;
     }
     settingsStore.setLocationEnabled(locationEnabled);
     settingsStore.setLocationMinutes(locationMinutes);
 
-    const run = async (): Promise<void> => {
+    if (!locationEnabled) {
+      return;
+    }
+
+    const runLive = async (): Promise<void> => {
+      try {
+        const position = await getCurrentPosition();
+        const payload = {
+          deviceId: myDeviceId,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+          recordedAt: new Date().toISOString(),
+        };
+
+        if (!online) {
+          return;
+        }
+
+        const wifiConnected = await isWifiConnected();
+        setWifiAvailable(wifiConnected);
+        if (!wifiConnected) {
+          return;
+        }
+
+        await api.sendLiveLocation(payload);
+      } catch {
+        // noop
+      }
+    };
+
+    const runPersisted = async (): Promise<void> => {
       try {
         const position = await getCurrentPosition();
         const recordedAt = new Date().toISOString();
@@ -525,9 +594,14 @@ function App() {
       }
     };
 
-    void run();
-    const timer = window.setInterval(run, locationMinutes * 60_000);
-    return () => window.clearInterval(timer);
+    void runLive();
+    void runPersisted();
+    const liveTimer = window.setInterval(runLive, 15_000);
+    const persistedTimer = window.setInterval(runPersisted, locationMinutes * 60_000);
+    return () => {
+      window.clearInterval(liveTimer);
+      window.clearInterval(persistedTimer);
+    };
   }, [isAuthed, locationEnabled, locationMinutes, myDeviceId, online, selectedMapDeviceId]);
 
   useEffect(() => {
@@ -1047,6 +1121,7 @@ function App() {
             devices={devices}
             selectedMapDevice={selectedMapDevice}
             selectedMapDeviceId={selectedMapDeviceId}
+            mapFocusPoint={mapFocusPoint}
             latestPoint={latestPoint}
             history={history}
             mapDetailOpen={mapDetailOpen}
@@ -1056,6 +1131,9 @@ function App() {
             onSetMapDetailOpen={setMapDetailOpen}
             onRefreshMapHistory={(deviceId) => {
               void refreshMapHistory(deviceId);
+            }}
+            onSelectHistoryPoint={(point) => {
+              setMapFocusPoint(point);
             }}
             onSetLocationEnabled={(enabled) => {
               setLocationEnabled(enabled);

@@ -5,6 +5,7 @@ type Props = {
   devices: Device[];
   selectedMapDevice: Device | null;
   selectedMapDeviceId: string;
+  mapFocusPoint: LocationPoint | null;
   latestPoint: LocationPoint | null;
   history: LocationPoint[];
   mapDetailOpen: boolean;
@@ -13,6 +14,7 @@ type Props = {
   onSelectMapDevice: (deviceId: string) => void;
   onSetMapDetailOpen: (open: boolean) => void;
   onRefreshMapHistory: (deviceId: string) => void;
+  onSelectHistoryPoint: (point: LocationPoint) => void;
   onSetLocationEnabled: (enabled: boolean) => void;
   onSetLocationMinutes: (minutes: number) => void;
 };
@@ -21,6 +23,7 @@ export default function MapTab({
   devices,
   selectedMapDevice,
   selectedMapDeviceId,
+  mapFocusPoint,
   latestPoint,
   history,
   mapDetailOpen,
@@ -29,9 +32,14 @@ export default function MapTab({
   onSelectMapDevice,
   onSetMapDetailOpen,
   onRefreshMapHistory,
+  onSelectHistoryPoint,
   onSetLocationEnabled,
   onSetLocationMinutes,
 }: Props) {
+  const activePoint = mapFocusPoint ?? latestPoint;
+  const centerLatitude = activePoint?.latitude ?? 20;
+  const centerLongitude = activePoint?.longitude ?? 0;
+
   return (
     <section className="panel-grid">
       {!mapDetailOpen && (
@@ -54,45 +62,10 @@ export default function MapTab({
             ))}
           </div>
           {devices.length === 0 && <p className="empty-state">No devices available</p>}
-        </div>
-      )}
-      {mapDetailOpen && (
-        <div className="panel">
-          <div className="split-row">
-            <button className="ghost" onClick={() => onSetMapDetailOpen(false)} type="button">Back</button>
-            <h3>{selectedMapDevice?.name ?? "Map"}</h3>
-            <button onClick={() => selectedMapDeviceId && onRefreshMapHistory(selectedMapDeviceId)} type="button">Live</button>
-          </div>
-          <div className="map-wrap">
-            {latestPoint ? (
-              <MapContainer center={[latestPoint.latitude, latestPoint.longitude]} zoom={13} style={{ height: "100%", width: "100%" }}>
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <Marker position={[latestPoint.latitude, latestPoint.longitude]}>
-                  <Popup>{selectedMapDevice?.name ?? "Device"}</Popup>
-                </Marker>
-              </MapContainer>
-            ) : (
-              <div className="map-empty">No location history available</div>
-            )}
-          </div>
-          <p className="section-label">Location History</p>
-          <div className="list compact">
-            {history.map((point) => (
-              <article className="row-card static" key={point.id}>
-                <strong>{point.title}</strong>
-                <span className="muted">
-                  {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} · {new Date(point.recordedAt).toLocaleString()}
-                </span>
-              </article>
-            ))}
-          </div>
           <p className="section-label">Location Updates</p>
           <div className="panel inset-panel">
             <label className="inline">
-              Share location in background
+              Share this device location in background
               <input checked={locationEnabled} onChange={(event) => onSetLocationEnabled(event.target.checked)} type="checkbox" />
             </label>
             <select
@@ -104,6 +77,45 @@ export default function MapTab({
               <option value={30}>30 minutes</option>
               <option value={60}>60 minutes</option>
             </select>
+          </div>
+        </div>
+      )}
+      {mapDetailOpen && (
+        <div className="panel">
+          <div className="split-row">
+            <button className="ghost" onClick={() => onSetMapDetailOpen(false)} type="button">Back</button>
+            <h3>{selectedMapDevice?.name ?? "Map"}</h3>
+            <button onClick={() => selectedMapDeviceId && onRefreshMapHistory(selectedMapDeviceId)} type="button">Live</button>
+          </div>
+          <div className="map-wrap">
+            <MapContainer
+              center={[centerLatitude, centerLongitude]}
+              key={activePoint ? `${activePoint.id}-${activePoint.recordedAt}` : "map-empty-center"}
+              zoom={activePoint ? 15.5 : 2}
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {activePoint && (
+                <Marker position={[activePoint.latitude, activePoint.longitude]}>
+                  <Popup>{activePoint.title}</Popup>
+                </Marker>
+              )}
+            </MapContainer>
+            {!activePoint && <div className="map-empty">No location history available</div>}
+          </div>
+          <p className="section-label">Location History</p>
+          <div className="list compact">
+            {history.map((point) => (
+              <button className="row-card" key={point.id} onClick={() => onSelectHistoryPoint(point)} type="button">
+                <strong>{point.title}</strong>
+                <span className="muted">
+                  {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} · {new Date(point.recordedAt).toLocaleString()}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       )}

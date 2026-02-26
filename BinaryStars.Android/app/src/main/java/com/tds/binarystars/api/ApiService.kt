@@ -113,6 +113,10 @@ interface ApiService {
     @POST("locations")
     suspend fun sendLocation(@Body request: LocationUpdateRequestDto): Response<Void>
 
+    /** Send a live location update without persisting to history. */
+    @POST("locations/live")
+    suspend fun sendLiveLocation(@Body request: LocationUpdateRequestDto): Response<Void>
+
     /** Fetch location history for a device. */
     @GET("locations/history")
     suspend fun getLocationHistory(@Query("deviceId") deviceId: String): Response<List<LocationHistoryPointDto>>

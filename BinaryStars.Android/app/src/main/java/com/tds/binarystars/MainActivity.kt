@@ -15,6 +15,7 @@ import com.tds.binarystars.fragments.SettingsFragment
 
 import android.provider.Settings
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.RegisterDeviceRequest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
@@ -43,6 +44,14 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (AuthTokenStore.getToken() == null) {
+            AuthTokenStore.clear()
+            startActivity(android.content.Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_main)
 
         registerReconnectListener()

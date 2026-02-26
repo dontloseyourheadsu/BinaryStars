@@ -230,3 +230,15 @@ data class DevicePresenceEventDto(
     val lastSeen: String,
     val occurredAt: String
 )
+
+/** Device live location event payload. */
+data class LocationUpdateEventDto(
+    val id: String,
+    val userId: String,
+    val deviceId: String,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracyMeters: Double?,
+    val recordedAt: String,
+    val occurredAt: String
+)
