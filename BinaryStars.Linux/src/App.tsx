@@ -6,7 +6,7 @@ import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "./App.css";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
-import { getBluetoothConnectedDeviceNames, getLocalDeviceInfo } from "./tauriDeviceInfo";
+import { getBluetoothConnectedDeviceNames, getLocalDeviceInfo, isWifiConnected } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { ThemeMode } from "./storage";
 import type {
@@ -84,6 +84,7 @@ function App() {
   const [systemTheme, setSystemTheme] = useState<EffectiveTheme>(getSystemTheme());
   const [locationEnabled, setLocationEnabled] = useState(settingsStore.getLocationEnabled(false));
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
+  const [wifiAvailable, setWifiAvailable] = useState(true);
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
   const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
@@ -216,9 +217,97 @@ function App() {
     setTransfers(next);
   };
 
+  const toLocalLocationPoint = (payload: {
+    deviceId: string;
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+  }) => ({
+    id: crypto.randomUUID(),
+    deviceId: payload.deviceId,
+    title: "Local snapshot",
+    recordedAt: payload.recordedAt,
+    latitude: payload.latitude,
+    longitude: payload.longitude,
+  });
+
+  const mergeHistory = (remote: LocationPoint[], local: LocationPoint[]): LocationPoint[] => {
+    return [...remote, ...local]
+      .sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt))
+      .slice(0, 500);
+  };
+
+  const saveLocalLocationPoint = (payload: {
+    deviceId: string;
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+  }): void => {
+    cacheStore.addLocalLocationPoint(toLocalLocationPoint(payload));
+  };
+
+  const queuePendingLocationUpload = (payload: {
+    deviceId: string;
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number | null;
+    recordedAt: string;
+  }): void => {
+    cacheStore.addPendingLocationUpload({
+      id: crypto.randomUUID(),
+      ...payload,
+    });
+  };
+
+  const flushPendingLocationUploads = async (deviceId: string): Promise<void> => {
+    const pending = cacheStore.getPendingLocationUploads(deviceId);
+    if (pending.length === 0) {
+      return;
+    }
+
+    const sentIds: string[] = [];
+    for (const item of pending) {
+      try {
+        await api.sendLocation({
+          deviceId: item.deviceId,
+          latitude: item.latitude,
+          longitude: item.longitude,
+          accuracyMeters: item.accuracyMeters,
+          recordedAt: item.recordedAt,
+        });
+        sentIds.push(item.id);
+      } catch {
+        break;
+      }
+    }
+
+    cacheStore.removePendingLocationUploads(deviceId, sentIds);
+  };
+
+  const getCurrentPosition = async (): Promise<GeolocationPosition> => {
+    return new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
+    });
+  };
+
   const refreshMapHistory = async (deviceId: string): Promise<void> => {
-    const next = await api.getLocationHistory(deviceId);
-    setHistory(next);
+    const local = cacheStore.getLocalLocationHistory(deviceId);
+    if (!online) {
+      setHistory(local);
+      return;
+    }
+
+    try {
+      const remote = await api.getLocationHistory(deviceId);
+      if (deviceId === myDeviceId) {
+        setHistory(mergeHistory(remote, local));
+        return;
+      }
+
+      setHistory(remote);
+    } catch {
+      setHistory(local);
+    }
   };
 
   const initSession = async (): Promise<void> => {
@@ -295,12 +384,38 @@ function App() {
   }, [isAuthed]);
 
   useEffect(() => {
+    if (!isAuthed) {
+      return;
+    }
+
+    const refreshWifiState = async (): Promise<void> => {
+      const connected = await isWifiConnected();
+      setWifiAvailable(connected);
+    };
+
+    void refreshWifiState();
+    const timer = window.setInterval(() => {
+      void refreshWifiState();
+    }, 12_000);
+
+    return () => window.clearInterval(timer);
+  }, [isAuthed]);
+
+  useEffect(() => {
     const bluetoothSet = new Set(bluetoothConnectedNames);
     setDevices((prev) => prev.map((device) => ({
       ...device,
       isBluetoothOnline: bluetoothSet.has(device.name),
     })));
   }, [bluetoothConnectedNames]);
+
+  useEffect(() => {
+    if (!isAuthed || !online || !wifiAvailable) {
+      return;
+    }
+
+    void flushPendingLocationUploads(myDeviceId);
+  }, [isAuthed, online, wifiAvailable, myDeviceId]);
 
   useEffect(() => {
     if (!isAuthed) {
@@ -367,35 +482,56 @@ function App() {
     settingsStore.setLocationEnabled(locationEnabled);
     settingsStore.setLocationMinutes(locationMinutes);
 
-    const run = () => {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            await api.sendLocation({
-              deviceId: myDeviceId,
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracyMeters: position.coords.accuracy,
-              recordedAt: new Date().toISOString(),
-            });
-          } catch {
-            // noop
+    const run = async (): Promise<void> => {
+      try {
+        const position = await getCurrentPosition();
+        const recordedAt = new Date().toISOString();
+        const payload = {
+          deviceId: myDeviceId,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+          recordedAt,
+        };
+
+        saveLocalLocationPoint(payload);
+
+        if (!online) {
+          queuePendingLocationUpload(payload);
+          if (selectedMapDeviceId === myDeviceId) {
+            setHistory(cacheStore.getLocalLocationHistory(myDeviceId));
           }
-        },
-        () => {
-          // noop
-        },
-        { enableHighAccuracy: true },
-      );
+          return;
+        }
+
+        const wifiConnected = await isWifiConnected();
+        setWifiAvailable(wifiConnected);
+        if (!wifiConnected) {
+          queuePendingLocationUpload(payload);
+          if (selectedMapDeviceId === myDeviceId) {
+            setHistory(cacheStore.getLocalLocationHistory(myDeviceId));
+          }
+          return;
+        }
+
+        await flushPendingLocationUploads(myDeviceId);
+        await api.sendLocation(payload);
+
+        if (selectedMapDeviceId === myDeviceId) {
+          await refreshMapHistory(myDeviceId);
+        }
+      } catch {
+        // noop
+      }
     };
 
-    run();
+    void run();
     const timer = window.setInterval(run, locationMinutes * 60_000);
     return () => window.clearInterval(timer);
-  }, [isAuthed, locationEnabled, locationMinutes, myDeviceId]);
+  }, [isAuthed, locationEnabled, locationMinutes, myDeviceId, online, selectedMapDeviceId]);
 
   useEffect(() => {
-    if (!selectedMapDeviceId || !isAuthed || !online) {
+    if (!selectedMapDeviceId || !isAuthed) {
       return;
     }
     void refreshMapHistory(selectedMapDeviceId);
@@ -829,6 +965,13 @@ function App() {
           </section>
         )}
 
+        {online && !wifiAvailable && locationEnabled && (
+          <section className="panel no-connection">
+            <p className="no-connection-title">Wi‑Fi not available</p>
+            <p className="muted">Location updates are cached locally and will sync when Wi‑Fi returns.</p>
+          </section>
+        )}
+
         {activeTab === "Devices" && (
           <DevicesTab
             onlineDevices={onlineDevices}
@@ -912,9 +1055,6 @@ function App() {
             onSelectMapDevice={setSelectedMapDeviceId}
             onSetMapDetailOpen={setMapDetailOpen}
             onRefreshMapHistory={(deviceId) => {
-              if (!requireOnline()) {
-                return;
-              }
               void refreshMapHistory(deviceId);
             }}
             onSetLocationEnabled={(enabled) => {

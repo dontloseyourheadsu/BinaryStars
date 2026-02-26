@@ -73,6 +73,7 @@ public interface ILocationHistoryReadService
 public class LocationHistoryService : ILocationHistoryWriteService, ILocationHistoryReadService
 {
     private const int DefaultLimit = 50;
+    private static readonly TimeSpan DetailedRetentionWindow = TimeSpan.FromDays(1);
     private readonly ILocationHistoryRepository _repository;
     private readonly IDeviceRepository _deviceRepository;
 
@@ -108,6 +109,9 @@ public class LocationHistoryService : ILocationHistoryWriteService, ILocationHis
 
         await _repository.AddAsync(entry, cancellationToken);
         await _repository.SaveChangesAsync(cancellationToken);
+
+        var detailedCutoffUtc = DateTimeOffset.UtcNow - DetailedRetentionWindow;
+        await _repository.CompactOlderEntriesToHourlyAsync(userId, request.DeviceId, detailedCutoffUtc, cancellationToken);
 
         return Result.Success();
     }

@@ -9,6 +9,26 @@ const THEME_KEY = "binarystars.theme.mode";
 const LEGACY_THEME_DARK_KEY = "binarystars.theme.dark";
 const LOCATION_ENABLED_KEY = "binarystars.location.enabled";
 const LOCATION_INTERVAL_KEY = "binarystars.location.minutes";
+const LOCATION_LOCAL_HISTORY_KEY = "binarystars.location.localHistory";
+const LOCATION_PENDING_UPLOADS_KEY = "binarystars.location.pendingUploads";
+
+export interface LocalLocationPoint {
+  id: string;
+  deviceId: string;
+  title: string;
+  recordedAt: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface PendingLocationUpload {
+  id: string;
+  deviceId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  recordedAt: string;
+}
 
 function readJson<T>(key: string, fallback: T): T {
   const raw = localStorage.getItem(key);
@@ -56,6 +76,34 @@ export const cacheStore = {
   },
   setProfile(profile: AccountProfile | null): void {
     writeJson(PROFILE_KEY, profile);
+  },
+  getLocalLocationHistory(deviceId: string): LocalLocationPoint[] {
+    const all = readJson<LocalLocationPoint[]>(LOCATION_LOCAL_HISTORY_KEY, []);
+    return all
+      .filter((entry) => entry.deviceId === deviceId)
+      .sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt));
+  },
+  addLocalLocationPoint(point: LocalLocationPoint): void {
+    const next = [point, ...readJson<LocalLocationPoint[]>(LOCATION_LOCAL_HISTORY_KEY, [])].slice(0, 2_000);
+    writeJson(LOCATION_LOCAL_HISTORY_KEY, next);
+  },
+  getPendingLocationUploads(deviceId: string): PendingLocationUpload[] {
+    const all = readJson<PendingLocationUpload[]>(LOCATION_PENDING_UPLOADS_KEY, []);
+    return all.filter((entry) => entry.deviceId === deviceId);
+  },
+  addPendingLocationUpload(upload: PendingLocationUpload): void {
+    const next = [...readJson<PendingLocationUpload[]>(LOCATION_PENDING_UPLOADS_KEY, []), upload].slice(-1_000);
+    writeJson(LOCATION_PENDING_UPLOADS_KEY, next);
+  },
+  removePendingLocationUploads(deviceId: string, ids: string[]): void {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const idSet = new Set(ids);
+    const next = readJson<PendingLocationUpload[]>(LOCATION_PENDING_UPLOADS_KEY, [])
+      .filter((entry) => entry.deviceId !== deviceId || !idSet.has(entry.id));
+    writeJson(LOCATION_PENDING_UPLOADS_KEY, next);
   },
 };
 

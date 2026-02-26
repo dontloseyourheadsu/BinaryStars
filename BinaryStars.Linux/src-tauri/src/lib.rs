@@ -19,7 +19,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_device_info,
             oauth_get_provider_token,
-            get_bluetooth_connected_device_names
+            get_bluetooth_connected_device_names,
+            is_wifi_connected
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -61,6 +62,46 @@ async fn get_bluetooth_connected_device_names() -> Result<Vec<String>, String> {
             .collect::<Vec<String>>();
 
         Ok(names)
+    })
+    .await
+    .map_err(|e| format!("spawn error: {}", e))?
+}
+
+#[tauri::command]
+async fn is_wifi_connected() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = Command::new("nmcli")
+            .args(["-t", "-f", "TYPE,STATE", "device"])
+            .output();
+
+        if let Ok(value) = output {
+            if value.status.success() {
+                let stdout = String::from_utf8(value.stdout).unwrap_or_default();
+                let has_wifi = stdout.lines().any(|line| {
+                    let mut parts = line.split(':');
+                    let device_type = parts.next().unwrap_or_default().trim();
+                    let state = parts.next().unwrap_or_default().trim();
+                    device_type.eq_ignore_ascii_case("wifi") && state.eq_ignore_ascii_case("connected")
+                });
+                return Ok(has_wifi);
+            }
+        }
+
+        let interfaces = if_addrs::get_if_addrs().map_err(|e| format!("if_addrs error: {}", e))?;
+        let has_wireless = interfaces.into_iter().any(|iface| {
+            let name = iface.name.to_lowercase();
+            let looks_wireless = name.starts_with("wl") || name.contains("wifi") || name.contains("wlan");
+            if !looks_wireless {
+                return false;
+            }
+
+            match iface.ip() {
+                IpAddr::V4(v4) => !v4.is_loopback(),
+                IpAddr::V6(v6) => !v6.is_loopback(),
+            }
+        });
+
+        Ok(has_wireless)
     })
     .await
     .map_err(|e| format!("spawn error: {}", e))?

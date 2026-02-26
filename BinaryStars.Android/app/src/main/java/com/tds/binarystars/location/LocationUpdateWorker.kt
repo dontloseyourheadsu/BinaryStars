@@ -11,6 +11,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Tasks
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.LocationUpdateRequestDto
+import com.tds.binarystars.storage.LocationCacheStorage
 import com.tds.binarystars.util.NetworkUtils
 import java.time.OffsetDateTime
 import java.util.concurrent.TimeUnit
@@ -29,10 +30,6 @@ class LocationUpdateWorker(
      * Gets location data and posts it to the API.
      */
     override suspend fun doWork(): Result {
-        if (!NetworkUtils.isOnline(applicationContext)) {
-            return Result.success()
-        }
-
         val hasLocationPermission = ContextCompat.checkSelfPermission(
             applicationContext,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -62,18 +59,44 @@ class LocationUpdateWorker(
         }
 
         val deviceId = Settings.Secure.getString(applicationContext.contentResolver, Settings.Secure.ANDROID_ID)
+        val recordedAt = OffsetDateTime.now().toString()
         val request = LocationUpdateRequestDto(
             deviceId = deviceId,
             latitude = location.latitude,
             longitude = location.longitude,
             accuracyMeters = location.accuracy.toDouble(),
-            recordedAt = OffsetDateTime.now().toString()
+            recordedAt = recordedAt
         )
 
+        LocationCacheStorage.saveLocalPoint(
+            deviceId = deviceId,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            recordedAt = recordedAt
+        )
+
+        if (!NetworkUtils.isOnline(applicationContext) || !NetworkUtils.isWifiConnected(applicationContext)) {
+            LocationCacheStorage.enqueuePendingUpload(request)
+            return Result.success()
+        }
+
         return try {
+            val sentIds = mutableSetOf<String>()
+            val pending = LocationCacheStorage.getPendingUploads(deviceId)
+            for ((id, pendingRequest) in pending) {
+                try {
+                    ApiClient.apiService.sendLocation(pendingRequest)
+                    sentIds.add(id)
+                } catch (_: Exception) {
+                    break
+                }
+            }
+            LocationCacheStorage.removePendingUploadsByIds(sentIds)
+
             ApiClient.apiService.sendLocation(request)
             Result.success()
         } catch (_: Exception) {
+            LocationCacheStorage.enqueuePendingUpload(request)
             Result.success()
         }
     }
