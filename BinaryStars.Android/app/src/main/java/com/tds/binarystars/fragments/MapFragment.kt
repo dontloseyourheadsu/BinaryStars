@@ -35,6 +35,7 @@ import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.model.LocationHistoryPoint
 import com.tds.binarystars.model.MapDeviceItem
 import com.tds.binarystars.location.LocationUpdateScheduler
+import com.tds.binarystars.storage.LocationCacheStorage
 import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.util.NetworkUtils
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -50,8 +51,6 @@ import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Point
 import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
-import java.util.UUID
 import android.content.res.Configuration
 import kotlinx.coroutines.launch
 
@@ -276,6 +275,11 @@ class MapFragment : Fragment() {
     private fun loadHistory(deviceId: String) {
         history.clear()
         historyAdapter.notifyDataSetChanged()
+        val localHistory = if (isCurrentDevice(deviceId)) {
+            LocationCacheStorage.getLocalHistory(deviceId)
+        } else {
+            emptyList()
+        }
 
         if (NetworkUtils.isOnline(requireContext())) {
             viewLifecycleOwner.lifecycleScope.launch {
@@ -295,18 +299,21 @@ class MapFragment : Fragment() {
                         }
                     }
                 } catch (_: Exception) {
-                    // Fall back to mock data below.
+                    // Fall back to local history below.
                 }
 
-                if (history.isEmpty()) {
-                    history.addAll(mockHistory(deviceId))
+                if (localHistory.isNotEmpty()) {
+                    history.addAll(localHistory)
                 }
+
+                history.sortByDescending { it.timestamp }
 
                 historyAdapter.notifyDataSetChanged()
                 updateHistoryEmptyState()
             }
         } else {
-            history.addAll(mockHistory(deviceId))
+            history.addAll(localHistory)
+            history.sortByDescending { it.timestamp }
             historyAdapter.notifyDataSetChanged()
             updateHistoryEmptyState()
         }
@@ -377,7 +384,19 @@ class MapFragment : Fragment() {
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
             .addOnSuccessListener { location ->
                 if (location != null) {
+                    val recordedAt = OffsetDateTime.now().toString()
+                    val currentId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+                    LocationCacheStorage.saveLocalPoint(
+                        deviceId = currentId,
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        recordedAt = recordedAt
+                    )
                     showMapLocation(location.latitude, location.longitude, "Live location")
+
+                    if (selectedDevice?.id == currentId) {
+                        loadHistory(currentId)
+                    }
                 } else {
                     val fallback = history.firstOrNull()
                     if (fallback != null) {
@@ -537,33 +556,6 @@ class MapFragment : Fragment() {
     private fun setNoConnection(show: Boolean) {
         noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
         contentView.visibility = if (show) View.GONE else View.VISIBLE
-    }
-
-    /**
-     * Provides placeholder history when offline.
-     */
-    private fun mockHistory(deviceId: String): List<LocationHistoryPoint> {
-        val now = OffsetDateTime.now()
-        val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm")
-        val seed = deviceId.hashCode().toLong()
-        val baseLat = 30.2672 + ((seed % 10) * 0.01)
-        val baseLon = -97.7431 + ((seed % 7) * 0.01)
-        return listOf(
-            LocationHistoryPoint(
-                id = UUID.randomUUID().toString(),
-                title = "Last known",
-                timestamp = now.format(formatter),
-                latitude = baseLat,
-                longitude = baseLon
-            ),
-            LocationHistoryPoint(
-                id = UUID.randomUUID().toString(),
-                title = "Earlier point",
-                timestamp = now.minusHours(2).format(formatter),
-                latitude = baseLat + 0.005,
-                longitude = baseLon - 0.004
-            )
-        )
     }
 
     /**
