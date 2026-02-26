@@ -189,6 +189,15 @@ export const api = {
   }): Promise<void> {
     await http.post("/locations", payload);
   },
+  async sendLiveLocation(payload: {
+    deviceId: string;
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number | null;
+    recordedAt: string;
+  }): Promise<void> {
+    await http.post("/locations/live", payload);
+  },
   async getLocationHistory(deviceId: string): Promise<LocationPoint[]> {
     const response = await http.get<LocationPoint[]>("/locations/history", {
       params: { deviceId },

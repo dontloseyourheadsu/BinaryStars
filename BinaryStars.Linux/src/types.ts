@@ -111,3 +111,14 @@ export interface DevicePresenceEvent {
   lastSeen: string;
   occurredAt: string;
 }
+
+export interface LocationUpdateEvent {
+  id: string;
+  userId: string;
+  deviceId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  recordedAt: string;
+  occurredAt: string;
+}
