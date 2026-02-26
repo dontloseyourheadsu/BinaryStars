@@ -18,7 +18,7 @@ object LocationUpdateScheduler {
     fun schedule(context: Context, intervalMinutes: Int) {
         val repeatMinutes = intervalMinutes.coerceAtLeast(15)
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiredNetworkType(NetworkType.UNMETERED)
             .build()
 
         val request = PeriodicWorkRequestBuilder<LocationUpdateWorker>(repeatMinutes.toLong(), TimeUnit.MINUTES)
