@@ -1,6 +1,7 @@
 using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Locations;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace BinaryStars.Application.Databases.Repositories.Locations;
 
@@ -40,5 +41,42 @@ public class LocationHistoryRepository : ILocationHistoryRepository
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         return _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task CompactOlderEntriesToHourlyAsync(Guid userId, string deviceId, DateTimeOffset detailedCutoffUtc, CancellationToken cancellationToken)
+    {
+        var olderEntries = await _context.LocationHistory
+            .Where(entry => entry.UserId == userId && entry.DeviceId == deviceId && entry.RecordedAt < detailedCutoffUtc)
+            .OrderByDescending(entry => entry.RecordedAt)
+            .ToListAsync(cancellationToken);
+
+        if (olderEntries.Count <= 1)
+        {
+            return;
+        }
+
+        var keepIds = olderEntries
+            .GroupBy(entry => GetUtcHourBucket(entry.RecordedAt))
+            .Select(group => group.First().Id)
+            .ToHashSet();
+
+        var toDelete = olderEntries
+            .Where(entry => !keepIds.Contains(entry.Id))
+            .ToList();
+
+        if (toDelete.Count == 0)
+        {
+            return;
+        }
+
+        _context.LocationHistory.RemoveRange(toDelete);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string GetUtcHourBucket(DateTimeOffset value)
+    {
+        var utc = value.UtcDateTime;
+        return utc.ToString("yyyy-MM-dd-HH", CultureInfo.InvariantCulture);
     }
 }

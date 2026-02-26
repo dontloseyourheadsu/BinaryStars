@@ -29,4 +29,13 @@ public interface ILocationHistoryRepository
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     Task SaveChangesAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Compacts older history points to hourly granularity for a user and device.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="detailedCutoffUtc">Points older than this UTC instant are compacted.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    Task CompactOlderEntriesToHourlyAsync(Guid userId, string deviceId, DateTimeOffset detailedCutoffUtc, CancellationToken cancellationToken);
 }
