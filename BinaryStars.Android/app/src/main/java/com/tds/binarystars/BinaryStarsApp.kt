@@ -10,6 +10,7 @@ import com.tds.binarystars.storage.LocationCacheStorage
 import com.tds.binarystars.storage.NotesStorage
 import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.location.LocationUpdateScheduler
+import com.tds.binarystars.location.LiveLocationService
 import org.maplibre.android.MapLibre
 
 class BinaryStarsApp : Application() {
@@ -30,6 +31,7 @@ class BinaryStarsApp : Application() {
         if (SettingsStorage.areLocationUpdatesEnabled(false)) {
             val minutes = SettingsStorage.getLocationUpdateMinutes(15)
             LocationUpdateScheduler.schedule(this, minutes)
+            LiveLocationService.start(this)
         }
 
         AppCompatDelegate.setDefaultNightMode(

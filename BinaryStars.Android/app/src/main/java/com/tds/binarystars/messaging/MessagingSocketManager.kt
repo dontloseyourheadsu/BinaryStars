@@ -9,6 +9,7 @@ import com.tds.binarystars.api.DeviceRemovedEventDto
 import com.tds.binarystars.api.DevicePresenceEventDto
 import com.tds.binarystars.api.MessagingEnvelopeDto
 import com.tds.binarystars.api.MessagingMessageDto
+import com.tds.binarystars.api.LocationUpdateEventDto
 import com.tds.binarystars.api.SendMessageRequestDto
 import com.tds.binarystars.model.ChatMessage
 import com.tds.binarystars.storage.ChatStorage
@@ -128,6 +129,10 @@ object MessagingSocketManager {
                 val payload = gson.fromJson(envelope.payload, DevicePresenceEventDto::class.java)
                 notifyPresenceChanged(payload.deviceId, payload.isOnline, payload.lastSeen)
             }
+            "location_update" -> {
+                val payload = gson.fromJson(envelope.payload, LocationUpdateEventDto::class.java)
+                notifyLocationUpdated(payload)
+            }
         }
     }
 
@@ -198,6 +203,12 @@ object MessagingSocketManager {
             listeners.forEach { it.onDevicePresenceChanged(deviceId, isOnline, lastSeen) }
         }
     }
+
+    private fun notifyLocationUpdated(event: LocationUpdateEventDto) {
+        mainHandler.post {
+            listeners.forEach { it.onLocationUpdated(event) }
+        }
+    }
 }
 
 /**
@@ -208,4 +219,5 @@ interface MessagingEventListener {
     fun onDeviceRemoved(deviceId: String, isSelf: Boolean)
     fun onConnectionStateChanged(isConnected: Boolean)
     fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String)
+    fun onLocationUpdated(event: LocationUpdateEventDto) {}
 }

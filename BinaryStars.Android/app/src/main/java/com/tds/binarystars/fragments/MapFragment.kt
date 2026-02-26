@@ -32,6 +32,9 @@ import com.tds.binarystars.adapter.LocationHistoryAdapter
 import com.tds.binarystars.adapter.MapDevicesAdapter
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.DeviceTypeDto
+import com.tds.binarystars.api.LocationUpdateEventDto
+import com.tds.binarystars.messaging.MessagingEventListener
+import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.model.LocationHistoryPoint
 import com.tds.binarystars.model.MapDeviceItem
 import com.tds.binarystars.location.LocationUpdateScheduler
@@ -54,7 +57,7 @@ import java.time.OffsetDateTime
 import android.content.res.Configuration
 import kotlinx.coroutines.launch
 
-class MapFragment : Fragment() {
+class MapFragment : Fragment(), MessagingEventListener {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var contentView: View
     private lateinit var noConnectionView: View
@@ -308,12 +311,21 @@ class MapFragment : Fragment() {
 
                 history.sortByDescending { it.timestamp }
 
+                if (history.isNotEmpty()) {
+                    val top = history.first()
+                    showMapLocation(top.latitude, top.longitude, top.title)
+                }
+
                 historyAdapter.notifyDataSetChanged()
                 updateHistoryEmptyState()
             }
         } else {
             history.addAll(localHistory)
             history.sortByDescending { it.timestamp }
+            if (history.isNotEmpty()) {
+                val top = history.first()
+                showMapLocation(top.latitude, top.longitude, top.title)
+            }
             historyAdapter.notifyDataSetChanged()
             updateHistoryEmptyState()
         }
@@ -558,6 +570,49 @@ class MapFragment : Fragment() {
         contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
+    override fun onChatUpdated(deviceId: String) {
+        // no-op
+    }
+
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {
+        if (selectedDevice?.id == deviceId) {
+            selectedDevice = null
+            history.clear()
+            historyAdapter.notifyDataSetChanged()
+            updateHistoryEmptyState()
+            showDeviceList()
+        }
+    }
+
+    override fun onConnectionStateChanged(isConnected: Boolean) {
+        // no-op
+    }
+
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
+        // no-op
+    }
+
+    override fun onLocationUpdated(event: LocationUpdateEventDto) {
+        val selected = selectedDevice ?: return
+        if (selected.id != event.deviceId) {
+            return
+        }
+
+        val currentPoint = LocationHistoryPoint(
+            id = "current-${event.deviceId}",
+            title = "Live",
+            timestamp = event.recordedAt,
+            latitude = event.latitude,
+            longitude = event.longitude
+        )
+
+        history.removeAll { it.id == currentPoint.id }
+        history.add(0, currentPoint)
+        historyAdapter.notifyDataSetChanged()
+        updateHistoryEmptyState()
+        showMapLocation(currentPoint.latitude, currentPoint.longitude, currentPoint.title)
+    }
+
     /**
      * Returns the MapLibre style asset URL.
      */
@@ -567,6 +622,7 @@ class MapFragment : Fragment() {
 
     override fun onStart() {
         super.onStart()
+        MessagingSocketManager.addListener(this)
         mapView.onStart()
     }
 
@@ -582,6 +638,7 @@ class MapFragment : Fragment() {
 
     override fun onStop() {
         super.onStop()
+        MessagingSocketManager.removeListener(this)
         mapView.onStop()
     }
 
