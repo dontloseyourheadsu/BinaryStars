@@ -53,3 +53,15 @@ export async function getBluetoothConnectedDeviceNames(): Promise<string[]> {
     return [];
   }
 }
+
+export async function isWifiConnected(): Promise<boolean> {
+  if (!isTauriRuntime()) {
+    return true;
+  }
+
+  try {
+    return await invoke<boolean>("is_wifi_connected");
+  } catch {
+    return false;
+  }
+}
