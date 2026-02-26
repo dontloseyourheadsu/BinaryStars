@@ -48,7 +48,7 @@ public interface ILocationHistoryWriteService
     /// <param name="request">The location update request.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A success or failure result.</returns>
-    Task<Result> AddLocationAsync(Guid userId, LocationUpdateRequest request, CancellationToken cancellationToken);
+    Task<Result> AddLocationAsync(Guid userId, LocationUpdateRequest request, CancellationToken cancellationToken, bool persistToHistory = true);
 }
 
 /// <summary>
@@ -73,6 +73,7 @@ public interface ILocationHistoryReadService
 public class LocationHistoryService : ILocationHistoryWriteService, ILocationHistoryReadService
 {
     private const int DefaultLimit = 50;
+    private static readonly TimeSpan HistorySpacing = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan DetailedRetentionWindow = TimeSpan.FromDays(1);
     private readonly ILocationHistoryRepository _repository;
     private readonly IDeviceRepository _deviceRepository;
@@ -84,7 +85,7 @@ public class LocationHistoryService : ILocationHistoryWriteService, ILocationHis
     }
 
     /// <inheritdoc />
-    public async Task<Result> AddLocationAsync(Guid userId, LocationUpdateRequest request, CancellationToken cancellationToken)
+    public async Task<Result> AddLocationAsync(Guid userId, LocationUpdateRequest request, CancellationToken cancellationToken, bool persistToHistory = true)
     {
         if (userId == Guid.Empty)
             return Result.Failure(LocationErrors.UserIdCannotBeEmpty);
@@ -95,6 +96,9 @@ public class LocationHistoryService : ILocationHistoryWriteService, ILocationHis
         var device = await _deviceRepository.GetByIdAsync(request.DeviceId, cancellationToken);
         if (device == null || device.UserId != userId)
             return Result.Failure(LocationErrors.DeviceNotLinkedToUser);
+
+        if (!persistToHistory)
+            return Result.Success();
 
         var entry = new LocationHistoryDbModel
         {
@@ -130,16 +134,42 @@ public class LocationHistoryService : ILocationHistoryWriteService, ILocationHis
             return Result<List<LocationHistoryPointResponse>>.Failure(LocationErrors.DeviceNotLinkedToUser);
 
         var safeLimit = limit <= 0 ? DefaultLimit : Math.Min(limit, 200);
-        var entries = await _repository.GetByUserAndDeviceAsync(userId, deviceId, safeLimit, cancellationToken);
+        var rawLimit = Math.Min(Math.Max(safeLimit * 6, safeLimit), 1200);
+        var entries = await _repository.GetByUserAndDeviceAsync(userId, deviceId, rawLimit, cancellationToken);
+        var sampledEntries = SampleForHistory(entries, safeLimit);
 
-        var responses = entries.Select((entry, index) => new LocationHistoryPointResponse(
+        var responses = sampledEntries.Select((entry, index) => new LocationHistoryPointResponse(
             entry.Id,
-            index == 0 ? "Last known" : "History",
+            "History",
             entry.RecordedAt,
             entry.Latitude,
             entry.Longitude
         )).ToList();
 
         return Result<List<LocationHistoryPointResponse>>.Success(responses);
+    }
+
+    private static List<LocationHistoryDbModel> SampleForHistory(List<LocationHistoryDbModel> entries, int limit)
+    {
+        if (entries.Count == 0 || limit <= 0)
+        {
+            return [];
+        }
+
+        var sampled = new List<LocationHistoryDbModel>(Math.Min(limit, entries.Count));
+        var seenBuckets = new HashSet<long>();
+        var bucketSeconds = (long)HistorySpacing.TotalSeconds;
+
+        for (var index = 0; index < entries.Count && sampled.Count < limit; index++)
+        {
+            var candidate = entries[index];
+            var bucket = candidate.RecordedAt.ToUnixTimeSeconds() / bucketSeconds;
+            if (seenBuckets.Add(bucket))
+            {
+                sampled.Add(candidate);
+            }
+        }
+
+        return sampled;
     }
 }

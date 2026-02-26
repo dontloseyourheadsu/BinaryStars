@@ -68,6 +68,7 @@
     <Compile Include="Services/MessagingKafkaService.cs" />
     <Compile Include="Services/MessagingWebSocketHandler.cs" />
     <Compile Include="Services/DevicePresenceMonitorService.cs" />
+    <Compile Include="Services/DeviceLiveLocationCache.cs" />
   </ItemGroup>
 
   <ItemGroup>

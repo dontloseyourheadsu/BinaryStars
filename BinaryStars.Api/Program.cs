@@ -59,6 +59,7 @@ if (!builder.Environment.IsEnvironment("Test"))
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddSingleton<DeviceLiveLocationCache>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddControllers()
