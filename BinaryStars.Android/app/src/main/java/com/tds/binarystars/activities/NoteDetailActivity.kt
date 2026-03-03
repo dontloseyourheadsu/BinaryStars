@@ -14,6 +14,11 @@ import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.NoteType
 import com.tds.binarystars.api.UpdateNoteRequestDto
 import com.tds.binarystars.storage.NotesStorage
+import io.noties.markwon.Markwon
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.ext.tasklist.TaskListPlugin
+import io.noties.markwon.html.HtmlPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -25,9 +30,11 @@ class NoteDetailActivity : AppCompatActivity() {
     private lateinit var tvDeviceInfo: TextView
     private lateinit var tvTimestamps: TextView
     private lateinit var contentDisplay: EditText
+    private lateinit var markdownPreview: TextView
     private lateinit var btnEditDevice: Button
     private lateinit var btnEdit: Button
     private lateinit var progressBar: ProgressBar
+    private lateinit var markwon: Markwon
 
     private var noteId: String = ""
     private var noteName: String = ""
@@ -44,7 +51,7 @@ class NoteDetailActivity : AppCompatActivity() {
         if (result.resultCode == RESULT_OK) {
             val updatedContent = result.data?.getStringExtra(ContentEditorActivity.EXTRA_CONTENT) ?: ""
             if (updatedContent != content) {
-                contentDisplay.setText(updatedContent)
+                renderContent(updatedContent)
                 saveNote(updatedContent)
             }
         }
@@ -61,9 +68,17 @@ class NoteDetailActivity : AppCompatActivity() {
         tvDeviceInfo = findViewById(R.id.tvDeviceInfo)
         tvTimestamps = findViewById(R.id.tvTimestamps)
         contentDisplay = findViewById(R.id.etNoteContent)
+        markdownPreview = findViewById(R.id.tvMarkdownPreview)
         btnEditDevice = findViewById(R.id.btnEditDevice)
         btnEdit = findViewById(R.id.btnEdit)
         progressBar = findViewById(R.id.pbLoading)
+
+        markwon = Markwon.builder(this)
+            .usePlugin(StrikethroughPlugin.create())
+            .usePlugin(TablePlugin.create(this))
+            .usePlugin(TaskListPlugin.create(this))
+            .usePlugin(HtmlPlugin.create())
+            .build()
 
         loadNoteData()
         setupUI()
@@ -90,8 +105,8 @@ class NoteDetailActivity : AppCompatActivity() {
         tvNoteName.text = noteName
         val displayDevice = if (deviceName.isNotBlank()) deviceName else deviceId
         tvDeviceInfo.text = "Signed by Device: $displayDevice"
-        contentDisplay.setText(content)
         contentDisplay.isEnabled = false
+        renderContent(content)
 
         val createdFormatted = formatDate(createdAt)
         val updatedFormatted = formatDate(updatedAt)
@@ -156,6 +171,7 @@ class NoteDetailActivity : AppCompatActivity() {
                     }
                     Toast.makeText(this@NoteDetailActivity, "Note saved successfully", Toast.LENGTH_SHORT).show()
                     tvTimestamps.text = "Created: ${formatDate(createdAt)}\nUpdated: ${formatDate(updatedAt)}"
+                    renderContent(content)
                 } else {
                     Toast.makeText(this@NoteDetailActivity, "Failed to save note", Toast.LENGTH_SHORT).show()
                 }
@@ -270,8 +286,24 @@ class NoteDetailActivity : AppCompatActivity() {
                     2 -> 20f
                     else -> 16f
                 }
-                contentDisplay.textSize = size
+                if (contentType == NoteType.Markdown) {
+                    markdownPreview.textSize = size
+                } else {
+                    contentDisplay.textSize = size
+                }
             }
             .show()
+    }
+
+    private fun renderContent(noteContent: String) {
+        if (contentType == NoteType.Markdown) {
+            contentDisplay.visibility = View.GONE
+            markdownPreview.visibility = View.VISIBLE
+            markwon.setMarkdown(markdownPreview, noteContent)
+        } else {
+            markdownPreview.visibility = View.GONE
+            contentDisplay.visibility = View.VISIBLE
+            contentDisplay.setText(noteContent)
+        }
     }
 }
