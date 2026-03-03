@@ -396,6 +396,22 @@ function App() {
   }, [isAuthed, online]);
 
   useEffect(() => {
+    if (!isAuthed || !online || activeTab !== "Devices") {
+      return;
+    }
+
+    const refresh = (): void => {
+      void refreshDevices().catch(() => {
+        setError("No connection available");
+      });
+    };
+
+    refresh();
+    const timer = window.setInterval(refresh, 10_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, isAuthed, online, bluetoothConnectedNames]);
+
+  useEffect(() => {
     if (!isAuthed) {
       return;
     }

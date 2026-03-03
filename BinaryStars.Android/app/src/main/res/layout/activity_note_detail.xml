@@ -95,6 +95,16 @@
                 android:textSize="14sp"
                 android:textColor="@color/carbon_text_main" />
 
+            <TextView
+                android:id="@+id/tvMarkdownPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/carbon_bg_panel"
+                android:padding="12dp"
+                android:textSize="14sp"
+                android:textColor="@color/carbon_text_main"
+                android:visibility="gone" />
+
         </LinearLayout>
     </ScrollView>
 

@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Note } from "../../types";
 
 type Props = {
@@ -52,6 +53,11 @@ export default function NotesTab({
                 <strong>{note.name}</strong>
                 <span className="muted">{note.contentType} · {new Date(note.updatedAt).toLocaleString()}</span>
               </button>
+              {note.contentType === "Markdown" && (
+                <div className="markdown-preview">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.content || "_Preview_"}</ReactMarkdown>
+                </div>
+              )}
               <button className="ghost" onClick={() => onDeleteNote(note.id)} type="button">
                 Delete
               </button>
@@ -102,7 +108,7 @@ export default function NotesTab({
         </div>
         {noteType === "Markdown" && (
           <div className="markdown-preview">
-            <ReactMarkdown>{noteContent || "_Preview_"}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{noteContent || "_Preview_"}</ReactMarkdown>
           </div>
         )}
       </div>

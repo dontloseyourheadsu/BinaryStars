@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
  * Sends periodic device heartbeat updates independent of telemetry/location settings.
  */
 object PresenceHeartbeatManager {
-    private const val HEARTBEAT_INTERVAL_MS = 15_000L
+    private const val HEARTBEAT_INTERVAL_MS = 10_000L
 
     private var heartbeatScope: CoroutineScope? = null
     private var heartbeatJob: Job? = null
