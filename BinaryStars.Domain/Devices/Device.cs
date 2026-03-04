@@ -88,6 +88,11 @@ public readonly record struct Device
     public DateTimeOffset LastSeen { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether notification sync data is pending for this device.
+    /// </summary>
+    public bool HasPendingNotificationSync { get; init; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Device"/> struct.
     /// </summary>
     /// <param name="id">The unique identifier.</param>
@@ -106,6 +111,7 @@ public readonly record struct Device
     /// <param name="publicKey">The public key used for end-to-end encryption.</param>
     /// <param name="publicKeyAlgorithm">The algorithm used to generate the public key.</param>
     /// <param name="publicKeyCreatedAt">The timestamp when the public key was generated.</param>
+    /// <param name="hasPendingNotificationSync">Whether pending notification sync exists for this device.</param>
     public Device(
         string id,
         string name,
@@ -122,7 +128,8 @@ public readonly record struct Device
         DateTimeOffset lastSeen,
         string? publicKey = null,
         string? publicKeyAlgorithm = null,
-        DateTimeOffset? publicKeyCreatedAt = null)
+        DateTimeOffset? publicKeyCreatedAt = null,
+        bool hasPendingNotificationSync = false)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException(DeviceErrors.IdCannotBeNullOrWhitespace, nameof(id));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException(DeviceErrors.NameCannotBeNullOrWhitespace, nameof(name));
@@ -144,5 +151,6 @@ public readonly record struct Device
         CpuLoadPercent = cpuLoadPercent;
         IsAvailable = isAvailable;
         LastSeen = lastSeen;
+        HasPendingNotificationSync = hasPendingNotificationSync;
     }
 }

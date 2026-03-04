@@ -14,6 +14,7 @@ import {
   isWifiConnected,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
+import type { LocalNotificationHistoryItem } from "./storage";
 import type { ThemeMode } from "./storage";
 import type {
   AccountProfile,
@@ -24,6 +25,7 @@ import type {
   LocationUpdateEvent,
   LocationPoint,
   MessageDto,
+  NotificationSchedule,
   Note,
 } from "./types";
 import AuthView from "./components/Auth/AuthView";
@@ -33,6 +35,7 @@ import DevicesTab from "./components/tabs/DevicesTab";
 import FilesTab from "./components/tabs/FilesTab";
 import NotesTab from "./components/tabs/NotesTab";
 import MessagingTab from "./components/tabs/MessagingTab";
+import NotificationsTab from "./components/tabs/NotificationsTab";
 import MapTab from "./components/tabs/MapTab";
 import SettingsTab from "./components/tabs/SettingsTab";
 import { Tab, tabs } from "./components/tabs/types";
@@ -76,6 +79,8 @@ function App() {
   const [transfers, setTransfers] = useState<FileTransfer[]>(cacheStore.getTransfers());
   const [notes, setNotes] = useState<Note[]>(cacheStore.getNotes());
   const [messages, setMessages] = useState<ChatMessage[]>(cacheStore.getMessages());
+  const [notificationHistory, setNotificationHistory] = useState<LocalNotificationHistoryItem[]>(cacheStore.getNotificationHistory());
+  const [notificationSchedules, setNotificationSchedules] = useState<NotificationSchedule[]>(cacheStore.getNotificationSchedules());
   const [profile, setProfile] = useState<AccountProfile | null>(cacheStore.getProfile());
   const [history, setHistory] = useState<LocationPoint[]>([]);
   const [mapFocusPoint, setMapFocusPoint] = useState<LocationPoint | null>(null);
@@ -83,6 +88,13 @@ function App() {
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
   const [selectedDeviceDetailId, setSelectedDeviceDetailId] = useState("");
   const [newMessage, setNewMessage] = useState("");
+  const [notificationTitle, setNotificationTitle] = useState("");
+  const [notificationBody, setNotificationBody] = useState("");
+  const [notificationTargetDeviceId, setNotificationTargetDeviceId] = useState("");
+  const [notificationScheduledFor, setNotificationScheduledFor] = useState("");
+  const [notificationRepeatMinutes, setNotificationRepeatMinutes] = useState("");
+  const [notificationScheduleEnabled, setNotificationScheduleEnabled] = useState(true);
+  const [editingNotificationScheduleId, setEditingNotificationScheduleId] = useState<string | null>(null);
   const [noteName, setNoteName] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [noteType, setNoteType] = useState<"Plaintext" | "Markdown">("Plaintext");
@@ -259,6 +271,14 @@ function App() {
   useEffect(() => {
     cacheStore.setMessages(messages);
   }, [messages]);
+
+  useEffect(() => {
+    cacheStore.setNotificationHistory(notificationHistory);
+  }, [notificationHistory]);
+
+  useEffect(() => {
+    cacheStore.setNotificationSchedules(notificationSchedules);
+  }, [notificationSchedules]);
 
   useEffect(() => {
     cacheStore.setNotes(notes);
@@ -509,6 +529,49 @@ function App() {
     }
   };
 
+  const syncNotificationsFromServer = async (surfaceError = false): Promise<void> => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    try {
+      const payload = await api.pullNotifications(myDeviceId);
+      setNotificationSchedules(payload.schedules);
+
+      if (payload.notifications.length > 0) {
+        setNotificationHistory((prev) => {
+          const byId = new Map(prev.map((entry) => [entry.id, entry]));
+          payload.notifications.forEach((entry) => {
+            byId.set(entry.id, {
+              ...entry,
+              receivedAt: new Date().toISOString(),
+            });
+          });
+
+          return Array.from(byId.values())
+            .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+            .slice(0, 1_000);
+        });
+      }
+
+      await api.acknowledgeNotificationSync(myDeviceId);
+      setDevices((prev) => prev.map((device) => {
+        if (device.id !== myDeviceId) {
+          return device;
+        }
+
+        return {
+          ...device,
+          hasPendingNotificationSync: false,
+        };
+      }));
+    } catch (nextError) {
+      if (surfaceError) {
+        setError(nextError instanceof Error ? nextError.message : "Failed to sync notifications");
+      }
+    }
+  };
+
   const initSession = async (): Promise<void> => {
     const canUseNetwork = typeof navigator === "undefined" || navigator.onLine;
     if (!canUseNetwork) {
@@ -645,6 +708,23 @@ function App() {
   }, [activeTab, isAuthed, online, selectedMapDeviceId]);
 
   useEffect(() => {
+    if (!isAuthed || !online || activeTab !== "Notifications" || !notificationTargetDeviceId) {
+      return;
+    }
+
+    const refreshSchedules = async (): Promise<void> => {
+      try {
+        const items = await api.getNotificationSchedules(notificationTargetDeviceId);
+        setNotificationSchedules(items);
+      } catch {
+        // keep cached schedules
+      }
+    };
+
+    void refreshSchedules();
+  }, [activeTab, isAuthed, online, notificationTargetDeviceId]);
+
+  useEffect(() => {
     if (!isAuthed) {
       return;
     }
@@ -708,7 +788,13 @@ function App() {
     };
   }, [isAuthed, myDeviceId, selectedMapDeviceId]);
 
-  usePresenceHeartbeat(isAuthed, myDeviceId);
+  usePresenceHeartbeat(isAuthed, myDeviceId, (device) => {
+    if (!device.hasPendingNotificationSync) {
+      return;
+    }
+
+    void syncNotificationsFromServer();
+  });
 
   useEffect(() => {
     if (!isAuthed) {
@@ -840,6 +926,17 @@ function App() {
       setSelectedDeviceDetailId("");
     }
   }, [devices, selectedDeviceDetailId]);
+
+  useEffect(() => {
+    if (notificationTargetDeviceId && devices.some((entry) => entry.id === notificationTargetDeviceId)) {
+      return;
+    }
+
+    if (devices.length > 0) {
+      const fallback = devices.find((entry) => entry.id === myDeviceId)?.id ?? devices[0].id;
+      setNotificationTargetDeviceId(fallback);
+    }
+  }, [devices, myDeviceId, notificationTargetDeviceId]);
 
   const linkCurrentDevice = async (): Promise<void> => {
     if (!requireOnline()) {
@@ -1085,6 +1182,123 @@ function App() {
     setMessages((prev) => upsertMessage(prev, storedMessage));
   };
 
+  const resetNotificationEditor = (): void => {
+    setEditingNotificationScheduleId(null);
+    setNotificationTitle("");
+    setNotificationBody("");
+    setNotificationScheduledFor("");
+    setNotificationRepeatMinutes("");
+    setNotificationScheduleEnabled(true);
+  };
+
+  const sendNotificationNow = async (): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
+    if (!notificationTargetDeviceId || !notificationTitle.trim() || !notificationBody.trim()) {
+      setError("Target device, title, and body are required");
+      return;
+    }
+
+    await api.sendNotification({
+      senderDeviceId: myDeviceId,
+      targetDeviceId: notificationTargetDeviceId,
+      title: notificationTitle.trim(),
+      body: notificationBody.trim(),
+    });
+
+    if (notificationTargetDeviceId === myDeviceId) {
+      await syncNotificationsFromServer();
+    }
+
+    setError("");
+  };
+
+  const saveNotificationSchedule = async (): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
+    if (!notificationTargetDeviceId || !notificationTitle.trim() || !notificationBody.trim()) {
+      setError("Target device, title, and body are required");
+      return;
+    }
+
+    const hasScheduledFor = notificationScheduledFor.trim().length > 0;
+    const hasRepeat = notificationRepeatMinutes.trim().length > 0;
+
+    if ((hasScheduledFor && hasRepeat) || (!hasScheduledFor && !hasRepeat)) {
+      setError("Provide either one-time schedule or repeat minutes");
+      return;
+    }
+
+    const payload = {
+      sourceDeviceId: myDeviceId,
+      targetDeviceId: notificationTargetDeviceId,
+      title: notificationTitle.trim(),
+      body: notificationBody.trim(),
+      isEnabled: notificationScheduleEnabled,
+      scheduledForUtc: hasScheduledFor ? new Date(notificationScheduledFor).toISOString() : null,
+      repeatMinutes: hasRepeat ? Number.parseInt(notificationRepeatMinutes, 10) : null,
+    };
+
+    if (editingNotificationScheduleId) {
+      await api.updateNotificationSchedule(editingNotificationScheduleId, payload);
+    } else {
+      await api.createNotificationSchedule(payload);
+    }
+
+    if (notificationTargetDeviceId === myDeviceId) {
+      await syncNotificationsFromServer();
+    } else {
+      const refreshed = await api.getNotificationSchedules(notificationTargetDeviceId);
+      setNotificationSchedules(refreshed);
+    }
+
+    setError("");
+    resetNotificationEditor();
+  };
+
+  const editNotificationSchedule = (schedule: NotificationSchedule): void => {
+    setEditingNotificationScheduleId(schedule.id);
+    setNotificationTargetDeviceId(schedule.targetDeviceId);
+    setNotificationTitle(schedule.title);
+    setNotificationBody(schedule.body);
+    setNotificationScheduleEnabled(schedule.isEnabled);
+    setNotificationRepeatMinutes(schedule.repeatMinutes != null ? String(schedule.repeatMinutes) : "");
+    setNotificationScheduledFor(
+      schedule.scheduledForUtc ? new Date(schedule.scheduledForUtc).toISOString().slice(0, 16) : "",
+    );
+  };
+
+  const deleteNotificationSchedule = async (scheduleId: string): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
+    await api.deleteNotificationSchedule(scheduleId);
+
+    if (notificationTargetDeviceId === myDeviceId) {
+      await syncNotificationsFromServer();
+    } else {
+      const refreshed = await api.getNotificationSchedules(notificationTargetDeviceId);
+      setNotificationSchedules(refreshed);
+    }
+
+    if (editingNotificationScheduleId === scheduleId) {
+      resetNotificationEditor();
+    }
+  };
+
+  const deleteNotificationHistoryItem = (itemId: string): void => {
+    setNotificationHistory((prev) => prev.filter((entry) => entry.id !== itemId));
+  };
+
+  const clearNotificationHistory = (): void => {
+    setNotificationHistory([]);
+  };
+
   const clearCurrentChat = (): void => {
     if (!selectedChatDeviceId) {
       return;
@@ -1100,6 +1314,8 @@ function App() {
     setDevices([]);
     setSelectedChatDeviceId("");
     setSelectedDeviceDetailId("");
+    setNotificationSchedules([]);
+    setNotificationHistory([]);
     setHistory([]);
     setDrawerOpen(false);
   };
@@ -1319,6 +1535,39 @@ function App() {
             onSetNewMessage={setNewMessage}
             onClearCurrentChat={clearCurrentChat}
             onSendChatMessage={() => void sendChatMessage()}
+          />
+        )}
+
+        {activeTab === "Notifications" && (
+          <NotificationsTab
+            devices={devices}
+            selectedTargetDeviceId={notificationTargetDeviceId}
+            notificationTitle={notificationTitle}
+            notificationBody={notificationBody}
+            scheduledForUtc={notificationScheduledFor}
+            repeatMinutes={notificationRepeatMinutes}
+            isScheduleEnabled={notificationScheduleEnabled}
+            editingScheduleId={editingNotificationScheduleId}
+            schedules={notificationSchedules}
+            history={notificationHistory.filter((entry) => entry.targetDeviceId === myDeviceId)}
+            onSelectTargetDevice={setNotificationTargetDeviceId}
+            onSetNotificationTitle={setNotificationTitle}
+            onSetNotificationBody={setNotificationBody}
+            onSetScheduledForUtc={setNotificationScheduledFor}
+            onSetRepeatMinutes={setNotificationRepeatMinutes}
+            onSetScheduleEnabled={setNotificationScheduleEnabled}
+            onSendNow={() => void sendNotificationNow()}
+            onSaveSchedule={() => void saveNotificationSchedule()}
+            onEditSchedule={editNotificationSchedule}
+            onDeleteSchedule={(scheduleId) => {
+              void deleteNotificationSchedule(scheduleId);
+            }}
+            onResetEditor={resetNotificationEditor}
+            onDeleteHistoryItem={deleteNotificationHistoryItem}
+            onClearHistory={clearNotificationHistory}
+            onRefresh={() => {
+              void syncNotificationsFromServer(true);
+            }}
           />
         )}
 

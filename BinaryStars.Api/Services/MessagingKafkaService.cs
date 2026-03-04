@@ -115,6 +115,105 @@ public class MessagingKafkaService
     }
 
     /// <summary>
+    /// Publishes a device notification.
+    /// </summary>
+    /// <param name="message">The notification payload.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    public async Task PublishNotificationAsync(DeviceNotificationMessage message, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
+    {
+        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
+        var payload = JsonSerializer.SerializeToUtf8Bytes(message, MessagingJson.SerializerOptions);
+
+        await producer.ProduceAsync(
+            _settings.NotificationsTopic,
+            new Message<string, byte[]>
+            {
+                Key = message.Id,
+                Value = payload
+            },
+            cancellationToken);
+
+        producer.Flush(TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
+    /// Consumes pending notifications for a device from Kafka.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The pending notifications.</returns>
+    public async Task<List<DeviceNotificationMessage>> ConsumePendingNotificationsAsync(
+        string deviceId,
+        Guid userId,
+        KafkaAuthMode authMode,
+        string? oauthToken,
+        CancellationToken cancellationToken)
+    {
+        using var consumer = _clientFactory.CreateConsumer($"notifications-{deviceId}", authMode, oauthToken);
+        consumer.Subscribe(_settings.NotificationsTopic);
+
+        var notifications = new List<DeviceNotificationMessage>();
+        var emptyReads = 0;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var result = consumer.Consume(TimeSpan.FromSeconds(1));
+            if (result == null)
+            {
+                emptyReads++;
+                if (emptyReads >= 3)
+                    break;
+
+                continue;
+            }
+
+            if (result.Message?.Value == null || result.Message.Value.Length == 0)
+            {
+                consumer.Commit(result);
+                continue;
+            }
+
+            var message = JsonSerializer.Deserialize<DeviceNotificationMessage>(result.Message.Value, MessagingJson.SerializerOptions);
+            if (message != null &&
+                message.UserId == userId &&
+                message.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
+            {
+                notifications.Add(message);
+            }
+
+            consumer.Commit(result);
+        }
+
+        return notifications;
+    }
+
+    /// <summary>
+    /// Deletes a pending notification from Kafka using a tombstone.
+    /// </summary>
+    /// <param name="notificationId">The notification identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    public async Task DeleteNotificationAsync(string notificationId, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
+    {
+        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
+        await producer.ProduceAsync(
+            _settings.NotificationsTopic,
+            new Message<string, byte[]>
+            {
+                Key = notificationId,
+                Value = null!
+            },
+            cancellationToken);
+        producer.Flush(TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
     /// Consumes pending messages for a device from Kafka.
     /// </summary>
     /// <param name="deviceId">The device identifier.</param>

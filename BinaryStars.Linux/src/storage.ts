@@ -1,10 +1,20 @@
-import type { AccountProfile, ChatMessage, Device, FileTransfer, Note } from "./types";
+import type {
+  AccountProfile,
+  ChatMessage,
+  Device,
+  DeviceNotificationMessage,
+  FileTransfer,
+  Note,
+  NotificationSchedule,
+} from "./types";
 
 const NOTES_KEY = "binarystars.notes.cache";
 const TRANSFERS_KEY = "binarystars.transfers.cache";
 const MESSAGES_KEY = "binarystars.messages.cache";
 const DEVICES_KEY = "binarystars.devices.cache";
 const PROFILE_KEY = "binarystars.profile.cache";
+const NOTIFICATION_HISTORY_KEY = "binarystars.notifications.history.cache";
+const NOTIFICATION_SCHEDULES_KEY = "binarystars.notifications.schedules.cache";
 const THEME_KEY = "binarystars.theme.mode";
 const LEGACY_THEME_DARK_KEY = "binarystars.theme.dark";
 const LOCATION_ENABLED_KEY = "binarystars.location.enabled";
@@ -28,6 +38,10 @@ export interface PendingLocationUpload {
   longitude: number;
   accuracyMeters: number | null;
   recordedAt: string;
+}
+
+export interface LocalNotificationHistoryItem extends DeviceNotificationMessage {
+  receivedAt: string;
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -76,6 +90,18 @@ export const cacheStore = {
   },
   setProfile(profile: AccountProfile | null): void {
     writeJson(PROFILE_KEY, profile);
+  },
+  getNotificationHistory(): LocalNotificationHistoryItem[] {
+    return readJson<LocalNotificationHistoryItem[]>(NOTIFICATION_HISTORY_KEY, []);
+  },
+  setNotificationHistory(items: LocalNotificationHistoryItem[]): void {
+    writeJson(NOTIFICATION_HISTORY_KEY, items);
+  },
+  getNotificationSchedules(): NotificationSchedule[] {
+    return readJson<NotificationSchedule[]>(NOTIFICATION_SCHEDULES_KEY, []);
+  },
+  setNotificationSchedules(schedules: NotificationSchedule[]): void {
+    writeJson(NOTIFICATION_SCHEDULES_KEY, schedules);
   },
   getLocalLocationHistory(deviceId: string): LocalLocationPoint[] {
     const all = readJson<LocalLocationPoint[]>(LOCATION_LOCAL_HISTORY_KEY, []);

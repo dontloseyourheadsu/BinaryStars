@@ -1,10 +1,15 @@
 import { useEffect } from "react";
 import { api } from "../api";
+import type { Device } from "../types";
 
 /**
  * Sends mandatory device heartbeat updates independent from optional feature hooks.
  */
-export function usePresenceHeartbeat(isAuthed: boolean, deviceId: string): void {
+export function usePresenceHeartbeat(
+  isAuthed: boolean,
+  deviceId: string,
+  onHeartbeat?: (device: Device) => void,
+): void {
   useEffect(() => {
     if (!isAuthed) {
       return;
@@ -12,7 +17,8 @@ export function usePresenceHeartbeat(isAuthed: boolean, deviceId: string): void 
 
     const runHeartbeat = async (): Promise<void> => {
       try {
-        await api.sendHeartbeat(deviceId);
+        const device = await api.sendHeartbeat(deviceId);
+        onHeartbeat?.(device);
       } catch {
         // ignore heartbeat failures and retry on next interval
       }
@@ -24,5 +30,5 @@ export function usePresenceHeartbeat(isAuthed: boolean, deviceId: string): void 
     }, 10_000);
 
     return () => window.clearInterval(timer);
-  }, [isAuthed, deviceId]);
+  }, [isAuthed, deviceId, onHeartbeat]);
 }

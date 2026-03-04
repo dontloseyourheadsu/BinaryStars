@@ -39,6 +39,36 @@ export interface Device {
   wifiUploadSpeed: string;
   wifiDownloadSpeed: string;
   lastSeen: string;
+  hasPendingNotificationSync?: boolean;
+}
+
+export interface DeviceNotificationMessage {
+  id: string;
+  userId: string;
+  senderDeviceId: string;
+  targetDeviceId: string;
+  title: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface NotificationSchedule {
+  id: string;
+  sourceDeviceId: string;
+  targetDeviceId: string;
+  title: string;
+  body: string;
+  isEnabled: boolean;
+  scheduledForUtc: string | null;
+  repeatMinutes: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationsPullResponse {
+  hasPendingNotificationSync: boolean;
+  notifications: DeviceNotificationMessage[];
+  schedules: NotificationSchedule[];
 }
 
 export interface Note {
