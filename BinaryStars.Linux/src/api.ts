@@ -3,10 +3,13 @@ import type {
   AccountProfile,
   AuthResponse,
   Device,
+  DeviceNotificationMessage,
   FileTransfer,
   LocationPoint,
   MessageDto,
+  NotificationSchedule,
   Note,
+  NotificationsPullResponse,
   SendMessageRequest,
 } from "./types";
 
@@ -112,8 +115,60 @@ export const api = {
   }): Promise<void> {
     await http.put(`/devices/${encodeURIComponent(deviceId)}/telemetry`, payload);
   },
-  async sendHeartbeat(deviceId: string): Promise<void> {
-    await http.post(`/devices/${encodeURIComponent(deviceId)}/heartbeat`);
+  async sendHeartbeat(deviceId: string): Promise<Device> {
+    const response = await http.post<Device>(`/devices/${encodeURIComponent(deviceId)}/heartbeat`);
+    return response.data;
+  },
+  async sendNotification(payload: {
+    senderDeviceId: string;
+    targetDeviceId: string;
+    title: string;
+    body: string;
+  }): Promise<DeviceNotificationMessage> {
+    const response = await http.post<DeviceNotificationMessage>("/notifications/send", payload);
+    return response.data;
+  },
+  async getNotificationSchedules(deviceId: string): Promise<NotificationSchedule[]> {
+    const response = await http.get<NotificationSchedule[]>("/notifications/schedules", {
+      params: { deviceId },
+    });
+    return response.data;
+  },
+  async createNotificationSchedule(payload: {
+    sourceDeviceId: string;
+    targetDeviceId: string;
+    title: string;
+    body: string;
+    isEnabled: boolean;
+    scheduledForUtc: string | null;
+    repeatMinutes: number | null;
+  }): Promise<NotificationSchedule> {
+    const response = await http.post<NotificationSchedule>("/notifications/schedules", payload);
+    return response.data;
+  },
+  async updateNotificationSchedule(scheduleId: string, payload: {
+    sourceDeviceId: string;
+    targetDeviceId: string;
+    title: string;
+    body: string;
+    isEnabled: boolean;
+    scheduledForUtc: string | null;
+    repeatMinutes: number | null;
+  }): Promise<NotificationSchedule> {
+    const response = await http.put<NotificationSchedule>(`/notifications/schedules/${encodeURIComponent(scheduleId)}`, payload);
+    return response.data;
+  },
+  async deleteNotificationSchedule(scheduleId: string): Promise<void> {
+    await http.delete(`/notifications/schedules/${encodeURIComponent(scheduleId)}`);
+  },
+  async pullNotifications(deviceId: string): Promise<NotificationsPullResponse> {
+    const response = await http.get<NotificationsPullResponse>("/notifications/pull", {
+      params: { deviceId },
+    });
+    return response.data;
+  },
+  async acknowledgeNotificationSync(deviceId: string): Promise<void> {
+    await http.post("/notifications/ack", { deviceId });
   },
   async getNotes(): Promise<Note[]> {
     const response = await http.get<Note[]>("/notes");

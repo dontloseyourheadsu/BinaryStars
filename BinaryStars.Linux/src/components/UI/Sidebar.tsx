@@ -28,6 +28,11 @@ const iconMap: Record<string, ReactNode> = {
       <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H8l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2v7h14V7H5Z" fill="currentColor" />
     </svg>
   ),
+  Notifications: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3a6 6 0 0 1 6 6v3.7l1.5 2.6a1 1 0 0 1-.87 1.5H5.37a1 1 0 0 1-.87-1.5L6 12.7V9a6 6 0 0 1 6-6Zm0 2a4 4 0 0 0-4 4v4l-1.1 2h10.2L16 13V9a4 4 0 0 0-4-4Zm-2 13h4a2 2 0 0 1-4 0Z" fill="currentColor" />
+    </svg>
+  ),
   Map: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M15 4l5-2v16l-5 2-6-2-5 2V4l5-2 6 2Zm-1 2.2-4-1.33V17.8l4 1.33V6.2Zm-9-.87v12.34l3-1.2V4.13l-3 1.2Zm14 11.34V4.33l-3 1.2v12.34l3-1.2Z" fill="currentColor" />
