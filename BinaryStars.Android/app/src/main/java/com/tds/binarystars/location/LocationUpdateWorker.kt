@@ -75,7 +75,7 @@ class LocationUpdateWorker(
             recordedAt = recordedAt
         )
 
-        if (!NetworkUtils.isOnline(applicationContext) || !NetworkUtils.isWifiConnected(applicationContext)) {
+        if (!NetworkUtils.isOnline(applicationContext)) {
             LocationCacheStorage.enqueuePendingUpload(request)
             return Result.success()
         }
