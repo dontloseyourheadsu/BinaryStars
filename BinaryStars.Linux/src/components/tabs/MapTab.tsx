@@ -11,11 +11,11 @@ type Props = {
   mapDetailOpen: boolean;
   locationEnabled: boolean;
   locationMinutes: number;
-  geoPermissionState: "granted" | "denied" | "prompt" | "unsupported" | "unknown";
+  geoPermissionState: "granted" | "denied" | "prompt" | "unsupported" | "unknown" | "native";
   isGeolocationAvailable: boolean;
   lastGeoError: string;
   lastLocationSampleAt: string | null;
-  lastLocationSource: "geolocation" | null;
+  lastLocationSource: "native" | "geolocation" | null;
   onSelectMapDevice: (deviceId: string) => void;
   onSetMapDetailOpen: (open: boolean) => void;
   onRefreshMapHistory: (deviceId: string) => void;
@@ -94,7 +94,7 @@ export default function MapTab({
             </select>
             <p className="section-label">Location Diagnostics</p>
             <p className="muted">Geolocation API: {isGeolocationAvailable ? "available" : "unavailable"}</p>
-            <p className="muted">Permission: {geoPermissionState}</p>
+            <p className="muted">Permission: {geoPermissionState === "native" ? "managed by desktop (native)" : geoPermissionState}</p>
             <p className="muted">Last source: {lastLocationSource ?? "none"}</p>
             <p className="muted">Last sample: {lastLocationSampleAt ? new Date(lastLocationSampleAt).toLocaleString() : "none"}</p>
             {lastGeoError && <p className="muted">Last geolocation error: {lastGeoError}</p>}

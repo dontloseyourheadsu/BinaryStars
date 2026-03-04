@@ -8,7 +8,9 @@ import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
 import {
   getBluetoothConnectedDeviceNames,
+  getNativeLocation,
   getLocalDeviceInfo,
+  isTauriRuntime,
   isWifiConnected,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
@@ -94,10 +96,10 @@ function App() {
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
   const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
-  const [geoPermissionState, setGeoPermissionState] = useState<"granted" | "denied" | "prompt" | "unsupported" | "unknown">("unknown");
+  const [geoPermissionState, setGeoPermissionState] = useState<"granted" | "denied" | "prompt" | "unsupported" | "unknown" | "native">("unknown");
   const [lastGeoError, setLastGeoError] = useState("");
   const [lastLocationSampleAt, setLastLocationSampleAt] = useState<string | null>(null);
-  const [lastLocationSource, setLastLocationSource] = useState<"geolocation" | null>(null);
+  const [lastLocationSource, setLastLocationSource] = useState<"native" | "geolocation" | null>(null);
 
   const normalizeNoteType = (value: unknown): "Plaintext" | "Markdown" => {
     if (typeof value === "string" && value.trim().toLowerCase() === "markdown") {
@@ -144,6 +146,11 @@ function App() {
 
   useEffect(() => {
     const readPermission = async (): Promise<void> => {
+      if (isTauriRuntime()) {
+        setGeoPermissionState("native");
+        return;
+      }
+
       if (typeof navigator === "undefined" || !("permissions" in navigator)) {
         setGeoPermissionState("unsupported");
         return;
@@ -386,6 +393,24 @@ function App() {
   };
 
   const getCurrentPosition = async (): Promise<{ latitude: number; longitude: number; accuracyMeters: number | null }> => {
+    if (isTauriRuntime()) {
+      const nativeLocation = await getNativeLocation();
+      if (!nativeLocation) {
+        setLastGeoError("Native Linux location unavailable or permission denied");
+        throw new Error("Native location is unavailable. Ensure desktop location services are enabled.");
+      }
+
+      setLastGeoError("");
+      setLastLocationSampleAt(new Date().toISOString());
+      setLastLocationSource("native");
+
+      return {
+        latitude: nativeLocation.latitude,
+        longitude: nativeLocation.longitude,
+        accuracyMeters: nativeLocation.accuracyMeters,
+      };
+    }
+
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setLastGeoError("Geolocation API is unavailable in this runtime");
       throw new Error("Location services are unavailable on this device");
@@ -415,6 +440,12 @@ function App() {
 
   const requestLocationPermission = async (): Promise<boolean> => {
     try {
+      if (isTauriRuntime()) {
+        setGeoPermissionState("native");
+        await getCurrentPosition();
+        return true;
+      }
+
       if (typeof navigator !== "undefined" && "permissions" in navigator) {
         const permissionsApi = navigator.permissions as Permissions;
         const state = await permissionsApi.query({ name: "geolocation" as PermissionName });
@@ -424,7 +455,7 @@ function App() {
       await getCurrentPosition();
       return true;
     } catch {
-      setError("Unable to acquire location because geolocation permission was not granted");
+      setError("Unable to acquire location because location permission was not granted");
       return false;
     }
   };
@@ -449,7 +480,7 @@ function App() {
     if (!granted) {
       setLocationEnabled(false);
       settingsStore.setLocationEnabled(false);
-      setError("Location sharing could not start because geolocation permission is required");
+      setError("Location sharing could not start because location permission is required");
       return;
     }
 
@@ -697,7 +728,7 @@ function App() {
       if (!granted && !cancelled) {
         setLocationEnabled(false);
         settingsStore.setLocationEnabled(false);
-        setError("Location sharing was disabled because geolocation permission is required");
+        setError("Location sharing was disabled because location permission is required");
       }
       return granted;
     };
@@ -1303,7 +1334,7 @@ function App() {
             locationEnabled={locationEnabled}
             locationMinutes={locationMinutes}
             geoPermissionState={geoPermissionState}
-            isGeolocationAvailable={typeof navigator !== "undefined" && !!navigator.geolocation}
+            isGeolocationAvailable={isTauriRuntime() || (typeof navigator !== "undefined" && !!navigator.geolocation)}
             lastGeoError={lastGeoError}
             lastLocationSampleAt={lastLocationSampleAt}
             lastLocationSource={lastLocationSource}
