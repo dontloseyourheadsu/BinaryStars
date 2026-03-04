@@ -63,7 +63,8 @@ data class DeviceDto(
     val cpuLoadPercent: Int? = null,
     val wifiUploadSpeed: String,
     val wifiDownloadSpeed: String,
-    val lastSeen: String
+    val lastSeen: String,
+    val hasPendingNotificationSync: Boolean = false
 )
 
 /** Device telemetry update request payload. */
