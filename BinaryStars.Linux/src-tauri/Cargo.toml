@@ -32,3 +32,4 @@ sha2 = "0.10"
 url = "2"
 urlencoding = "2"
 webbrowser = "1"
+zbus = { version = "5", default-features = true }
