@@ -31,6 +31,11 @@ public class KafkaSettings
     public string DeviceRemovedTopic { get; set; } = "binarystars.device-removed";
 
     /// <summary>
+    /// Gets or sets the topic used for pending device notifications.
+    /// </summary>
+    public string NotificationsTopic { get; set; } = "binarystars.notifications";
+
+    /// <summary>
     /// Gets or sets TLS/SASL settings.
     /// </summary>
     public KafkaSecuritySettings Security { get; set; } = new();
