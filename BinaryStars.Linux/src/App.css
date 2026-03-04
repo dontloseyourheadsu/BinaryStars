@@ -173,6 +173,10 @@ button.ghost,
   background: var(--bg-app);
 }
 
+.app-shell > .banner {
+  grid-column: 1 / -1;
+}
+
 .sidebar {
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
@@ -342,6 +346,7 @@ button.ghost,
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-main);
+  min-width: 0;
 }
 
 .row-card.active {
@@ -376,6 +381,14 @@ button.ghost,
   color: inherit;
   text-align: left;
   padding: 0;
+  min-width: 0;
+}
+
+textarea {
+  width: 100%;
+  max-width: 100%;
+  resize: vertical;
+  overflow: auto;
 }
 
 .muted {
@@ -471,6 +484,10 @@ button.ghost,
   border: 0;
 }
 
+.map-wrap .leaflet-container {
+  touch-action: pan-x pan-y;
+}
+
 .map-empty {
   position: absolute;
   inset: 0;
@@ -487,12 +504,64 @@ button.ghost,
   justify-content: space-between;
 }
 
+.location-toggle {
+  gap: 12px;
+}
+
+.theme-checkbox {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 6px;
+  border: 2px solid var(--text-muted);
+  background: var(--bg-panel);
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.theme-checkbox:hover {
+  border-color: var(--primary-purple);
+}
+
+.theme-checkbox:checked {
+  background: var(--primary-purple);
+  border-color: var(--primary-purple);
+}
+
+.theme-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  left: 7px;
+  top: 3px;
+}
+
+.theme-checkbox:focus-visible {
+  outline: 2px solid var(--primary-purple);
+  outline-offset: 2px;
+}
+
 .markdown-preview {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
   max-height: 220px;
   overflow: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-preview pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1024px) {

@@ -83,7 +83,7 @@ class LiveLocationService : Service() {
             return
         }
 
-        if (!NetworkUtils.isOnline(applicationContext) || !NetworkUtils.isWifiConnected(applicationContext)) {
+        if (!NetworkUtils.isOnline(applicationContext)) {
             return
         }
 

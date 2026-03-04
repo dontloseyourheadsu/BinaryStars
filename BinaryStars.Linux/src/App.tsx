@@ -6,7 +6,11 @@ import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "./App.css";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
-import { getBluetoothConnectedDeviceNames, getLocalDeviceInfo, isWifiConnected } from "./tauriDeviceInfo";
+import {
+  getBluetoothConnectedDeviceNames,
+  getLocalDeviceInfo,
+  isWifiConnected,
+} from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { ThemeMode } from "./storage";
 import type {
@@ -90,6 +94,22 @@ function App() {
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
   const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
+  const [geoPermissionState, setGeoPermissionState] = useState<"granted" | "denied" | "prompt" | "unsupported" | "unknown">("unknown");
+  const [lastGeoError, setLastGeoError] = useState("");
+  const [lastLocationSampleAt, setLastLocationSampleAt] = useState<string | null>(null);
+  const [lastLocationSource, setLastLocationSource] = useState<"geolocation" | null>(null);
+
+  const normalizeNoteType = (value: unknown): "Plaintext" | "Markdown" => {
+    if (typeof value === "string" && value.trim().toLowerCase() === "markdown") {
+      return "Markdown";
+    }
+
+    if (typeof value === "number" && value === 1) {
+      return "Markdown";
+    }
+
+    return "Plaintext";
+  };
 
   const wsRef = useRef<WebSocket | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
@@ -121,6 +141,54 @@ function App() {
     settingsStore.setThemeMode(themeMode);
     void applyNativeWindowTheme(resolvedTheme);
   }, [resolvedTheme, themeMode]);
+
+  useEffect(() => {
+    const readPermission = async (): Promise<void> => {
+      if (typeof navigator === "undefined" || !("permissions" in navigator)) {
+        setGeoPermissionState("unsupported");
+        return;
+      }
+
+      try {
+        const permissionsApi = navigator.permissions as Permissions;
+        const state = await permissionsApi.query({ name: "geolocation" as PermissionName });
+        setGeoPermissionState(state.state);
+        state.onchange = () => {
+          setGeoPermissionState(state.state);
+        };
+      } catch {
+        setGeoPermissionState("unknown");
+      }
+    };
+
+    void readPermission();
+  }, []);
+
+  useEffect(() => {
+    const onWheel = (event: WheelEvent): void => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+
+      if (event.key === "+" || event.key === "=" || event.key === "-" || event.key === "0") {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -220,7 +288,10 @@ function App() {
 
   const refreshNotes = async (): Promise<void> => {
     const next = await api.getNotes();
-    setNotes(next);
+    setNotes(next.map((note) => ({
+      ...note,
+      contentType: normalizeNoteType(note.contentType),
+    })));
   };
 
   const refreshTransfers = async (): Promise<void> => {
@@ -314,10 +385,77 @@ function App() {
     cacheStore.removePendingLocationUploads(deviceId, sentIds);
   };
 
-  const getCurrentPosition = async (): Promise<GeolocationPosition> => {
-    return new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
+  const getCurrentPosition = async (): Promise<{ latitude: number; longitude: number; accuracyMeters: number | null }> => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLastGeoError("Geolocation API is unavailable in this runtime");
+      throw new Error("Location services are unavailable on this device");
+    }
+
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        resolve,
+        (error) => {
+          setLastGeoError(`${error.code}: ${error.message}`);
+          reject(error);
+        },
+        { enableHighAccuracy: true, timeout: 10_000 },
+      );
     });
+
+    setLastGeoError("");
+    setLastLocationSampleAt(new Date().toISOString());
+    setLastLocationSource("geolocation");
+
+    return {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracyMeters: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
+    };
+  };
+
+  const requestLocationPermission = async (): Promise<boolean> => {
+    try {
+      if (typeof navigator !== "undefined" && "permissions" in navigator) {
+        const permissionsApi = navigator.permissions as Permissions;
+        const state = await permissionsApi.query({ name: "geolocation" as PermissionName });
+        setGeoPermissionState(state.state);
+      }
+
+      await getCurrentPosition();
+      return true;
+    } catch {
+      setError("Unable to acquire location because geolocation permission was not granted");
+      return false;
+    }
+  };
+
+  const toggleLocationSharing = async (enabled: boolean): Promise<void> => {
+    if (!enabled) {
+      setLocationEnabled(false);
+      settingsStore.setLocationEnabled(false);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Allow BinaryStars to share this device location in the background while this toggle is on?",
+    );
+    if (!confirmed) {
+      setLocationEnabled(false);
+      settingsStore.setLocationEnabled(false);
+      return;
+    }
+
+    const granted = await requestLocationPermission();
+    if (!granted) {
+      setLocationEnabled(false);
+      settingsStore.setLocationEnabled(false);
+      setError("Location sharing could not start because geolocation permission is required");
+      return;
+    }
+
+    setError("");
+    setLocationEnabled(true);
+    settingsStore.setLocationEnabled(true);
   };
 
   const refreshMapHistory = async (deviceId: string): Promise<void> => {
@@ -456,12 +594,24 @@ function App() {
   }, [bluetoothConnectedNames]);
 
   useEffect(() => {
-    if (!isAuthed || !online || !wifiAvailable) {
+    if (!isAuthed || !online) {
       return;
     }
 
     void flushPendingLocationUploads(myDeviceId);
-  }, [isAuthed, online, wifiAvailable, myDeviceId]);
+  }, [isAuthed, online, myDeviceId]);
+
+  useEffect(() => {
+    if (!isAuthed || !online || activeTab !== "Map" || !selectedMapDeviceId) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void refreshMapHistory(selectedMapDeviceId);
+    }, 10_000);
+
+    return () => window.clearInterval(timer);
+  }, [activeTab, isAuthed, online, selectedMapDeviceId]);
 
   useEffect(() => {
     if (!isAuthed) {
@@ -540,14 +690,26 @@ function App() {
       return;
     }
 
+    let cancelled = false;
+
+    const ensurePermission = async (): Promise<boolean> => {
+      const granted = await requestLocationPermission();
+      if (!granted && !cancelled) {
+        setLocationEnabled(false);
+        settingsStore.setLocationEnabled(false);
+        setError("Location sharing was disabled because geolocation permission is required");
+      }
+      return granted;
+    };
+
     const runLive = async (): Promise<void> => {
       try {
         const position = await getCurrentPosition();
         const payload = {
           deviceId: myDeviceId,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracyMeters: position.coords.accuracy,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          accuracyMeters: position.accuracyMeters,
           recordedAt: new Date().toISOString(),
         };
 
@@ -555,15 +717,9 @@ function App() {
           return;
         }
 
-        const wifiConnected = await isWifiConnected();
-        setWifiAvailable(wifiConnected);
-        if (!wifiConnected) {
-          return;
-        }
-
         await api.sendLiveLocation(payload);
       } catch {
-        // noop
+        // no-op
       }
     };
 
@@ -573,25 +729,15 @@ function App() {
         const recordedAt = new Date().toISOString();
         const payload = {
           deviceId: myDeviceId,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracyMeters: position.coords.accuracy,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          accuracyMeters: position.accuracyMeters,
           recordedAt,
         };
 
         saveLocalLocationPoint(payload);
 
         if (!online) {
-          queuePendingLocationUpload(payload);
-          if (selectedMapDeviceId === myDeviceId) {
-            setHistory(cacheStore.getLocalLocationHistory(myDeviceId));
-          }
-          return;
-        }
-
-        const wifiConnected = await isWifiConnected();
-        setWifiAvailable(wifiConnected);
-        if (!wifiConnected) {
           queuePendingLocationUpload(payload);
           if (selectedMapDeviceId === myDeviceId) {
             setHistory(cacheStore.getLocalLocationHistory(myDeviceId));
@@ -606,15 +752,28 @@ function App() {
           await refreshMapHistory(myDeviceId);
         }
       } catch {
-        // noop
+        // no-op
       }
     };
 
-    void runLive();
-    void runPersisted();
-    const liveTimer = window.setInterval(runLive, 15_000);
-    const persistedTimer = window.setInterval(runPersisted, locationMinutes * 60_000);
+    void (async () => {
+      const granted = await ensurePermission();
+      if (!granted || cancelled) {
+        return;
+      }
+      setError("");
+      await runLive();
+      await runPersisted();
+    })();
+
+    const liveTimer = window.setInterval(() => {
+      void runLive();
+    }, 15_000);
+    const persistedTimer = window.setInterval(() => {
+      void runPersisted();
+    }, locationMinutes * 60_000);
     return () => {
+      cancelled = true;
       window.clearInterval(liveTimer);
       window.clearInterval(persistedTimer);
     };
@@ -797,7 +956,7 @@ function App() {
     setEditingNoteId(note.id);
     setNoteName(note.name);
     setNoteContent(note.content);
-    setNoteType(note.contentType);
+    setNoteType(normalizeNoteType(note.contentType));
   };
 
   const wrapSelection = (before: string, after = before) => {
@@ -1143,6 +1302,11 @@ function App() {
             mapDetailOpen={mapDetailOpen}
             locationEnabled={locationEnabled}
             locationMinutes={locationMinutes}
+            geoPermissionState={geoPermissionState}
+            isGeolocationAvailable={typeof navigator !== "undefined" && !!navigator.geolocation}
+            lastGeoError={lastGeoError}
+            lastLocationSampleAt={lastLocationSampleAt}
+            lastLocationSource={lastLocationSource}
             onSelectMapDevice={setSelectedMapDeviceId}
             onSetMapDetailOpen={setMapDetailOpen}
             onRefreshMapHistory={(deviceId) => {
@@ -1152,8 +1316,7 @@ function App() {
               setMapFocusPoint(point);
             }}
             onSetLocationEnabled={(enabled) => {
-              setLocationEnabled(enabled);
-              settingsStore.setLocationEnabled(enabled);
+              void toggleLocationSharing(enabled);
             }}
             onSetLocationMinutes={(minutes) => {
               setLocationMinutes(minutes);

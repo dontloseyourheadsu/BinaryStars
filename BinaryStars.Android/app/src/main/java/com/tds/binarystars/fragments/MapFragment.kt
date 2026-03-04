@@ -55,6 +55,9 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Point
 import java.time.OffsetDateTime
 import android.content.res.Configuration
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class MapFragment : Fragment(), MessagingEventListener {
@@ -79,6 +82,7 @@ class MapFragment : Fragment(), MessagingEventListener {
     private var selectedDevice: MapDeviceItem? = null
     private var pendingLocationAction: (() -> Unit)? = null
     private var pendingBackgroundEnable = false
+    private var historyPollingJob: Job? = null
 
     private companion object {
         private const val LOCATION_SOURCE_ID = "location-source"
@@ -260,9 +264,11 @@ class MapFragment : Fragment(), MessagingEventListener {
         showMapDetail()
         loadHistory(item.id)
         showLiveLocation()
+        startHistoryPolling(item.id)
     }
 
     private fun showDeviceList() {
+        stopHistoryPolling()
         mapDetailView.visibility = View.GONE
         deviceListView.visibility = View.VISIBLE
     }
@@ -354,12 +360,7 @@ class MapFragment : Fragment(), MessagingEventListener {
             return
         }
 
-        val latest = history.firstOrNull()
-        if (latest != null) {
-            showMapLocation(latest.latitude, latest.longitude, latest.title)
-        } else {
-            Toast.makeText(requireContext(), "No location history available", Toast.LENGTH_SHORT).show()
-        }
+        loadHistory(device.id)
     }
 
     /**
@@ -405,6 +406,32 @@ class MapFragment : Fragment(), MessagingEventListener {
                         recordedAt = recordedAt
                     )
                     showMapLocation(location.latitude, location.longitude, "Live location")
+
+                    if (NetworkUtils.isOnline(requireContext())) {
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            try {
+                                ApiClient.apiService.sendLiveLocation(
+                                    com.tds.binarystars.api.LocationUpdateRequestDto(
+                                        deviceId = currentId,
+                                        latitude = location.latitude,
+                                        longitude = location.longitude,
+                                        accuracyMeters = location.accuracy.toDouble(),
+                                        recordedAt = recordedAt
+                                    )
+                                )
+                                ApiClient.apiService.sendLocation(
+                                    com.tds.binarystars.api.LocationUpdateRequestDto(
+                                        deviceId = currentId,
+                                        latitude = location.latitude,
+                                        longitude = location.longitude,
+                                        accuracyMeters = location.accuracy.toDouble(),
+                                        recordedAt = recordedAt
+                                    )
+                                )
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
 
                     if (selectedDevice?.id == currentId) {
                         loadHistory(currentId)
@@ -570,6 +597,30 @@ class MapFragment : Fragment(), MessagingEventListener {
         contentView.visibility = if (show) View.GONE else View.VISIBLE
     }
 
+    private fun startHistoryPolling(deviceId: String) {
+        stopHistoryPolling()
+        historyPollingJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive) {
+                delay(10_000)
+                if (!NetworkUtils.isOnline(requireContext())) {
+                    continue
+                }
+
+                val selected = selectedDevice ?: break
+                if (selected.id != deviceId) {
+                    break
+                }
+
+                loadHistory(deviceId)
+            }
+        }
+    }
+
+    private fun stopHistoryPolling() {
+        historyPollingJob?.cancel()
+        historyPollingJob = null
+    }
+
     override fun onChatUpdated(deviceId: String) {
         // no-op
     }
@@ -639,6 +690,7 @@ class MapFragment : Fragment(), MessagingEventListener {
     override fun onStop() {
         super.onStop()
         MessagingSocketManager.removeListener(this)
+        stopHistoryPolling()
         mapView.onStop()
     }
 

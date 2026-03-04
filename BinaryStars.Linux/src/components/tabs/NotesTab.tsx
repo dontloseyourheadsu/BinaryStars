@@ -1,5 +1,7 @@
 import type { RefObject } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import type { Note } from "../../types";
 
@@ -38,6 +40,19 @@ export default function NotesTab({
   onWrapSelection,
   onInsertAtSelection,
 }: Props) {
+  const isMarkdown = (value: unknown): boolean => {
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      return normalized === "markdown";
+    }
+
+    if (typeof value === "number") {
+      return value === 1;
+    }
+
+    return false;
+  };
+
   return (
     <section className="panel-grid">
       <div className="panel">
@@ -53,9 +68,14 @@ export default function NotesTab({
                 <strong>{note.name}</strong>
                 <span className="muted">{note.contentType} · {new Date(note.updatedAt).toLocaleString()}</span>
               </button>
-              {note.contentType === "Markdown" && (
+              {isMarkdown(note.contentType) && (
                 <div className="markdown-preview">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.content || "_Preview_"}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    rehypePlugins={[rehypeRaw]}
+                  >
+                    {note.content || "_Preview_"}
+                  </ReactMarkdown>
                 </div>
               )}
               <button className="ghost" onClick={() => onDeleteNote(note.id)} type="button">
@@ -106,9 +126,14 @@ export default function NotesTab({
           <button className="ghost" onClick={onResetEditor} type="button">Cancel</button>
           <button onClick={onSaveNote} type="button">Save</button>
         </div>
-        {noteType === "Markdown" && (
+        {isMarkdown(noteType) && (
           <div className="markdown-preview">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{noteContent || "_Preview_"}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              rehypePlugins={[rehypeRaw]}
+            >
+              {noteContent || "_Preview_"}
+            </ReactMarkdown>
           </div>
         )}
       </div>

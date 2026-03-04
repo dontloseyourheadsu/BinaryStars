@@ -20,10 +20,59 @@ pub fn run() {
             get_device_info,
             oauth_get_provider_token,
             get_bluetooth_connected_device_names,
-            is_wifi_connected
+            is_wifi_connected,
+            get_approximate_location
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[derive(Serialize)]
+pub struct ApproximateLocation {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub accuracy_meters: Option<f64>,
+}
+
+#[derive(Deserialize)]
+struct IpApiResponse {
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    lat: Option<f64>,
+    lon: Option<f64>,
+}
+
+#[tauri::command]
+async fn get_approximate_location() -> Result<ApproximateLocation, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(8))
+            .build()
+            .map_err(|e| format!("http client error: {}", e))?;
+
+        let response = client
+            .get("https://ipapi.co/json/")
+            .send()
+            .and_then(|r| r.error_for_status())
+            .map_err(|e| format!("ip geolocation request failed: {}", e))?;
+
+        let body: IpApiResponse = response
+            .json()
+            .map_err(|e| format!("ip geolocation parse failed: {}", e))?;
+
+        let latitude = body.latitude.or(body.lat)
+            .ok_or_else(|| "missing latitude in ip geolocation response".to_string())?;
+        let longitude = body.longitude.or(body.lon)
+            .ok_or_else(|| "missing longitude in ip geolocation response".to_string())?;
+
+        Ok(ApproximateLocation {
+            latitude,
+            longitude,
+            accuracy_meters: None,
+        })
+    })
+    .await
+    .map_err(|e| format!("spawn error: {}", e))?
 }
 
 #[tauri::command]

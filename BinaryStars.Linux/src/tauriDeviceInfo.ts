@@ -19,6 +19,12 @@ export interface TauriDeviceInfo {
   interfaces: TauriInterfaceInfo[];
 }
 
+export interface ApproxLocation {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+}
+
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -63,5 +69,53 @@ export async function isWifiConnected(): Promise<boolean> {
     return await invoke<boolean>("is_wifi_connected");
   } catch {
     return false;
+  }
+}
+
+export async function getApproximateLocation(): Promise<ApproxLocation | null> {
+  if (isTauriRuntime()) {
+    try {
+      const result = await invoke<{
+        latitude: number;
+        longitude: number;
+        accuracy_meters: number | null;
+      }>("get_approximate_location");
+
+      return {
+        latitude: result.latitude,
+        longitude: result.longitude,
+        accuracyMeters: result.accuracy_meters,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const response = await fetch("https://ipapi.co/json/", { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json() as {
+      latitude?: number;
+      longitude?: number;
+      lat?: number;
+      lon?: number;
+    };
+
+    const latitude = typeof data.latitude === "number" ? data.latitude : data.lat;
+    const longitude = typeof data.longitude === "number" ? data.longitude : data.lon;
+    if (typeof latitude !== "number" || typeof longitude !== "number") {
+      return null;
+    }
+
+    return {
+      latitude,
+      longitude,
+      accuracyMeters: null,
+    };
+  } catch {
+    return null;
   }
 }
