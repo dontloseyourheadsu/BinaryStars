@@ -165,7 +165,8 @@ public class DevicesWriteService : IDevicesWriteService
             WifiDownloadSpeed = "0 Mbps",
             WifiUploadSpeed = "0 Mbps",
             Type = DeviceType.Android,
-            LastSeen = DateTimeOffset.UtcNow
+            LastSeen = DateTimeOffset.UtcNow,
+            HasPendingNotificationSync = false
         };
 
         await _deviceRepository.AddAsync(newDevice, cancellationToken);
@@ -257,7 +258,8 @@ public class DevicesWriteService : IDevicesWriteService
             dbModel.LastSeen,
             dbModel.PublicKey,
             dbModel.PublicKeyAlgorithm,
-            dbModel.PublicKeyCreatedAt
+            dbModel.PublicKeyCreatedAt,
+            dbModel.HasPendingNotificationSync
         );
     }
 }

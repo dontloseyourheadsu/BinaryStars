@@ -31,7 +31,8 @@ public static class DeviceMapper
             model.LastSeen,
             model.PublicKey,
             model.PublicKeyAlgorithm,
-            model.PublicKeyCreatedAt
+            model.PublicKeyCreatedAt,
+            model.HasPendingNotificationSync
         );
     }
 
@@ -61,6 +62,7 @@ public static class DeviceMapper
             CpuLoadPercent = domain.CpuLoadPercent,
             IsAvailable = domain.IsAvailable,
             LastSeen = domain.LastSeen,
+            HasPendingNotificationSync = domain.HasPendingNotificationSync,
             UserId = userId
         };
     }

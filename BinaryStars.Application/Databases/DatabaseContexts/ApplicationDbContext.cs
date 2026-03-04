@@ -2,6 +2,7 @@ using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using BinaryStars.Application.Databases.DatabaseModels.Locations;
 using BinaryStars.Application.Databases.DatabaseModels.Notes;
+using BinaryStars.Application.Databases.DatabaseModels.Notifications;
 using BinaryStars.Application.Databases.DatabaseModels.Transfers;
 using BinaryStars.Application.Databases.DatabaseRules;
 using Microsoft.AspNetCore.Identity;
@@ -36,6 +37,11 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
     public DbSet<LocationHistoryDbModel> LocationHistory { get; set; }
 
     /// <summary>
+    /// Gets or sets notification schedule records.
+    /// </summary>
+    public DbSet<NotificationScheduleDbModel> NotificationSchedules { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ApplicationDbContext"/> class.
     /// </summary>
     /// <param name="options">The context options.</param>
@@ -57,5 +63,6 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
         builder.ApplyConfiguration(new NoteDbModelConfiguration());
         builder.ApplyConfiguration(new FileTransferDbModelConfiguration());
         builder.ApplyConfiguration(new LocationHistoryDbModelConfiguration());
+        builder.ApplyConfiguration(new NotificationScheduleDbModelConfiguration());
     }
 }

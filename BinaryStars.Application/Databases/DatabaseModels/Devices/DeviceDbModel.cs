@@ -88,6 +88,11 @@ public class DeviceDbModel
     public DateTimeOffset LastSeen { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether notification sync data is pending for this device.
+    /// </summary>
+    public bool HasPendingNotificationSync { get; set; }
+
+    /// <summary>
     /// Gets or sets the owning user identifier.
     /// </summary>
     public Guid UserId { get; set; }

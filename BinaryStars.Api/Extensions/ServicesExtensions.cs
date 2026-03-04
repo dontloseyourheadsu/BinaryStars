@@ -4,11 +4,13 @@ using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Locations;
 using BinaryStars.Application.Databases.Repositories.Notes;
+using BinaryStars.Application.Databases.Repositories.Notifications;
 using BinaryStars.Application.Databases.Repositories.Transfers;
 using BinaryStars.Application.Services.Accounts;
 using BinaryStars.Application.Services.Devices;
 using BinaryStars.Application.Services.Locations;
 using BinaryStars.Application.Services.Notes;
+using BinaryStars.Application.Services.Notifications;
 using BinaryStars.Application.Services.Transfers;
 using BinaryStars.Application.Validators.Accounts;
 using BinaryStars.Api.Services;
@@ -33,6 +35,7 @@ public static class ServicesExtensions
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
         services.AddScoped<INotesRepository, NotesRepository>();
+        services.AddScoped<INotificationScheduleRepository, NotificationScheduleRepository>();
         services.AddScoped<IFileTransferRepository, FileTransferRepository>();
         services.AddScoped<ILocationHistoryRepository, LocationHistoryRepository>();
 
@@ -43,6 +46,8 @@ public static class ServicesExtensions
         services.AddScoped<IDevicesWriteService, DevicesWriteService>();
         services.AddScoped<INotesReadService, NotesReadService>();
         services.AddScoped<INotesWriteService, NotesWriteService>();
+        services.AddScoped<INotificationsReadService, NotificationsService>();
+        services.AddScoped<INotificationsWriteService, NotificationsService>();
         services.AddScoped<IFileTransfersReadService, FileTransfersService>();
         services.AddScoped<IFileTransfersWriteService, FileTransfersService>();
         services.AddScoped<ILocationHistoryReadService, LocationHistoryService>();

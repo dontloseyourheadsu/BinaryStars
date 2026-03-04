@@ -84,6 +84,25 @@ public record LocationUpdateEvent(
     DateTimeOffset OccurredAt);
 
 /// <summary>
+/// Payload for device notifications queued for pull-by-heartbeat delivery.
+/// </summary>
+/// <param name="Id">The notification identifier.</param>
+/// <param name="UserId">The owning user identifier.</param>
+/// <param name="SenderDeviceId">The source device identifier.</param>
+/// <param name="TargetDeviceId">The target device identifier.</param>
+/// <param name="Title">The notification title.</param>
+/// <param name="Body">The notification body.</param>
+/// <param name="CreatedAt">The timestamp the notification was queued.</param>
+public record DeviceNotificationMessage(
+    string Id,
+    Guid UserId,
+    string SenderDeviceId,
+    string TargetDeviceId,
+    string Title,
+    string Body,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
 /// Envelope used for websocket payloads.
 /// </summary>
 /// <param name="Type">The payload type string.</param>
