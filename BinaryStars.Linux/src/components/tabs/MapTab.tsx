@@ -11,6 +11,11 @@ type Props = {
   mapDetailOpen: boolean;
   locationEnabled: boolean;
   locationMinutes: number;
+  geoPermissionState: "granted" | "denied" | "prompt" | "unsupported" | "unknown";
+  isGeolocationAvailable: boolean;
+  lastGeoError: string;
+  lastLocationSampleAt: string | null;
+  lastLocationSource: "geolocation" | null;
   onSelectMapDevice: (deviceId: string) => void;
   onSetMapDetailOpen: (open: boolean) => void;
   onRefreshMapHistory: (deviceId: string) => void;
@@ -29,6 +34,11 @@ export default function MapTab({
   mapDetailOpen,
   locationEnabled,
   locationMinutes,
+  geoPermissionState,
+  isGeolocationAvailable,
+  lastGeoError,
+  lastLocationSampleAt,
+  lastLocationSource,
   onSelectMapDevice,
   onSetMapDetailOpen,
   onRefreshMapHistory,
@@ -64,9 +74,14 @@ export default function MapTab({
           {devices.length === 0 && <p className="empty-state">No devices available</p>}
           <p className="section-label">Location Updates</p>
           <div className="panel inset-panel">
-            <label className="inline">
+            <label className="inline location-toggle">
               Share this device location in background
-              <input checked={locationEnabled} onChange={(event) => onSetLocationEnabled(event.target.checked)} type="checkbox" />
+              <input
+                className="theme-checkbox"
+                checked={locationEnabled}
+                onChange={(event) => onSetLocationEnabled(event.target.checked)}
+                type="checkbox"
+              />
             </label>
             <select
               aria-label="Location update interval"
@@ -77,6 +92,12 @@ export default function MapTab({
               <option value={30}>30 minutes</option>
               <option value={60}>60 minutes</option>
             </select>
+            <p className="section-label">Location Diagnostics</p>
+            <p className="muted">Geolocation API: {isGeolocationAvailable ? "available" : "unavailable"}</p>
+            <p className="muted">Permission: {geoPermissionState}</p>
+            <p className="muted">Last source: {lastLocationSource ?? "none"}</p>
+            <p className="muted">Last sample: {lastLocationSampleAt ? new Date(lastLocationSampleAt).toLocaleString() : "none"}</p>
+            {lastGeoError && <p className="muted">Last geolocation error: {lastGeoError}</p>}
           </div>
         </div>
       )}
@@ -92,6 +113,12 @@ export default function MapTab({
               center={[centerLatitude, centerLongitude]}
               key={activePoint ? `${activePoint.id}-${activePoint.recordedAt}` : "map-empty-center"}
               zoom={activePoint ? 15.5 : 2}
+              scrollWheelZoom={false}
+              touchZoom={false}
+              doubleClickZoom={false}
+              boxZoom={false}
+              keyboard={false}
+              zoomControl={false}
               style={{ height: "100%", width: "100%" }}
             >
               <TileLayer
