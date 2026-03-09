@@ -11,6 +11,7 @@ import com.tds.binarystars.fragments.FilesFragment
 import com.tds.binarystars.fragments.MapFragment
 import com.tds.binarystars.fragments.MessagingFragment
 import com.tds.binarystars.fragments.NotesFragment
+import com.tds.binarystars.fragments.ActionsFragment
 import com.tds.binarystars.fragments.SettingsFragment
 
 import android.provider.Settings
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         val navNotes = findViewById<LinearLayout>(R.id.nav_notes)
         val navMessaging = findViewById<LinearLayout>(R.id.nav_messaging)
         val navMap = findViewById<LinearLayout>(R.id.nav_map)
+        val navActions = findViewById<LinearLayout>(R.id.nav_actions)
         val navSettings = findViewById<LinearLayout>(R.id.nav_settings)
 
         navDevices.setOnClickListener {
@@ -107,6 +109,11 @@ class MainActivity : AppCompatActivity() {
 
         navMap.setOnClickListener {
             loadFragment(MapFragment())
+            drawerLayout.closeDrawers()
+        }
+
+        navActions.setOnClickListener {
+            loadFragment(ActionsFragment())
             drawerLayout.closeDrawers()
         }
 

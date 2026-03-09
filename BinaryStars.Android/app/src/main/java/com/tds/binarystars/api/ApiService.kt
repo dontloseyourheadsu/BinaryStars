@@ -52,6 +52,10 @@ interface ApiService {
     @POST("devices/{id}/heartbeat")
     suspend fun sendDeviceHeartbeat(@Path("id") deviceId: String): Response<DeviceDto>
 
+    /** Send a remote action command to a target device. */
+    @POST("actions/send")
+    suspend fun sendAction(@Body request: SendActionRequestDto): Response<DeviceActionCommandDto>
+
     // Notes endpoints
     /** List notes for the authenticated user. */
     @GET("notes")
