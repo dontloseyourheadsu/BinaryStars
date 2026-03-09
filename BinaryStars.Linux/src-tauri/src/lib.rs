@@ -25,7 +25,8 @@ pub fn run() {
             oauth_get_provider_token,
             get_bluetooth_connected_device_names,
             is_wifi_connected,
-            get_native_location
+            get_native_location,
+            perform_local_action
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -223,6 +224,97 @@ async fn is_wifi_connected() -> Result<bool, String> {
         });
 
         Ok(has_wireless)
+    })
+    .await
+    .map_err(|e| format!("spawn error: {}", e))?
+}
+
+fn try_command(program: &str, args: &[&str]) -> Result<(), String> {
+    let output = Command::new(program).args(args).output();
+    let output = match output {
+        Ok(value) => value,
+        Err(error) => {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                return Err(format!("missing:{}", program));
+            }
+            return Err(format!("{} failed to start: {}", program, error));
+        }
+    };
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+    let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+    let detail = if !stderr.trim().is_empty() {
+        stderr.trim().to_string()
+    } else {
+        stdout.trim().to_string()
+    };
+
+    Err(format!("{} exited with status {}: {}", program, output.status, detail))
+}
+
+fn block_screen_linux() -> Result<(), String> {
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_ascii_lowercase();
+    let session = std::env::var("DESKTOP_SESSION").unwrap_or_default().to_ascii_lowercase();
+
+    let mut errors: Vec<String> = Vec::new();
+
+    let mut candidates: Vec<(&str, Vec<&str>)> = Vec::new();
+
+    if desktop.contains("kde") || session.contains("kde") || session.contains("plasma") {
+        candidates.push(("qdbus6", vec!["org.freedesktop.ScreenSaver", "/ScreenSaver", "Lock"]));
+        candidates.push(("qdbus", vec!["org.freedesktop.ScreenSaver", "/ScreenSaver", "Lock"]));
+    }
+
+    if desktop.contains("gnome") || desktop.contains("unity") || desktop.contains("xfce") || desktop.contains("cinnamon") || session.contains("gnome") {
+        candidates.push((
+            "dbus-send",
+            vec![
+                "--session",
+                "--dest=org.gnome.ScreenSaver",
+                "--type=method_call",
+                "/org/gnome/ScreenSaver",
+                "org.gnome.ScreenSaver.Lock",
+            ],
+        ));
+    }
+
+    candidates.push((
+        "dbus-send",
+        vec![
+            "--session",
+            "--dest=org.freedesktop.ScreenSaver",
+            "--type=method_call",
+            "/ScreenSaver",
+            "org.freedesktop.ScreenSaver.Lock",
+        ],
+    ));
+    candidates.push(("xdg-screensaver", vec!["lock"]));
+    candidates.push(("loginctl", vec!["lock-session"]));
+
+    for (program, args) in candidates {
+        match try_command(program, &args) {
+            Ok(_) => return Ok(()),
+            Err(error) => errors.push(error),
+        }
+    }
+
+    Err(format!(
+        "Unable to lock screen on this Linux desktop/session. The window manager/session API may be unavailable or denied this request. Tried GNOME/KDE/freedesktop/loginctl methods. Details: {}",
+        errors.join(" | ")
+    ))
+}
+
+#[tauri::command]
+async fn perform_local_action(action_type: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        match action_type.as_str() {
+            "block_screen" => block_screen_linux(),
+            _ => Err("Unsupported local action".to_string()),
+        }
     })
     .await
     .map_err(|e| format!("spawn error: {}", e))?
