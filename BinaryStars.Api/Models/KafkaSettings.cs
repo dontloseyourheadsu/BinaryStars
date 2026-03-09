@@ -36,6 +36,11 @@ public class KafkaSettings
     public string NotificationsTopic { get; set; } = "binarystars.notifications";
 
     /// <summary>
+    /// Gets or sets the topic used for remote device action commands.
+    /// </summary>
+    public string ActionsTopic { get; set; } = "binarystars.actions";
+
+    /// <summary>
     /// Gets or sets TLS/SASL settings.
     /// </summary>
     public KafkaSecuritySettings Security { get; set; } = new();

@@ -93,3 +93,11 @@ export async function getNativeLocation(): Promise<NativeLocation | null> {
     return null;
   }
 }
+
+export async function performLocalAction(actionType: "block_screen"): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Local actions are supported only in the Linux desktop app runtime");
+  }
+
+  await invoke<void>("perform_local_action", { actionType });
+}

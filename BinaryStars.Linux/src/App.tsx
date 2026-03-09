@@ -12,6 +12,7 @@ import {
   getLocalDeviceInfo,
   isTauriRuntime,
   isWifiConnected,
+  performLocalAction,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { LocalNotificationHistoryItem } from "./storage";
@@ -37,6 +38,7 @@ import NotesTab from "./components/tabs/NotesTab";
 import MessagingTab from "./components/tabs/MessagingTab";
 import NotificationsTab from "./components/tabs/NotificationsTab";
 import MapTab from "./components/tabs/MapTab";
+import ActionsTab from "./components/tabs/ActionsTab";
 import SettingsTab from "./components/tabs/SettingsTab";
 import { Tab, tabs } from "./components/tabs/types";
 import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
@@ -87,6 +89,7 @@ function App() {
   const [selectedMapDeviceId, setSelectedMapDeviceId] = useState("");
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
   const [selectedDeviceDetailId, setSelectedDeviceDetailId] = useState("");
+  const [selectedActionDeviceId, setSelectedActionDeviceId] = useState("");
   const [newMessage, setNewMessage] = useState("");
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationBody, setNotificationBody] = useState("");
@@ -249,6 +252,16 @@ function App() {
   const selectedDeviceDetail = useMemo(
     () => devices.find((entry) => entry.id === selectedDeviceDetailId) ?? null,
     [devices, selectedDeviceDetailId],
+  );
+
+  const linuxActionDevices = useMemo(
+    () => devices.filter((entry) => entry.type === "Linux"),
+    [devices],
+  );
+
+  const selectedActionDevice = useMemo(
+    () => linuxActionDevices.find((entry) => entry.id === selectedActionDeviceId) ?? null,
+    [linuxActionDevices, selectedActionDeviceId],
   );
 
   const chatSummaries = useMemo(() => {
@@ -696,6 +709,24 @@ function App() {
   }, [isAuthed, online, myDeviceId]);
 
   useEffect(() => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    void syncActionCommands().catch(() => {
+      // ignore transient action polling errors
+    });
+
+    const timer = window.setInterval(() => {
+      void syncActionCommands().catch(() => {
+        // ignore transient action polling errors
+      });
+    }, 8_000);
+
+    return () => window.clearInterval(timer);
+  }, [isAuthed, online, myDeviceId]);
+
+  useEffect(() => {
     if (!isAuthed || !online || activeTab !== "Map" || !selectedMapDeviceId) {
       return;
     }
@@ -937,6 +968,19 @@ function App() {
       setNotificationTargetDeviceId(fallback);
     }
   }, [devices, myDeviceId, notificationTargetDeviceId]);
+
+  useEffect(() => {
+    if (selectedActionDeviceId && linuxActionDevices.some((entry) => entry.id === selectedActionDeviceId)) {
+      return;
+    }
+
+    if (linuxActionDevices.length > 0) {
+      const fallback = linuxActionDevices.find((entry) => entry.id !== myDeviceId)?.id ?? linuxActionDevices[0].id;
+      setSelectedActionDeviceId(fallback);
+    } else {
+      setSelectedActionDeviceId("");
+    }
+  }, [linuxActionDevices, myDeviceId, selectedActionDeviceId]);
 
   const linkCurrentDevice = async (): Promise<void> => {
     if (!requireOnline()) {
@@ -1306,6 +1350,54 @@ function App() {
     setMessages((prev) => prev.filter((entry) => entry.deviceId !== selectedChatDeviceId));
   };
 
+  const executeActionLocally = async (actionType: string): Promise<void> => {
+    if (actionType !== "block_screen") {
+      return;
+    }
+
+    await performLocalAction("block_screen");
+  };
+
+  const syncActionCommands = async (): Promise<void> => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    const commands = await api.pullActions(myDeviceId);
+    for (const command of commands) {
+      try {
+        await executeActionLocally(command.actionType);
+      } catch (nextError) {
+        const message = nextError instanceof Error ? nextError.message : "Failed to execute remote action";
+        setError(message);
+      }
+    }
+  };
+
+  const sendBlockScreenAction = async (): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
+    if (!selectedActionDevice) {
+      setError("Select a Linux device first");
+      return;
+    }
+
+    if (!selectedActionDevice.isOnline) {
+      setError("Target device must be online");
+      return;
+    }
+
+    await api.sendAction({
+      senderDeviceId: myDeviceId,
+      targetDeviceId: selectedActionDevice.id,
+      actionType: "block_screen",
+    });
+
+    setError("");
+  };
+
   const signOut = (): void => {
     tokenStore.clear();
     wsRef.current?.close();
@@ -1314,6 +1406,7 @@ function App() {
     setDevices([]);
     setSelectedChatDeviceId("");
     setSelectedDeviceDetailId("");
+    setSelectedActionDeviceId("");
     setNotificationSchedules([]);
     setNotificationHistory([]);
     setHistory([]);
@@ -1602,6 +1695,17 @@ function App() {
               setLocationMinutes(minutes);
               settingsStore.setLocationMinutes(minutes);
             }}
+          />
+        )}
+
+        {activeTab === "Actions" && (
+          <ActionsTab
+            linuxDevices={linuxActionDevices}
+            selectedDeviceId={selectedActionDeviceId}
+            selectedDevice={selectedActionDevice}
+            onSelectDevice={setSelectedActionDeviceId}
+            onSendBlockScreen={() => void sendBlockScreenAction()}
+            busy={busy}
           />
         )}
 

@@ -195,6 +195,23 @@ data class SendMessageRequestDto(
     val sentAt: String?
 )
 
+/** Remote device action send request payload. */
+data class SendActionRequestDto(
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val actionType: String
+)
+
+/** Remote device action command response payload. */
+data class DeviceActionCommandDto(
+    val id: String,
+    val userId: String,
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val actionType: String,
+    val createdAt: String
+)
+
 // Location Models
 /** Location update request payload. */
 data class LocationUpdateRequestDto(

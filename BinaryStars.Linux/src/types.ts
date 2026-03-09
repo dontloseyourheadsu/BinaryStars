@@ -71,6 +71,15 @@ export interface NotificationsPullResponse {
   schedules: NotificationSchedule[];
 }
 
+export interface DeviceActionCommand {
+  id: string;
+  userId: string;
+  senderDeviceId: string;
+  targetDeviceId: string;
+  actionType: string;
+  createdAt: string;
+}
+
 export interface Note {
   id: string;
   name: string;
