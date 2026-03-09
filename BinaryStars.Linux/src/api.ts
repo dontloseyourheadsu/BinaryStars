@@ -3,6 +3,7 @@ import type {
   AccountProfile,
   AuthResponse,
   Device,
+  DeviceActionCommand,
   DeviceNotificationMessage,
   FileTransfer,
   LocationPoint,
@@ -169,6 +170,20 @@ export const api = {
   },
   async acknowledgeNotificationSync(deviceId: string): Promise<void> {
     await http.post("/notifications/ack", { deviceId });
+  },
+  async sendAction(payload: {
+    senderDeviceId: string;
+    targetDeviceId: string;
+    actionType: "block_screen";
+  }): Promise<DeviceActionCommand> {
+    const response = await http.post<DeviceActionCommand>("/actions/send", payload);
+    return response.data;
+  },
+  async pullActions(deviceId: string): Promise<DeviceActionCommand[]> {
+    const response = await http.get<DeviceActionCommand[]>("/actions/pull", {
+      params: { deviceId },
+    });
+    return response.data;
   },
   async getNotes(): Promise<Note[]> {
     const response = await http.get<Note[]>("/notes");
