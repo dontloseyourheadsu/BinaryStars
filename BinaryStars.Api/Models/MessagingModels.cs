@@ -103,6 +103,23 @@ public record DeviceNotificationMessage(
     DateTimeOffset CreatedAt);
 
 /// <summary>
+/// Payload for remote device actions delivered via Kafka pull.
+/// </summary>
+/// <param name="Id">The action identifier.</param>
+/// <param name="UserId">The owning user identifier.</param>
+/// <param name="SenderDeviceId">The source device identifier.</param>
+/// <param name="TargetDeviceId">The target device identifier.</param>
+/// <param name="ActionType">The action type string (for example: block_screen).</param>
+/// <param name="CreatedAt">The timestamp the action was queued.</param>
+public record DeviceActionCommand(
+    string Id,
+    Guid UserId,
+    string SenderDeviceId,
+    string TargetDeviceId,
+    string ActionType,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
 /// Envelope used for websocket payloads.
 /// </summary>
 /// <param name="Type">The payload type string.</param>

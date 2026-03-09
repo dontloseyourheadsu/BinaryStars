@@ -139,6 +139,30 @@ public class MessagingKafkaService
     }
 
     /// <summary>
+    /// Publishes a remote action command for a device.
+    /// </summary>
+    /// <param name="message">The action payload.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    public async Task PublishActionAsync(DeviceActionCommand message, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
+    {
+        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
+        var payload = JsonSerializer.SerializeToUtf8Bytes(message, MessagingJson.SerializerOptions);
+
+        await producer.ProduceAsync(
+            _settings.ActionsTopic,
+            new Message<string, byte[]>
+            {
+                Key = message.Id,
+                Value = payload
+            },
+            cancellationToken);
+
+        producer.Flush(TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
     /// Consumes pending notifications for a device from Kafka.
     /// </summary>
     /// <param name="deviceId">The device identifier.</param>
@@ -207,6 +231,81 @@ public class MessagingKafkaService
             new Message<string, byte[]>
             {
                 Key = notificationId,
+                Value = null!
+            },
+            cancellationToken);
+        producer.Flush(TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
+    /// Consumes pending action commands for a device from Kafka.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The pending action commands.</returns>
+    public async Task<List<DeviceActionCommand>> ConsumePendingActionsAsync(
+        string deviceId,
+        Guid userId,
+        KafkaAuthMode authMode,
+        string? oauthToken,
+        CancellationToken cancellationToken)
+    {
+        using var consumer = _clientFactory.CreateConsumer($"actions-{deviceId}", authMode, oauthToken);
+        consumer.Subscribe(_settings.ActionsTopic);
+
+        var commands = new List<DeviceActionCommand>();
+        var emptyReads = 0;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var result = consumer.Consume(TimeSpan.FromSeconds(1));
+            if (result == null)
+            {
+                emptyReads++;
+                if (emptyReads >= 3)
+                    break;
+
+                continue;
+            }
+
+            if (result.Message?.Value == null || result.Message.Value.Length == 0)
+            {
+                consumer.Commit(result);
+                continue;
+            }
+
+            var command = JsonSerializer.Deserialize<DeviceActionCommand>(result.Message.Value, MessagingJson.SerializerOptions);
+            if (command != null &&
+                command.UserId == userId &&
+                command.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
+            {
+                commands.Add(command);
+            }
+
+            consumer.Commit(result);
+        }
+
+        return commands;
+    }
+
+    /// <summary>
+    /// Deletes a pending action command from Kafka using a tombstone.
+    /// </summary>
+    /// <param name="actionId">The action command identifier.</param>
+    /// <param name="authMode">The Kafka authentication mode.</param>
+    /// <param name="oauthToken">Optional OAuth bearer token.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    public async Task DeleteActionAsync(string actionId, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
+    {
+        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
+        await producer.ProduceAsync(
+            _settings.ActionsTopic,
+            new Message<string, byte[]>
+            {
+                Key = actionId,
                 Value = null!
             },
             cancellationToken);
