@@ -18,16 +18,24 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tds.binarystars.MainActivity
 import com.tds.binarystars.R
+import com.tds.binarystars.adapter.ActionAppRow
+import com.tds.binarystars.adapter.ActionAppsAdapter
 import com.tds.binarystars.adapter.DevicesAdapter
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.DeviceActionResultDto
 import com.tds.binarystars.api.DeviceTypeDto
+import com.tds.binarystars.api.LaunchableAppItemDto
+import com.tds.binarystars.api.RunningAppItemDto
 import com.tds.binarystars.api.SendActionRequestDto
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 import com.tds.binarystars.util.NetworkUtils
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class ActionsFragment : Fragment() {
 
@@ -35,7 +43,18 @@ class ActionsFragment : Fragment() {
         private const val POLL_INTERVAL_MS = 10_000L
     }
 
+    private enum class ActionMode {
+        Base,
+        OpenApps,
+        CloseApps,
+    }
+
     private var selectedDevice: Device? = null
+    private var pendingCorrelationId: String? = null
+    private var actionMode: ActionMode = ActionMode.Base
+    private val gson = Gson()
+    private var launchableApps: List<LaunchableAppItemDto> = emptyList()
+    private var runningApps: List<RunningAppItemDto> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -69,6 +88,14 @@ class ActionsFragment : Fragment() {
             sendAction("reboot")
         }
 
+        view.findViewById<Button>(R.id.btnOpenApps).setOnClickListener {
+            requestLaunchableApps()
+        }
+
+        view.findViewById<Button>(R.id.btnCloseApps).setOnClickListener {
+            requestRunningApps()
+        }
+
         refreshLinuxDevices()
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -76,6 +103,7 @@ class ActionsFragment : Fragment() {
                 while (isActive) {
                     delay(POLL_INTERVAL_MS)
                     refreshLinuxDevices()
+                    pullActionResults()
                 }
             }
         }
@@ -87,7 +115,7 @@ class ActionsFragment : Fragment() {
     }
 
     @SuppressLint("HardwareIds")
-    private fun sendAction(actionType: String) {
+    private fun sendAction(actionType: String, payloadJson: String? = null) {
         val target = selectedDevice ?: return
         if (!NetworkUtils.isOnline(requireContext())) {
             Toast.makeText(requireContext(), "No connection available", Toast.LENGTH_SHORT).show()
@@ -100,6 +128,8 @@ class ActionsFragment : Fragment() {
         }
 
         val senderId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+        val correlationId = UUID.randomUUID().toString()
+        pendingCorrelationId = correlationId
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -107,7 +137,9 @@ class ActionsFragment : Fragment() {
                     SendActionRequestDto(
                         senderDeviceId = senderId,
                         targetDeviceId = target.id,
-                        actionType = actionType
+                        actionType = actionType,
+                        payloadJson = payloadJson,
+                        correlationId = correlationId
                     )
                 )
 
@@ -119,6 +151,160 @@ class ActionsFragment : Fragment() {
             } catch (_: Exception) {
                 Toast.makeText(requireContext(), "Failed to send action", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun requestLaunchableApps() {
+        actionMode = ActionMode.OpenApps
+        renderActionMode()
+        sendAction("list_launchable_apps")
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun requestRunningApps() {
+        actionMode = ActionMode.CloseApps
+        renderActionMode()
+        sendAction("list_running_apps")
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun openApp(app: LaunchableAppItemDto) {
+        val payload = gson.toJson(mapOf("appId" to app.appId))
+        sendAction("open_app", payload)
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun closeApp(app: RunningAppItemDto) {
+        val payload = gson.toJson(mapOf("pid" to app.pid, "name" to app.name))
+        sendAction("close_app", payload)
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun pullActionResults() {
+        if (!NetworkUtils.isOnline(requireContext())) {
+            return
+        }
+
+        val senderId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = ApiClient.apiService.pullActionResults(senderId)
+                if (!response.isSuccessful || response.body() == null) {
+                    return@launch
+                }
+
+                response.body()!!.forEach { result ->
+                    handleActionResult(result)
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun handleActionResult(result: DeviceActionResultDto) {
+        if (pendingCorrelationId != null && result.correlationId != pendingCorrelationId) {
+            return
+        }
+
+        if (!result.status.equals("success", ignoreCase = true)) {
+            Toast.makeText(
+                requireContext(),
+                result.error ?: "Action failed: not possible on target system",
+                Toast.LENGTH_SHORT
+            ).show()
+            pendingCorrelationId = null
+            return
+        }
+
+        if (result.actionType == "list_launchable_apps") {
+            val payload = result.payloadJson ?: "[]"
+            val listType = object : TypeToken<List<LaunchableAppItemDto>>() {}.type
+            val apps: List<LaunchableAppItemDto> = try {
+                gson.fromJson(payload, listType)
+            } catch (_: Exception) {
+                emptyList()
+            }
+            renderLaunchableApps(apps)
+            pendingCorrelationId = null
+            return
+        }
+
+        if (result.actionType == "list_running_apps") {
+            val payload = result.payloadJson ?: "[]"
+            val listType = object : TypeToken<List<RunningAppItemDto>>() {}.type
+            val apps: List<RunningAppItemDto> = try {
+                gson.fromJson(payload, listType)
+            } catch (_: Exception) {
+                emptyList()
+            }
+            renderRunningApps(apps)
+            pendingCorrelationId = null
+            return
+        }
+
+        if (result.actionType == "open_app" || result.actionType == "close_app") {
+            Toast.makeText(requireContext(), "Action completed", Toast.LENGTH_SHORT).show()
+            pendingCorrelationId = null
+        }
+    }
+
+    private fun renderActionMode() {
+        val root = view ?: return
+        val openView = root.findViewById<View>(R.id.viewOpenApps)
+        val closeView = root.findViewById<View>(R.id.viewCloseApps)
+        val openList = root.findViewById<RecyclerView>(R.id.listOpenApps)
+        val closeList = root.findViewById<RecyclerView>(R.id.listCloseApps)
+
+        openList.layoutManager = LinearLayoutManager(requireContext())
+        closeList.layoutManager = LinearLayoutManager(requireContext())
+
+        openView.visibility = if (actionMode == ActionMode.OpenApps) View.VISIBLE else View.GONE
+        closeView.visibility = if (actionMode == ActionMode.CloseApps) View.VISIBLE else View.GONE
+
+        if (actionMode == ActionMode.OpenApps) {
+            renderLaunchableApps(launchableApps)
+        }
+
+        if (actionMode == ActionMode.CloseApps) {
+            renderRunningApps(runningApps)
+        }
+    }
+
+    private fun renderLaunchableApps(apps: List<LaunchableAppItemDto>) {
+        val root = view ?: return
+        launchableApps = apps
+        val list = root.findViewById<RecyclerView>(R.id.listOpenApps)
+        val rows = apps.map { app ->
+            ActionAppRow(
+                id = app.appId,
+                title = app.name,
+                subtitle = app.appId
+            )
+        }
+
+        list.adapter = ActionAppsAdapter(rows, "Open") { row ->
+            val app = launchableApps.firstOrNull { it.appId == row.id } ?: return@ActionAppsAdapter
+            openApp(app)
+        }
+    }
+
+    private fun renderRunningApps(apps: List<RunningAppItemDto>) {
+        val root = view ?: return
+        runningApps = apps
+        val list = root.findViewById<RecyclerView>(R.id.listCloseApps)
+        val rows = apps.map { app ->
+            ActionAppRow(
+                id = app.pid.toString(),
+                title = app.name,
+                subtitle = "PID ${app.pid} • ${app.commandLine}"
+            )
+        }
+
+        list.adapter = ActionAppsAdapter(rows, "Close") { row ->
+            val app = runningApps.firstOrNull { it.pid.toString() == row.id } ?: return@ActionAppsAdapter
+            closeApp(app)
         }
     }
 
@@ -184,10 +370,14 @@ class ActionsFragment : Fragment() {
         val blockButton = root.findViewById<Button>(R.id.btnBlockScreen)
         val shutdownButton = root.findViewById<Button>(R.id.btnShutdown)
         val resetButton = root.findViewById<Button>(R.id.btnReset)
+        val openAppsButton = root.findViewById<Button>(R.id.btnOpenApps)
+        val closeAppsButton = root.findViewById<Button>(R.id.btnCloseApps)
 
         if (device == null) {
             listContainer.visibility = View.VISIBLE
             detailContainer.visibility = View.GONE
+            actionMode = ActionMode.Base
+            renderActionMode()
             return
         }
 
@@ -202,5 +392,8 @@ class ActionsFragment : Fragment() {
         blockButton.isEnabled = device.isOnline
         shutdownButton.isEnabled = device.isOnline
         resetButton.isEnabled = device.isOnline
+        openAppsButton.isEnabled = device.isOnline
+        closeAppsButton.isEnabled = device.isOnline
+        renderActionMode()
     }
 }

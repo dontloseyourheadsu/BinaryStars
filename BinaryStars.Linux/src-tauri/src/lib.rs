@@ -16,6 +16,19 @@ use zbus::blocking::{fdo::PropertiesProxy, Connection, Proxy};
 use zbus::names::InterfaceName;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
+#[derive(Serialize)]
+struct LaunchableAppItem {
+    app_id: String,
+    name: String,
+}
+
+#[derive(Serialize)]
+struct RunningAppItem {
+    pid: i32,
+    name: String,
+    command_line: String,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -344,6 +357,158 @@ fn power_action_linux(action_type: &str) -> Result<(), String> {
     ))
 }
 
+fn list_launchable_apps_json() -> Result<String, String> {
+    let mut entries: Vec<LaunchableAppItem> = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+
+    let mut dirs: Vec<std::path::PathBuf> = vec![
+        std::path::PathBuf::from("/usr/share/applications"),
+        std::path::PathBuf::from("/usr/local/share/applications"),
+    ];
+
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(std::path::PathBuf::from(home).join(".local/share/applications"));
+    }
+
+    for dir in dirs {
+        let read = std::fs::read_dir(&dir);
+        let read = match read {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+
+        for item in read.flatten() {
+            let path = item.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("desktop") {
+                continue;
+            }
+
+            let app_id = match path.file_name().and_then(|value| value.to_str()) {
+                Some(value) => value.to_string(),
+                None => continue,
+            };
+
+            if !seen.insert(app_id.clone()) {
+                continue;
+            }
+
+            let content = match std::fs::read_to_string(&path) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+
+            let mut name: Option<String> = None;
+            let mut no_display = false;
+            let mut hidden = false;
+
+            for line in content.lines() {
+                if let Some(value) = line.strip_prefix("Name=") {
+                    if !value.trim().is_empty() {
+                        name = Some(value.trim().to_string());
+                    }
+                }
+
+                if let Some(value) = line.strip_prefix("NoDisplay=") {
+                    no_display = value.trim().eq_ignore_ascii_case("true");
+                }
+
+                if let Some(value) = line.strip_prefix("Hidden=") {
+                    hidden = value.trim().eq_ignore_ascii_case("true");
+                }
+            }
+
+            if no_display || hidden {
+                continue;
+            }
+
+            entries.push(LaunchableAppItem {
+                app_id,
+                name: name.unwrap_or_else(|| "Unknown".to_string()),
+            });
+        }
+    }
+
+    entries.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    serde_json::to_string(&entries).map_err(|e| format!("failed to serialize launchable apps: {}", e))
+}
+
+fn list_running_apps_json() -> Result<String, String> {
+    let output = Command::new("ps")
+        .args(["-eo", "pid=,comm=,args="])
+        .output()
+        .map_err(|e| format!("failed to run ps: {}", e))?;
+
+    if !output.status.success() {
+        return Err("failed to list running apps (ps returned non-zero)".to_string());
+    }
+
+    let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+    let mut items: Vec<RunningAppItem> = Vec::new();
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let mut pieces = trimmed.split_whitespace();
+        let pid_raw = match pieces.next() {
+            Some(value) => value,
+            None => continue,
+        };
+        let pid: i32 = match pid_raw.parse() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let name = pieces.next().unwrap_or_default().to_string();
+        let command_line = pieces.collect::<Vec<&str>>().join(" ");
+
+        if name.is_empty() {
+            continue;
+        }
+
+        items.push(RunningAppItem {
+            pid,
+            name,
+            command_line,
+        });
+    }
+
+    serde_json::to_string(&items).map_err(|e| format!("failed to serialize running apps: {}", e))
+}
+
+fn open_app_linux(payload_json: Option<String>) -> Result<(), String> {
+    let payload = payload_json.ok_or_else(|| "open_app requires payload".to_string())?;
+    let value: serde_json::Value = serde_json::from_str(&payload)
+        .map_err(|e| format!("invalid open_app payload: {}", e))?;
+
+    let app_id = value
+        .get("appId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "open_app payload missing appId".to_string())?;
+
+    try_command("gtk-launch", &[app_id]).or_else(|_| {
+        let desktop_file = app_id.to_string();
+        try_command("gio", &["launch", desktop_file.as_str()])
+    })
+}
+
+fn close_app_linux(payload_json: Option<String>) -> Result<(), String> {
+    let payload = payload_json.ok_or_else(|| "close_app requires payload".to_string())?;
+    let value: serde_json::Value = serde_json::from_str(&payload)
+        .map_err(|e| format!("invalid close_app payload: {}", e))?;
+
+    if let Some(pid_value) = value.get("pid").and_then(|v| v.as_i64()) {
+        let pid_text = pid_value.to_string();
+        return try_command("kill", &["-TERM", pid_text.as_str()]);
+    }
+
+    if let Some(name_value) = value.get("name").and_then(|v| v.as_str()) {
+        return try_command("pkill", &["-f", name_value]);
+    }
+
+    Err("close_app payload must include pid or name".to_string())
+}
+
 fn is_running_as_root() -> bool {
     let output = Command::new("id").arg("-u").output();
     match output {
@@ -390,12 +555,31 @@ async fn request_elevated_mode() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn perform_local_action(action_type: String) -> Result<(), String> {
+async fn perform_local_action(action_type: String, payload_json: Option<String>) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         match action_type.as_str() {
-            "block_screen" => block_screen_linux(),
-            "shutdown" => power_action_linux("shutdown"),
-            "reboot" | "reset" => power_action_linux("reboot"),
+            "block_screen" => {
+                block_screen_linux()?;
+                Ok("{}".to_string())
+            }
+            "shutdown" => {
+                power_action_linux("shutdown")?;
+                Ok("{}".to_string())
+            }
+            "reboot" | "reset" => {
+                power_action_linux("reboot")?;
+                Ok("{}".to_string())
+            }
+            "list_launchable_apps" => list_launchable_apps_json(),
+            "list_running_apps" => list_running_apps_json(),
+            "open_app" => {
+                open_app_linux(payload_json)?;
+                Ok("{}".to_string())
+            }
+            "close_app" => {
+                close_app_linux(payload_json)?;
+                Ok("{}".to_string())
+            }
             _ => Err("Unsupported local action".to_string()),
         }
     })

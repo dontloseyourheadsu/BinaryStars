@@ -199,7 +199,9 @@ data class SendMessageRequestDto(
 data class SendActionRequestDto(
     val senderDeviceId: String,
     val targetDeviceId: String,
-    val actionType: String
+    val actionType: String,
+    val payloadJson: String? = null,
+    val correlationId: String? = null
 )
 
 /** Remote device action command response payload. */
@@ -209,7 +211,36 @@ data class DeviceActionCommandDto(
     val senderDeviceId: String,
     val targetDeviceId: String,
     val actionType: String,
+    val payloadJson: String? = null,
+    val correlationId: String? = null,
     val createdAt: String
+)
+
+/** Action result payload returned when pulling action results. */
+data class DeviceActionResultDto(
+    val id: String,
+    val userId: String,
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val actionType: String,
+    val status: String,
+    val payloadJson: String?,
+    val error: String?,
+    val correlationId: String?,
+    val createdAt: String
+)
+
+/** Launchable app entry returned by Linux target. */
+data class LaunchableAppItemDto(
+    val appId: String,
+    val name: String
+)
+
+/** Running app entry returned by Linux target. */
+data class RunningAppItemDto(
+    val pid: Int,
+    val name: String,
+    val commandLine: String
 )
 
 // Location Models

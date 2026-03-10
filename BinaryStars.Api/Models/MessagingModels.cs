@@ -110,6 +110,7 @@ public record DeviceNotificationMessage(
 /// <param name="SenderDeviceId">The source device identifier.</param>
 /// <param name="TargetDeviceId">The target device identifier.</param>
 /// <param name="ActionType">The action type string (for example: block_screen).</param>
+/// <param name="PayloadJson">Optional JSON payload for action parameters.</param>
 /// <param name="CreatedAt">The timestamp the action was queued.</param>
 public record DeviceActionCommand(
     string Id,
@@ -117,6 +118,23 @@ public record DeviceActionCommand(
     string SenderDeviceId,
     string TargetDeviceId,
     string ActionType,
+    string? PayloadJson,
+    string? CorrelationId,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// Payload for action result messages returned from target to requester.
+/// </summary>
+public record DeviceActionResultMessage(
+    string Id,
+    Guid UserId,
+    string SenderDeviceId,
+    string TargetDeviceId,
+    string ActionType,
+    string Status,
+    string? PayloadJson,
+    string? Error,
+    string? CorrelationId,
     DateTimeOffset CreatedAt);
 
 /// <summary>
