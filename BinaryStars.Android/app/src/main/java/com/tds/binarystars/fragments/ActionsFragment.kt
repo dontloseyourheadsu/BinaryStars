@@ -61,6 +61,14 @@ class ActionsFragment : Fragment() {
             sendBlockScreenAction()
         }
 
+        view.findViewById<Button>(R.id.btnShutdown).setOnClickListener {
+            sendAction("shutdown")
+        }
+
+        view.findViewById<Button>(R.id.btnReset).setOnClickListener {
+            sendAction("reboot")
+        }
+
         refreshLinuxDevices()
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -75,6 +83,11 @@ class ActionsFragment : Fragment() {
 
     @SuppressLint("HardwareIds")
     private fun sendBlockScreenAction() {
+        sendAction("block_screen")
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun sendAction(actionType: String) {
         val target = selectedDevice ?: return
         if (!NetworkUtils.isOnline(requireContext())) {
             Toast.makeText(requireContext(), "No connection available", Toast.LENGTH_SHORT).show()
@@ -94,7 +107,7 @@ class ActionsFragment : Fragment() {
                     SendActionRequestDto(
                         senderDeviceId = senderId,
                         targetDeviceId = target.id,
-                        actionType = "block_screen"
+                        actionType = actionType
                     )
                 )
 
@@ -169,6 +182,8 @@ class ActionsFragment : Fragment() {
         val listContainer = root.findViewById<View>(R.id.viewActionsList)
         val detailContainer = root.findViewById<View>(R.id.viewActionDetail)
         val blockButton = root.findViewById<Button>(R.id.btnBlockScreen)
+        val shutdownButton = root.findViewById<Button>(R.id.btnShutdown)
+        val resetButton = root.findViewById<Button>(R.id.btnReset)
 
         if (device == null) {
             listContainer.visibility = View.VISIBLE
@@ -182,8 +197,10 @@ class ActionsFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvActionDetailName).text = device.name
         root.findViewById<TextView>(R.id.tvActionDetailMeta).text = "${device.id} • ${if (device.isOnline) "Online" else "Offline"}"
         root.findViewById<TextView>(R.id.tvActionSupportInfo).text =
-            "Supported target: Linux desktops (GNOME/KDE/GTK-focused). Unsupported desktop/session APIs are handled on target device."
+            "Supported target: Linux desktops (GNOME/KDE/GTK-focused). Shutdown/reset require sudo mode on target app."
 
         blockButton.isEnabled = device.isOnline
+        shutdownButton.isEnabled = device.isOnline
+        resetButton.isEnabled = device.isOnline
     }
 }
