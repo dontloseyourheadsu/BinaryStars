@@ -24,12 +24,14 @@ import type {
   ChatMessage,
   DevicePresenceEvent,
   Device,
+  LaunchableAppItem,
   FileTransfer,
   LocationUpdateEvent,
   LocationPoint,
   MessageDto,
   NotificationSchedule,
   Note,
+  RunningAppItem,
 } from "./types";
 import AuthView from "./components/Auth/AuthView";
 import Sidebar from "./components/UI/Sidebar";
@@ -92,6 +94,10 @@ function App() {
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
   const [selectedDeviceDetailId, setSelectedDeviceDetailId] = useState("");
   const [selectedActionDeviceId, setSelectedActionDeviceId] = useState("");
+  const [actionMode, setActionMode] = useState<"base" | "open-app" | "close-app">("base");
+  const [launchableApps, setLaunchableApps] = useState<LaunchableAppItem[]>([]);
+  const [runningApps, setRunningApps] = useState<RunningAppItem[]>([]);
+  const [pendingActionRequestId, setPendingActionRequestId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationBody, setNotificationBody] = useState("");
@@ -709,7 +715,7 @@ function App() {
     }
 
     void flushPendingLocationUploads(myDeviceId);
-  }, [isAuthed, online, myDeviceId]);
+  }, [isAuthed, online, myDeviceId, pendingActionRequestId]);
 
   useEffect(() => {
     if (!isAuthed) {
@@ -729,10 +735,16 @@ function App() {
     void syncActionCommands().catch(() => {
       // ignore transient action polling errors
     });
+    void pullActionResults().catch(() => {
+      // ignore transient action result polling errors
+    });
 
     const timer = window.setInterval(() => {
       void syncActionCommands().catch(() => {
         // ignore transient action polling errors
+      });
+      void pullActionResults().catch(() => {
+        // ignore transient action result polling errors
       });
     }, 8_000);
 
@@ -1363,7 +1375,18 @@ function App() {
     setMessages((prev) => prev.filter((entry) => entry.deviceId !== selectedChatDeviceId));
   };
 
-  const sendActionCommand = async (actionType: "block_screen" | "shutdown" | "reboot"): Promise<void> => {
+  const sendActionCommand = async (
+    actionType:
+      | "block_screen"
+      | "shutdown"
+      | "reboot"
+      | "list_launchable_apps"
+      | "list_running_apps"
+      | "open_app"
+      | "close_app",
+    payloadJson?: string | null,
+    correlationId?: string | null,
+  ): Promise<void> => {
     if (!requireOnline()) {
       return;
     }
@@ -1382,25 +1405,48 @@ function App() {
       senderDeviceId: myDeviceId,
       targetDeviceId: selectedActionDevice.id,
       actionType,
+      payloadJson: payloadJson ?? null,
+      correlationId: correlationId ?? null,
     });
 
     setError("");
   };
 
-  const executeActionLocally = async (actionType: string): Promise<void> => {
+  const executeActionLocally = async (actionType: string, payloadJson?: string | null): Promise<string | null> => {
     if (actionType === "block_screen") {
       await performLocalAction("block_screen");
-      return;
+      return null;
     }
 
     if (actionType === "shutdown") {
       await performLocalAction("shutdown");
-      return;
+      return null;
     }
 
     if (actionType === "reboot" || actionType === "reset") {
       await performLocalAction("reboot");
+      return null;
     }
+
+    if (actionType === "list_launchable_apps") {
+      return performLocalAction("list_launchable_apps");
+    }
+
+    if (actionType === "list_running_apps") {
+      return performLocalAction("list_running_apps");
+    }
+
+    if (actionType === "open_app") {
+      await performLocalAction("open_app", payloadJson);
+      return null;
+    }
+
+    if (actionType === "close_app") {
+      await performLocalAction("close_app", payloadJson);
+      return null;
+    }
+
+    return null;
   };
 
   const syncActionCommands = async (): Promise<void> => {
@@ -1411,10 +1457,27 @@ function App() {
     const commands = await api.pullActions(myDeviceId);
     for (const command of commands) {
       try {
-        await executeActionLocally(command.actionType);
+        const payload = await executeActionLocally(command.actionType, command.payloadJson ?? null);
+        await api.publishActionResult({
+          senderDeviceId: myDeviceId,
+          targetDeviceId: command.senderDeviceId,
+          actionType: command.actionType,
+          status: "success",
+          payloadJson: payload,
+          error: null,
+          correlationId: command.correlationId ?? command.id,
+        });
       } catch (nextError) {
         const message = nextError instanceof Error ? nextError.message : "Failed to execute remote action";
-        setError(message);
+        await api.publishActionResult({
+          senderDeviceId: myDeviceId,
+          targetDeviceId: command.senderDeviceId,
+          actionType: command.actionType,
+          status: "failed",
+          payloadJson: null,
+          error: message,
+          correlationId: command.correlationId ?? command.id,
+        });
       }
     }
   };
@@ -1429,6 +1492,68 @@ function App() {
 
   const sendResetAction = async (): Promise<void> => {
     await sendActionCommand("reboot");
+  };
+
+  const fetchLaunchableApps = async (): Promise<void> => {
+    const requestId = crypto.randomUUID();
+    setPendingActionRequestId(requestId);
+    setActionMode("open-app");
+    setLaunchableApps([]);
+    await sendActionCommand("list_launchable_apps", null, requestId);
+  };
+
+  const fetchRunningApps = async (): Promise<void> => {
+    const requestId = crypto.randomUUID();
+    setPendingActionRequestId(requestId);
+    setActionMode("close-app");
+    setRunningApps([]);
+    await sendActionCommand("list_running_apps", null, requestId);
+  };
+
+  const openRemoteApp = async (app: LaunchableAppItem): Promise<void> => {
+    await sendActionCommand("open_app", JSON.stringify({ appId: app.appId }), crypto.randomUUID());
+  };
+
+  const closeRemoteApp = async (app: RunningAppItem): Promise<void> => {
+    await sendActionCommand("close_app", JSON.stringify({ pid: app.pid, name: app.name }), crypto.randomUUID());
+  };
+
+  const pullActionResults = async (): Promise<void> => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    const results = await api.pullActionResults(myDeviceId);
+    for (const result of results) {
+      if (result.status.toLowerCase() !== "success") {
+        setError(result.error ?? `Action ${result.actionType} failed`);
+        continue;
+      }
+
+      if (pendingActionRequestId && result.correlationId !== pendingActionRequestId) {
+        continue;
+      }
+
+      if (result.actionType === "list_launchable_apps") {
+        try {
+          const parsed = JSON.parse(result.payloadJson ?? "[]") as LaunchableAppItem[];
+          setLaunchableApps(parsed);
+          setPendingActionRequestId(null);
+        } catch {
+          setError("Failed to parse launchable apps payload");
+        }
+      }
+
+      if (result.actionType === "list_running_apps") {
+        try {
+          const parsed = JSON.parse(result.payloadJson ?? "[]") as RunningAppItem[];
+          setRunningApps(parsed);
+          setPendingActionRequestId(null);
+        } catch {
+          setError("Failed to parse running apps payload");
+        }
+      }
+    }
   };
 
   const ensureElevatedMode = async (): Promise<void> => {
@@ -1462,6 +1587,10 @@ function App() {
     setSelectedChatDeviceId("");
     setSelectedDeviceDetailId("");
     setSelectedActionDeviceId("");
+    setActionMode("base");
+    setLaunchableApps([]);
+    setRunningApps([]);
+    setPendingActionRequestId(null);
     setNotificationSchedules([]);
     setNotificationHistory([]);
     setHistory([]);
@@ -1762,6 +1891,14 @@ function App() {
             onSendBlockScreen={() => void sendBlockScreenAction()}
             onSendShutdown={() => void sendShutdownAction()}
             onSendReset={() => void sendResetAction()}
+            onFetchLaunchableApps={() => void fetchLaunchableApps()}
+            onFetchRunningApps={() => void fetchRunningApps()}
+            onOpenApp={(app) => void openRemoteApp(app)}
+            onCloseApp={(app) => void closeRemoteApp(app)}
+            launchableApps={launchableApps}
+            runningApps={runningApps}
+            actionMode={actionMode}
+            onBackToActions={() => setActionMode("base")}
             isElevated={isElevated}
             onRequestElevation={() => void ensureElevatedMode()}
             busy={busy}

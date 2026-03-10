@@ -4,6 +4,7 @@ import type {
   AuthResponse,
   Device,
   DeviceActionCommand,
+  DeviceActionResultMessage,
   DeviceNotificationMessage,
   FileTransfer,
   LocationPoint,
@@ -174,13 +175,40 @@ export const api = {
   async sendAction(payload: {
     senderDeviceId: string;
     targetDeviceId: string;
-    actionType: "block_screen" | "shutdown" | "reboot";
+    actionType:
+      | "block_screen"
+      | "shutdown"
+      | "reboot"
+      | "list_launchable_apps"
+      | "list_running_apps"
+      | "open_app"
+      | "close_app";
+    payloadJson?: string | null;
+    correlationId?: string | null;
   }): Promise<DeviceActionCommand> {
     const response = await http.post<DeviceActionCommand>("/actions/send", payload);
     return response.data;
   },
   async pullActions(deviceId: string): Promise<DeviceActionCommand[]> {
     const response = await http.get<DeviceActionCommand[]>("/actions/pull", {
+      params: { deviceId },
+    });
+    return response.data;
+  },
+  async publishActionResult(payload: {
+    senderDeviceId: string;
+    targetDeviceId: string;
+    actionType: string;
+    status: string;
+    payloadJson?: string | null;
+    error?: string | null;
+    correlationId?: string | null;
+  }): Promise<DeviceActionResultMessage> {
+    const response = await http.post<DeviceActionResultMessage>("/actions/results", payload);
+    return response.data;
+  },
+  async pullActionResults(deviceId: string): Promise<DeviceActionResultMessage[]> {
+    const response = await http.get<DeviceActionResultMessage[]>("/actions/results/pull", {
       params: { deviceId },
     });
     return response.data;

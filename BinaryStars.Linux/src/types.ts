@@ -77,7 +77,33 @@ export interface DeviceActionCommand {
   senderDeviceId: string;
   targetDeviceId: string;
   actionType: string;
+  payloadJson?: string | null;
+  correlationId?: string | null;
   createdAt: string;
+}
+
+export interface DeviceActionResultMessage {
+  id: string;
+  userId: string;
+  senderDeviceId: string;
+  targetDeviceId: string;
+  actionType: string;
+  status: string;
+  payloadJson?: string | null;
+  error?: string | null;
+  correlationId?: string | null;
+  createdAt: string;
+}
+
+export interface LaunchableAppItem {
+  appId: string;
+  name: string;
+}
+
+export interface RunningAppItem {
+  pid: number;
+  name: string;
+  commandLine: string;
 }
 
 export interface Note {

@@ -1,4 +1,4 @@
-import type { Device } from "../../types";
+import type { Device, LaunchableAppItem, RunningAppItem } from "../../types";
 
 type Props = {
   linuxDevices: Device[];
@@ -8,6 +8,14 @@ type Props = {
   onSendBlockScreen: () => void;
   onSendShutdown: () => void;
   onSendReset: () => void;
+  onFetchLaunchableApps: () => void;
+  onFetchRunningApps: () => void;
+  onOpenApp: (app: LaunchableAppItem) => void;
+  onCloseApp: (app: RunningAppItem) => void;
+  launchableApps: LaunchableAppItem[];
+  runningApps: RunningAppItem[];
+  actionMode: "base" | "open-app" | "close-app";
+  onBackToActions: () => void;
   isElevated: boolean;
   onRequestElevation: () => void;
   busy: boolean;
@@ -21,6 +29,14 @@ export default function ActionsTab({
   onSendBlockScreen,
   onSendShutdown,
   onSendReset,
+  onFetchLaunchableApps,
+  onFetchRunningApps,
+  onOpenApp,
+  onCloseApp,
+  launchableApps,
+  runningApps,
+  actionMode,
+  onBackToActions,
   isElevated,
   onRequestElevation,
   busy,
@@ -94,9 +110,58 @@ export default function ActionsTab({
             >
               Reset
             </button>
+            <button
+              onClick={onFetchLaunchableApps}
+              type="button"
+              disabled={!selectedDevice.isOnline || busy}
+            >
+              Open Apps
+            </button>
+            <button
+              onClick={onFetchRunningApps}
+              type="button"
+              disabled={!selectedDevice.isOnline || busy}
+            >
+              Close Apps
+            </button>
             <p className="muted">
               Supports GNOME/KDE/GTK-oriented desktops with graceful fallback when lock APIs are unavailable.
             </p>
+
+            {actionMode !== "base" && (
+              <>
+                <button className="ghost" onClick={onBackToActions} type="button">
+                  Back to Action Buttons
+                </button>
+
+                {actionMode === "open-app" && (
+                  <div className="list compact">
+                    {launchableApps.length === 0 && <p className="empty-state">No launchable apps available.</p>}
+                    {launchableApps.map((app) => (
+                      <article className="row-card static" key={app.appId}>
+                        <strong>{app.name}</strong>
+                        <span className="muted">{app.appId}</span>
+                        <button onClick={() => onOpenApp(app)} type="button" disabled={busy}>Open</button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                {actionMode === "close-app" && (
+                  <div className="list compact">
+                    {runningApps.length === 0 && <p className="empty-state">No running apps available.</p>}
+                    {runningApps.map((app) => (
+                      <article className="row-card static" key={`${app.pid}-${app.name}`}>
+                        <strong>{app.name}</strong>
+                        <span className="muted">PID {app.pid}</span>
+                        <span className="muted">{app.commandLine}</span>
+                        <button onClick={() => onCloseApp(app)} type="button" disabled={busy}>Close</button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </>
         )}
       </div>

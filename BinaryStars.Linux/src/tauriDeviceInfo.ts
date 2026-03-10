@@ -98,12 +98,22 @@ export async function getNativeLocation(): Promise<NativeLocation | null> {
   }
 }
 
-export async function performLocalAction(actionType: "block_screen" | "shutdown" | "reboot"): Promise<void> {
+export async function performLocalAction(
+  actionType:
+    | "block_screen"
+    | "shutdown"
+    | "reboot"
+    | "list_launchable_apps"
+    | "list_running_apps"
+    | "open_app"
+    | "close_app",
+  payloadJson?: string | null,
+): Promise<string> {
   if (!isTauriRuntime()) {
     throw new Error("Local actions are supported only in the Linux desktop app runtime");
   }
 
-  await invoke<void>("perform_local_action", { actionType });
+  return invoke<string>("perform_local_action", { actionType, payloadJson });
 }
 
 export async function getElevationStatus(): Promise<ElevationStatus> {
