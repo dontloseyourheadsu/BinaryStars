@@ -56,6 +56,10 @@ interface ApiService {
     @POST("actions/send")
     suspend fun sendAction(@Body request: SendActionRequestDto): Response<DeviceActionCommandDto>
 
+    /** Pull pending action result messages for the current device. */
+    @GET("actions/results/pull")
+    suspend fun pullActionResults(@Query("deviceId") deviceId: String): Response<List<DeviceActionResultDto>>
+
     // Notes endpoints
     /** List notes for the authenticated user. */
     @GET("notes")
