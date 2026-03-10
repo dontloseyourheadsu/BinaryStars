@@ -25,6 +25,10 @@ export interface NativeLocation {
   accuracyMeters: number | null;
 }
 
+export interface ElevationStatus {
+  is_root: boolean;
+}
+
 export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -94,10 +98,26 @@ export async function getNativeLocation(): Promise<NativeLocation | null> {
   }
 }
 
-export async function performLocalAction(actionType: "block_screen"): Promise<void> {
+export async function performLocalAction(actionType: "block_screen" | "shutdown" | "reboot"): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error("Local actions are supported only in the Linux desktop app runtime");
   }
 
   await invoke<void>("perform_local_action", { actionType });
+}
+
+export async function getElevationStatus(): Promise<ElevationStatus> {
+  if (!isTauriRuntime()) {
+    return { is_root: false };
+  }
+
+  return invoke<ElevationStatus>("get_elevation_status");
+}
+
+export async function requestElevatedMode(): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Elevation is supported only in the Linux desktop app runtime");
+  }
+
+  await invoke<void>("request_elevated_mode");
 }

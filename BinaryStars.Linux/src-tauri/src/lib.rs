@@ -26,7 +26,9 @@ pub fn run() {
             get_bluetooth_connected_device_names,
             is_wifi_connected,
             get_native_location,
-            perform_local_action
+            perform_local_action,
+            get_elevation_status,
+            request_elevated_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -308,11 +310,92 @@ fn block_screen_linux() -> Result<(), String> {
     ))
 }
 
+fn power_action_linux(action_type: &str) -> Result<(), String> {
+    let mut errors: Vec<String> = Vec::new();
+
+    let dbus_member = if action_type == "shutdown" { "PowerOff" } else { "Reboot" };
+    let systemctl_arg = if action_type == "shutdown" { "poweroff" } else { "reboot" };
+
+    let dbus_method = format!("org.freedesktop.login1.Manager.{}", dbus_member);
+    match try_command(
+        "dbus-send",
+        &[
+            "--system",
+            "--dest=org.freedesktop.login1",
+            "--type=method_call",
+            "/org/freedesktop/login1",
+            dbus_method.as_str(),
+            "boolean:true",
+        ],
+    ) {
+        Ok(_) => return Ok(()),
+        Err(error) => errors.push(error),
+    }
+
+    match try_command("systemctl", &[systemctl_arg]) {
+        Ok(_) => return Ok(()),
+        Err(error) => errors.push(error),
+    }
+
+    Err(format!(
+        "Unable to execute {}. Permission denied or unsupported policy/session. Details: {}",
+        action_type,
+        errors.join(" | ")
+    ))
+}
+
+fn is_running_as_root() -> bool {
+    let output = Command::new("id").arg("-u").output();
+    match output {
+        Ok(value) if value.status.success() => {
+            let uid = String::from_utf8(value.stdout).unwrap_or_default();
+            uid.trim() == "0"
+        }
+        _ => false,
+    }
+}
+
+#[derive(Serialize)]
+pub struct ElevationStatus {
+    pub is_root: bool,
+}
+
+#[tauri::command]
+async fn get_elevation_status() -> Result<ElevationStatus, String> {
+    Ok(ElevationStatus {
+        is_root: is_running_as_root(),
+    })
+}
+
+#[tauri::command]
+async fn request_elevated_mode() -> Result<(), String> {
+    if is_running_as_root() {
+        return Ok(());
+    }
+
+    let current_exe = std::env::current_exe()
+        .map_err(|e| format!("failed to resolve current executable: {}", e))?;
+
+    let pkexec_attempt = Command::new("pkexec").arg(&current_exe).spawn();
+    if pkexec_attempt.is_ok() {
+        std::process::exit(0);
+    }
+
+    let sudo_attempt = Command::new("sudo").arg(&current_exe).spawn();
+    if sudo_attempt.is_ok() {
+        std::process::exit(0);
+    }
+
+    Err("Failed to relaunch app in sudo mode. Ensure pkexec or sudo is installed and permitted.".to_string())
+}
+
 #[tauri::command]
 async fn perform_local_action(action_type: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         match action_type.as_str() {
             "block_screen" => block_screen_linux(),
+            "shutdown" => power_action_linux("shutdown"),
+            "reboot" | "reset" => power_action_linux("reboot"),
             _ => Err("Unsupported local action".to_string()),
         }
     })

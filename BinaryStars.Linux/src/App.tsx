@@ -8,11 +8,13 @@ import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
 import {
   getBluetoothConnectedDeviceNames,
+  getElevationStatus,
   getNativeLocation,
   getLocalDeviceInfo,
   isTauriRuntime,
   isWifiConnected,
   performLocalAction,
+  requestElevatedMode,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { LocalNotificationHistoryItem } from "./storage";
@@ -108,6 +110,7 @@ function App() {
   const [locationEnabled, setLocationEnabled] = useState(settingsStore.getLocationEnabled(false));
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
   const [wifiAvailable, setWifiAvailable] = useState(true);
+  const [isElevated, setIsElevated] = useState(false);
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
   const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
@@ -707,6 +710,16 @@ function App() {
 
     void flushPendingLocationUploads(myDeviceId);
   }, [isAuthed, online, myDeviceId]);
+
+  useEffect(() => {
+    if (!isAuthed) {
+      return;
+    }
+
+    void ensureElevatedMode().catch((nextError) => {
+      setError(nextError instanceof Error ? nextError.message : "Failed to enter sudo mode");
+    });
+  }, [isAuthed]);
 
   useEffect(() => {
     if (!isAuthed || !online) {
@@ -1350,12 +1363,44 @@ function App() {
     setMessages((prev) => prev.filter((entry) => entry.deviceId !== selectedChatDeviceId));
   };
 
-  const executeActionLocally = async (actionType: string): Promise<void> => {
-    if (actionType !== "block_screen") {
+  const sendActionCommand = async (actionType: "block_screen" | "shutdown" | "reboot"): Promise<void> => {
+    if (!requireOnline()) {
       return;
     }
 
-    await performLocalAction("block_screen");
+    if (!selectedActionDevice) {
+      setError("Select a Linux device first");
+      return;
+    }
+
+    if (!selectedActionDevice.isOnline) {
+      setError("Target device must be online");
+      return;
+    }
+
+    await api.sendAction({
+      senderDeviceId: myDeviceId,
+      targetDeviceId: selectedActionDevice.id,
+      actionType,
+    });
+
+    setError("");
+  };
+
+  const executeActionLocally = async (actionType: string): Promise<void> => {
+    if (actionType === "block_screen") {
+      await performLocalAction("block_screen");
+      return;
+    }
+
+    if (actionType === "shutdown") {
+      await performLocalAction("shutdown");
+      return;
+    }
+
+    if (actionType === "reboot" || actionType === "reset") {
+      await performLocalAction("reboot");
+    }
   };
 
   const syncActionCommands = async (): Promise<void> => {
@@ -1375,27 +1420,36 @@ function App() {
   };
 
   const sendBlockScreenAction = async (): Promise<void> => {
-    if (!requireOnline()) {
+    await sendActionCommand("block_screen");
+  };
+
+  const sendShutdownAction = async (): Promise<void> => {
+    await sendActionCommand("shutdown");
+  };
+
+  const sendResetAction = async (): Promise<void> => {
+    await sendActionCommand("reboot");
+  };
+
+  const ensureElevatedMode = async (): Promise<void> => {
+    if (!isTauriRuntime()) {
       return;
     }
 
-    if (!selectedActionDevice) {
-      setError("Select a Linux device first");
+    const status = await getElevationStatus();
+    setIsElevated(status.is_root);
+
+    if (status.is_root) {
       return;
     }
 
-    if (!selectedActionDevice.isOnline) {
-      setError("Target device must be online");
+    const shouldElevate = window.confirm("BinaryStars requires sudo mode for shutdown/reset actions. Relaunch in sudo mode now?");
+    if (!shouldElevate) {
+      setError("Sudo mode is required for shutdown/reset actions on this device");
       return;
     }
 
-    await api.sendAction({
-      senderDeviceId: myDeviceId,
-      targetDeviceId: selectedActionDevice.id,
-      actionType: "block_screen",
-    });
-
-    setError("");
+    await requestElevatedMode();
   };
 
   const signOut = (): void => {
@@ -1404,6 +1458,7 @@ function App() {
     setIsAuthed(false);
     setProfile(null);
     setDevices([]);
+    setIsElevated(false);
     setSelectedChatDeviceId("");
     setSelectedDeviceDetailId("");
     setSelectedActionDeviceId("");
@@ -1705,6 +1760,10 @@ function App() {
             selectedDevice={selectedActionDevice}
             onSelectDevice={setSelectedActionDeviceId}
             onSendBlockScreen={() => void sendBlockScreenAction()}
+            onSendShutdown={() => void sendShutdownAction()}
+            onSendReset={() => void sendResetAction()}
+            isElevated={isElevated}
+            onRequestElevation={() => void ensureElevatedMode()}
             busy={busy}
           />
         )}

@@ -174,7 +174,7 @@ export const api = {
   async sendAction(payload: {
     senderDeviceId: string;
     targetDeviceId: string;
-    actionType: "block_screen";
+    actionType: "block_screen" | "shutdown" | "reboot";
   }): Promise<DeviceActionCommand> {
     const response = await http.post<DeviceActionCommand>("/actions/send", payload);
     return response.data;

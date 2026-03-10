@@ -6,6 +6,10 @@ type Props = {
   selectedDevice: Device | null;
   onSelectDevice: (deviceId: string) => void;
   onSendBlockScreen: () => void;
+  onSendShutdown: () => void;
+  onSendReset: () => void;
+  isElevated: boolean;
+  onRequestElevation: () => void;
   busy: boolean;
 };
 
@@ -15,6 +19,10 @@ export default function ActionsTab({
   selectedDevice,
   onSelectDevice,
   onSendBlockScreen,
+  onSendShutdown,
+  onSendReset,
+  isElevated,
+  onRequestElevation,
   busy,
 }: Props) {
   return (
@@ -44,6 +52,14 @@ export default function ActionsTab({
 
       <div className="panel">
         <h3>Actions</h3>
+        {!isElevated && (
+          <>
+            <p className="muted">Sudo mode is required for shutdown/reset execution on target Linux apps.</p>
+            <button className="ghost" onClick={onRequestElevation} type="button" disabled={busy}>
+              Enable Sudo Mode
+            </button>
+          </>
+        )}
         {!selectedDevice && <p className="empty-state">Select a Linux device to manage actions.</p>}
         {selectedDevice && (
           <>
@@ -63,6 +79,20 @@ export default function ActionsTab({
               disabled={!selectedDevice.isOnline || busy}
             >
               Block Screen
+            </button>
+            <button
+              onClick={onSendShutdown}
+              type="button"
+              disabled={!selectedDevice.isOnline || busy}
+            >
+              Shut Down
+            </button>
+            <button
+              onClick={onSendReset}
+              type="button"
+              disabled={!selectedDevice.isOnline || busy}
+            >
+              Reset
             </button>
             <p className="muted">
               Supports GNOME/KDE/GTK-oriented desktops with graceful fallback when lock APIs are unavailable.
