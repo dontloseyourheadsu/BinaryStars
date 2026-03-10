@@ -44,7 +44,8 @@ public class ActionsController : ControllerBase
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        if (!string.Equals(request.ActionType, "block_screen", StringComparison.OrdinalIgnoreCase))
+        var normalizedActionType = NormalizeActionType(request.ActionType);
+        if (normalizedActionType == null)
             return BadRequest(new[] { "Unsupported action type." });
 
         var sender = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
@@ -63,7 +64,7 @@ public class ActionsController : ControllerBase
             userId,
             request.SenderDeviceId,
             request.TargetDeviceId,
-            "block_screen",
+            normalizedActionType,
             DateTimeOffset.UtcNow);
 
         var authMode = await ResolveKafkaAuthModeAsync(userId);
@@ -94,6 +95,21 @@ public class ActionsController : ControllerBase
         }
 
         return Ok(actions);
+    }
+
+    private static string? NormalizeActionType(string actionType)
+    {
+        if (string.Equals(actionType, "block_screen", StringComparison.OrdinalIgnoreCase))
+            return "block_screen";
+
+        if (string.Equals(actionType, "shutdown", StringComparison.OrdinalIgnoreCase))
+            return "shutdown";
+
+        if (string.Equals(actionType, "reboot", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(actionType, "reset", StringComparison.OrdinalIgnoreCase))
+            return "reboot";
+
+        return null;
     }
 
     private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
