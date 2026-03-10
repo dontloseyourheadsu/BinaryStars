@@ -111,6 +111,64 @@
             android:layout_marginTop="10dp"
             android:text="Reset" />
 
+        <Button
+            android:id="@+id/btnOpenApps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Open Apps" />
+
+        <Button
+            android:id="@+id/btnCloseApps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Close Apps" />
+
+        <LinearLayout
+            android:id="@+id/viewOpenApps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Launchable Apps"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_main" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/listOpenApps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:overScrollMode="never" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/viewCloseApps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Running Apps"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_main" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/listCloseApps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:overScrollMode="never" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/tvActionSupportInfo"
             android:layout_width="match_parent"
