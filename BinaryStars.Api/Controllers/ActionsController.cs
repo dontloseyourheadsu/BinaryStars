@@ -65,6 +65,8 @@ public class ActionsController : ControllerBase
             request.SenderDeviceId,
             request.TargetDeviceId,
             normalizedActionType,
+            request.PayloadJson,
+            request.CorrelationId,
             DateTimeOffset.UtcNow);
 
         var authMode = await ResolveKafkaAuthModeAsync(userId);
@@ -97,10 +99,77 @@ public class ActionsController : ControllerBase
         return Ok(actions);
     }
 
+    /// <summary>
+    /// Publishes an action result message from target device to requester.
+    /// </summary>
+    [HttpPost("results")]
+    public async Task<IActionResult> PublishResult([FromBody] PublishActionResultRequestDto request, CancellationToken cancellationToken)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        var normalizedActionType = NormalizeActionType(request.ActionType) ?? request.ActionType.Trim().ToLowerInvariant();
+
+        var sender = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
+        var target = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
+        if (sender == null || target == null || sender.UserId != userId || target.UserId != userId)
+            return BadRequest(new[] { "Invalid device." });
+
+        var result = new DeviceActionResultMessage(
+            Guid.NewGuid().ToString("D"),
+            userId,
+            request.SenderDeviceId,
+            request.TargetDeviceId,
+            normalizedActionType,
+            request.Status,
+            request.PayloadJson,
+            request.Error,
+            request.CorrelationId,
+            DateTimeOffset.UtcNow);
+
+        var authMode = await ResolveKafkaAuthModeAsync(userId);
+        await _kafkaService.PublishActionResultAsync(result, authMode, null, cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Pulls pending action result messages for a device and removes them from Kafka.
+    /// </summary>
+    [HttpGet("results/pull")]
+    public async Task<IActionResult> PullResults([FromQuery] string deviceId, CancellationToken cancellationToken)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        var target = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (target == null || target.UserId != userId)
+            return BadRequest(new[] { "Invalid device." });
+
+        var authMode = await ResolveKafkaAuthModeAsync(userId);
+        var results = await _kafkaService.ConsumePendingActionResultsAsync(deviceId, userId, authMode, null, cancellationToken);
+        foreach (var result in results)
+        {
+            await _kafkaService.DeleteActionResultAsync(result.Id, authMode, null, cancellationToken);
+        }
+
+        return Ok(results);
+    }
+
     private static string? NormalizeActionType(string actionType)
     {
         if (string.Equals(actionType, "block_screen", StringComparison.OrdinalIgnoreCase))
             return "block_screen";
+
+        if (string.Equals(actionType, "list_launchable_apps", StringComparison.OrdinalIgnoreCase))
+            return "list_launchable_apps";
+
+        if (string.Equals(actionType, "list_running_apps", StringComparison.OrdinalIgnoreCase))
+            return "list_running_apps";
+
+        if (string.Equals(actionType, "open_app", StringComparison.OrdinalIgnoreCase))
+            return "open_app";
+
+        if (string.Equals(actionType, "close_app", StringComparison.OrdinalIgnoreCase))
+            return "close_app";
 
         if (string.Equals(actionType, "shutdown", StringComparison.OrdinalIgnoreCase))
             return "shutdown";
@@ -126,4 +195,21 @@ public class ActionsController : ControllerBase
 /// <summary>
 /// Request payload for remote action send.
 /// </summary>
-public record SendActionRequestDto(string SenderDeviceId, string TargetDeviceId, string ActionType);
+public record SendActionRequestDto(
+    string SenderDeviceId,
+    string TargetDeviceId,
+    string ActionType,
+    string? PayloadJson,
+    string? CorrelationId);
+
+/// <summary>
+/// Request payload for action result publish.
+/// </summary>
+public record PublishActionResultRequestDto(
+    string SenderDeviceId,
+    string TargetDeviceId,
+    string ActionType,
+    string Status,
+    string? PayloadJson,
+    string? Error,
+    string? CorrelationId);
