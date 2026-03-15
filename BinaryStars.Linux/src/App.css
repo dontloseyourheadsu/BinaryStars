@@ -396,6 +396,12 @@ textarea {
   font-size: 13px;
 }
 
+.clipboard-entry {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .split-row {
   display: flex;
   gap: 8px;
