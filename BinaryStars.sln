@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BinaryStars.Proto", "BinaryStars.Proto\BinaryStars.Proto.csproj", "{5161CE22-EB63-9F1C-9365-632338461D17}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BinaryStars.Domain", "BinaryStars.Domain\BinaryStars.Domain.csproj", "{1865AC06-370E-4EC2-B33F-0871F858B8B4}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
@@ -27,18 +25,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Debug|x64.Build.0 = Debug|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Debug|x86.Build.0 = Debug|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Release|Any CPU.Build.0 = Release|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Release|x64.ActiveCfg = Release|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Release|x64.Build.0 = Release|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Release|x86.ActiveCfg = Release|Any CPU
-		{5161CE22-EB63-9F1C-9365-632338461D17}.Release|x86.Build.0 = Release|Any CPU
 		{1865AC06-370E-4EC2-B33F-0871F858B8B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{1865AC06-370E-4EC2-B33F-0871F858B8B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1865AC06-370E-4EC2-B33F-0871F858B8B4}.Debug|x64.ActiveCfg = Debug|Any CPU
