@@ -1,6 +1,8 @@
 package com.tds.binarystars.fragments
 
 import android.app.ActivityManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.net.TrafficStats
 import android.os.BatteryManager
@@ -9,7 +11,9 @@ import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import androidx.fragment.app.Fragment
@@ -19,20 +23,27 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tds.binarystars.R
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.DeviceTypeDto
+import com.tds.binarystars.api.SendActionRequestDto
 import com.tds.binarystars.api.UpdateDeviceTelemetryRequest
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.util.NetworkUtils
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.RandomAccessFile
+import java.util.UUID
 import kotlin.math.roundToInt
 
 class DeviceDetailFragment : Fragment() {
+
+    private val gson = Gson()
+    private var pendingClipboardCorrelationId: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -68,6 +79,9 @@ class DeviceDetailFragment : Fragment() {
         val tvBattery = view.findViewById<TextView>(R.id.tvBattery)
         val tvSubtitle = view.findViewById<TextView>(R.id.tvSubtitle)
         val toggleAvailability = view.findViewById<Switch>(R.id.toggleShare)
+        val tvClipboardHistoryStatus = view.findViewById<TextView>(R.id.tvClipboardHistoryStatus)
+        val btnRefreshClipboardHistory = view.findViewById<Button>(R.id.btnRefreshClipboardHistory)
+        val clipboardHistoryList = view.findViewById<LinearLayout>(R.id.clipboardHistoryList)
 
         view.findViewById<TextView>(R.id.tvTitle).text = name.ifBlank { "Device Detail" }
         tvSubtitle.text = listOf(type, ipAddress).filter { it.isNotBlank() }.joinToString(" • ")
@@ -152,6 +166,36 @@ class DeviceDetailFragment : Fragment() {
             tvBattery = tvBattery
         )
 
+        renderClipboardSupport(
+            isAndroidTarget = isAndroidDevice,
+            isTargetOnline = isOnline,
+            tvClipboardHistoryStatus = tvClipboardHistoryStatus,
+            btnRefreshClipboardHistory = btnRefreshClipboardHistory,
+            clipboardHistoryList = clipboardHistoryList
+        )
+
+        btnRefreshClipboardHistory.setOnClickListener {
+            requestClipboardHistory(
+                targetDeviceId = deviceId,
+                isAndroidTarget = isAndroidDevice,
+                isTargetOnline = isOnline,
+                tvClipboardHistoryStatus = tvClipboardHistoryStatus,
+                btnRefreshClipboardHistory = btnRefreshClipboardHistory,
+                clipboardHistoryList = clipboardHistoryList
+            )
+        }
+
+        if (!isAndroidDevice && isOnline) {
+            requestClipboardHistory(
+                targetDeviceId = deviceId,
+                isAndroidTarget = false,
+                isTargetOnline = true,
+                tvClipboardHistoryStatus = tvClipboardHistoryStatus,
+                btnRefreshClipboardHistory = btnRefreshClipboardHistory,
+                clipboardHistoryList = clipboardHistoryList
+            )
+        }
+
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (isActive) {
@@ -207,9 +251,220 @@ class DeviceDetailFragment : Fragment() {
                         tvConnection = tvConnection,
                         tvBattery = tvBattery
                     )
+
+                    renderClipboardSupport(
+                        isAndroidTarget = isAndroidDevice,
+                        isTargetOnline = isOnline,
+                        tvClipboardHistoryStatus = tvClipboardHistoryStatus,
+                        btnRefreshClipboardHistory = btnRefreshClipboardHistory,
+                        clipboardHistoryList = clipboardHistoryList
+                    )
+
+                    if (pendingClipboardCorrelationId != null && !isAndroidDevice && isOnline) {
+                        pullClipboardHistoryResults(
+                            currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID),
+                            tvClipboardHistoryStatus = tvClipboardHistoryStatus,
+                            btnRefreshClipboardHistory = btnRefreshClipboardHistory,
+                            clipboardHistoryList = clipboardHistoryList
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private fun renderClipboardSupport(
+        isAndroidTarget: Boolean,
+        isTargetOnline: Boolean,
+        tvClipboardHistoryStatus: TextView,
+        btnRefreshClipboardHistory: Button,
+        clipboardHistoryList: LinearLayout
+    ) {
+        if (isAndroidTarget) {
+            btnRefreshClipboardHistory.isEnabled = false
+            tvClipboardHistoryStatus.text =
+                "Clipboard history for Android targets is not available due OS-level clipboard access restrictions."
+            clipboardHistoryList.removeAllViews()
+            return
+        }
+
+        if (!isTargetOnline) {
+            btnRefreshClipboardHistory.isEnabled = false
+            tvClipboardHistoryStatus.text = "Target device must be online to fetch clipboard history."
+            clipboardHistoryList.removeAllViews()
+            return
+        }
+
+        btnRefreshClipboardHistory.isEnabled = true
+        if (pendingClipboardCorrelationId == null && tvClipboardHistoryStatus.text.isNullOrBlank()) {
+            tvClipboardHistoryStatus.text =
+                "Ready to fetch clipboard history (up to 20 entries; falls back to current clipboard when history providers are unavailable)."
+        }
+    }
+
+    private fun requestClipboardHistory(
+        targetDeviceId: String,
+        isAndroidTarget: Boolean,
+        isTargetOnline: Boolean,
+        tvClipboardHistoryStatus: TextView,
+        btnRefreshClipboardHistory: Button,
+        clipboardHistoryList: LinearLayout
+    ) {
+        if (isAndroidTarget) {
+            tvClipboardHistoryStatus.text =
+                "Clipboard history for Android targets is not available due OS-level clipboard access restrictions."
+            btnRefreshClipboardHistory.isEnabled = false
+            clipboardHistoryList.removeAllViews()
+            return
+        }
+
+        if (!isTargetOnline) {
+            tvClipboardHistoryStatus.text = "Target device must be online to fetch clipboard history."
+            btnRefreshClipboardHistory.isEnabled = false
+            clipboardHistoryList.removeAllViews()
+            return
+        }
+
+        if (!NetworkUtils.isOnline(requireContext())) {
+            tvClipboardHistoryStatus.text = "No connection available."
+            return
+        }
+
+        val senderId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+        val correlationId = UUID.randomUUID().toString()
+        pendingClipboardCorrelationId = correlationId
+        tvClipboardHistoryStatus.text = "Requesting clipboard history…"
+        clipboardHistoryList.removeAllViews()
+        btnRefreshClipboardHistory.isEnabled = false
+
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.apiService.sendAction(
+                    SendActionRequestDto(
+                        senderDeviceId = senderId,
+                        targetDeviceId = targetDeviceId,
+                        actionType = "get_clipboard_history",
+                        payloadJson = null,
+                        correlationId = correlationId
+                    )
+                )
+
+                if (!response.isSuccessful) {
+                    pendingClipboardCorrelationId = null
+                    tvClipboardHistoryStatus.text = "Failed to request clipboard history."
+                    btnRefreshClipboardHistory.isEnabled = true
+                } else {
+                    tvClipboardHistoryStatus.text = "Waiting for target device response…"
+                }
+            } catch (_: Exception) {
+                pendingClipboardCorrelationId = null
+                tvClipboardHistoryStatus.text = "Failed to request clipboard history."
+                btnRefreshClipboardHistory.isEnabled = true
+            }
+        }
+    }
+
+    private fun pullClipboardHistoryResults(
+        currentDeviceId: String,
+        tvClipboardHistoryStatus: TextView,
+        btnRefreshClipboardHistory: Button,
+        clipboardHistoryList: LinearLayout
+    ) {
+        val expectedCorrelationId = pendingClipboardCorrelationId ?: return
+
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.apiService.pullActionResults(currentDeviceId)
+                if (!response.isSuccessful || response.body() == null) {
+                    return@launch
+                }
+
+                val matching = response.body()!!.firstOrNull { result ->
+                    result.actionType == "get_clipboard_history" && result.correlationId == expectedCorrelationId
+                } ?: return@launch
+
+                pendingClipboardCorrelationId = null
+                btnRefreshClipboardHistory.isEnabled = true
+
+                if (!matching.status.equals("success", ignoreCase = true)) {
+                    tvClipboardHistoryStatus.text = matching.error ?: "Failed to fetch clipboard history from target device."
+                    clipboardHistoryList.removeAllViews()
+                    return@launch
+                }
+
+                val payload = matching.payloadJson ?: "[]"
+                val listType = object : TypeToken<List<String>>() {}.type
+                val values: List<String> = try {
+                    gson.fromJson<List<String>>(payload, listType)
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotEmpty() }
+                        ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                renderClipboardHistoryEntries(values, clipboardHistoryList)
+                tvClipboardHistoryStatus.text = if (values.isEmpty()) {
+                    "No clipboard history available."
+                } else {
+                    "${values.size} clipboard item(s) available (max 20)."
+                }
+            } catch (_: Exception) {
+                pendingClipboardCorrelationId = null
+                btnRefreshClipboardHistory.isEnabled = true
+                tvClipboardHistoryStatus.text = "Failed to pull clipboard history result."
+            }
+        }
+    }
+
+    private fun renderClipboardHistoryEntries(entries: List<String>, container: LinearLayout) {
+        container.removeAllViews()
+
+        entries.forEachIndexed { index, value ->
+            val row = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = 8
+                }
+            }
+
+            val textView = TextView(requireContext()).apply {
+                text = value
+                setTextColor(resources.getColor(R.color.carbon_text_main, null))
+                textSize = 13f
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = 12
+                }
+                setPadding(0, 8, 0, 8)
+                maxLines = 4
+            }
+
+            val copyButton = Button(requireContext()).apply {
+                text = "Copy"
+                isAllCaps = false
+                setOnClickListener {
+                    copyClipboardEntry(value)
+                }
+            }
+
+            row.addView(textView)
+            row.addView(copyButton)
+            container.addView(row)
+        }
+    }
+
+    private fun copyClipboardEntry(value: String) {
+        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        if (clipboard == null) {
+            Toast.makeText(requireContext(), "Clipboard service unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        clipboard.setPrimaryClip(ClipData.newPlainText("BinaryStars Clipboard", value))
+        Toast.makeText(requireContext(), "Copied", Toast.LENGTH_SHORT).show()
     }
 
     private fun populateDeviceStats(
