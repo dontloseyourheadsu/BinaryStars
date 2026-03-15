@@ -1,5 +1,22 @@
 # BinaryStars.Android
 
+## Feature Coverage
+
+BinaryStars Android currently includes:
+
+- Devices (link/unlink, full detail view, telemetry, availability toggle)
+- File transfers (create/upload/download/reject + Bluetooth transfer path)
+- Notes (create/edit/delete)
+- Messaging (chat list + direct chat, websocket + API fallback)
+- Map (history + live updates)
+- Notifications (send now, schedule, sync acknowledgement)
+- Remote actions for Linux targets (lock/shutdown/reboot/open/close/list apps)
+
+Clipboard history notes:
+
+- Android can request clipboard history from online Linux targets.
+- Clipboard history from Android targets is not available due Android OS clipboard access restrictions.
+
 ## Secrets And Local Configuration
 
 - Do not commit real OAuth client IDs or signing keys.
