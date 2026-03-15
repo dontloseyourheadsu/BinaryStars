@@ -102,6 +102,22 @@ POST /api/devices/register
 }
 ```
 
+### Update Device Telemetry
+
+PUT /api/devices/{deviceId}/telemetry
+
+```json
+{
+  "batteryLevel": 82,
+  "cpuLoadPercent": 14,
+  "isOnline": true,
+  "isAvailable": true,
+  "isSynced": true,
+  "wifiUploadSpeed": "1200 kbps",
+  "wifiDownloadSpeed": "5400 kbps"
+}
+```
+
 ### Unlink Device
 
 DELETE /api/devices/{deviceId}
@@ -220,9 +236,25 @@ POST /api/locations
 }
 ```
 
+### Create Live Location (No History Persistence)
+
+POST /api/locations/live
+
+```json
+{
+  "deviceId": "android-ssa-id-123",
+  "latitude": 40.7128,
+  "longitude": -74.006,
+  "accuracyMeters": 6.5,
+  "recordedAt": "2026-02-08T16:00:00Z"
+}
+```
+
 ### Get Location History
 
 GET /api/locations/history?deviceId={deviceId}&limit=50
+
+If a fresh live update exists and is not yet persisted, the first item may be titled `Live`.
 
 ## Messaging
 
@@ -245,6 +277,147 @@ GET /ws/messaging?deviceId={deviceId}
 
 - Requires Authorization: Bearer <access-token> header.
 - Sends pending Kafka messages before realtime messages.
+
+WebSocket envelope types currently used by the API include:
+
+- `message`
+- `device_removed`
+- `device_presence`
+- `location_update`
+
+## Notifications
+
+### Send Notification Now
+
+POST /api/notifications/send
+
+```json
+{
+  "senderDeviceId": "android-ssa-id-123",
+  "targetDeviceId": "android-ssa-id-456",
+  "title": "Heads up",
+  "body": "This is an immediate notification"
+}
+```
+
+### Get Notification Schedules For Target Device
+
+GET /api/notifications/schedules?deviceId={deviceId}
+
+### Create Notification Schedule
+
+POST /api/notifications/schedules
+
+```json
+{
+  "sourceDeviceId": "android-ssa-id-123",
+  "targetDeviceId": "android-ssa-id-456",
+  "title": "Reminder",
+  "body": "Stretch and hydrate",
+  "isEnabled": true,
+  "scheduledForUtc": "2026-03-15T09:00:00Z",
+  "repeatMinutes": 60
+}
+```
+
+### Update Notification Schedule
+
+PUT /api/notifications/schedules/{scheduleId}
+
+Body is the same shape as schedule creation.
+
+### Delete Notification Schedule
+
+DELETE /api/notifications/schedules/{scheduleId}
+
+### Pull Pending Notifications + Schedules
+
+GET /api/notifications/pull?deviceId={deviceId}
+
+Response:
+
+```json
+{
+  "hasPendingNotificationSync": true,
+  "notifications": [
+    {
+      "id": "notification-id",
+      "userId": "user-id",
+      "senderDeviceId": "android-ssa-id-123",
+      "targetDeviceId": "android-ssa-id-456",
+      "title": "Heads up",
+      "body": "This is an immediate notification",
+      "createdAt": "2026-03-14T12:00:00Z"
+    }
+  ],
+  "schedules": []
+}
+```
+
+### Acknowledge Notification Sync Applied
+
+POST /api/notifications/ack
+
+```json
+{
+  "deviceId": "android-ssa-id-456"
+}
+```
+
+## Actions
+
+Actions are currently supported only for Linux target devices.
+
+### Send Action Command
+
+POST /api/actions/send
+
+```json
+{
+  "senderDeviceId": "android-ssa-id-123",
+  "targetDeviceId": "linux-desktop-001",
+  "actionType": "get_clipboard_history",
+  "payloadJson": null,
+  "correlationId": "req-123"
+}
+```
+
+### Pull Pending Actions For Device
+
+GET /api/actions/pull?deviceId={deviceId}
+
+### Publish Action Result
+
+POST /api/actions/results
+
+```json
+{
+  "senderDeviceId": "linux-desktop-001",
+  "targetDeviceId": "android-ssa-id-123",
+  "actionType": "get_clipboard_history",
+  "status": "success",
+  "payloadJson": "[\"first entry\",\"second entry\"]",
+  "error": null,
+  "correlationId": "req-123"
+}
+```
+
+### Pull Pending Action Results For Device
+
+GET /api/actions/results/pull?deviceId={deviceId}
+
+For `get_clipboard_history`, payload currently returns up to 20 text entries when history providers are available on the Linux target, and otherwise falls back to a single current clipboard entry.
+
+Common action types:
+
+- `block_screen`
+- `shutdown`
+- `reboot`
+- `list_launchable_apps`
+- `list_running_apps`
+- `open_app`
+- `close_app`
+- `get_clipboard_history`
 
 ## Debug (Development Only)
 
