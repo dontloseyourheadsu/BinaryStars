@@ -6,6 +6,8 @@ The BinaryStars API is the .NET 10 backend that powers authentication, device ma
 
 - Authenticates users (password + external providers) and issues JWTs.
 - Manages devices, notes, and location history stored in PostgreSQL.
+- Handles notification send/schedule/sync endpoints.
+- Handles remote action command/result queues for Linux targets.
 - Streams file transfers to/from Kafka using packetized uploads.
 - Delivers device-to-device messages via websocket or Kafka fallback.
 - Runs background cleanup jobs with Hangfire.
@@ -119,6 +121,23 @@ See the Android README for signature hash and redirect URI details.
 - Clients must include deviceId as a query string (deviceId=...).
 
 The websocket handler delivers pending Kafka messages first, then forwards realtime messages. If a device is removed, only device removal events are delivered before the socket closes.
+
+Current websocket event envelope types also include:
+
+- `device_presence`
+- `location_update`
+- `device_removed`
+
+## Remote Actions
+
+- Action endpoints are available under `/api/actions/*`.
+- Targets are currently restricted to Linux devices.
+- Supported actions include power/screen controls, app listing/open/close, and `get_clipboard_history`.
+
+## Notifications
+
+- Notification endpoints are available under `/api/notifications/*`.
+- Supports immediate push-style payloads, per-device schedules, pull sync, and sync acknowledgement.
 
 ## OpenAPI + Scalar
 
