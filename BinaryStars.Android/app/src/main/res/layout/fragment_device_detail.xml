@@ -344,6 +344,49 @@
                      
             </androidx.constraintlayout.widget.ConstraintLayout>
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Clipboard History"
+                    android:textAllCaps="true"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/carbon_text_muted"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="24dp"
+                    android:paddingBottom="8dp"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@color/carbon_bg_panel"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/tvClipboardHistoryStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Clipboard history unavailable"
+                        android:textSize="13sp"
+                        android:textColor="@color/carbon_text_muted"/>
+
+                    <Button
+                        android:id="@+id/btnRefreshClipboardHistory"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Refresh clipboard history"
+                        android:textAllCaps="false"/>
+
+                    <LinearLayout
+                        android:id="@+id/clipboardHistoryList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="vertical" />
+                </LinearLayout>
+
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

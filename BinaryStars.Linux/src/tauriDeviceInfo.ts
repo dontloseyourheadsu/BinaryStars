@@ -106,7 +106,8 @@ export async function performLocalAction(
     | "list_launchable_apps"
     | "list_running_apps"
     | "open_app"
-    | "close_app",
+    | "close_app"
+    | "get_clipboard_history",
   payloadJson?: string | null,
 ): Promise<string> {
   if (!isTauriRuntime()) {

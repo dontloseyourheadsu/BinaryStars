@@ -98,6 +98,11 @@ function App() {
   const [launchableApps, setLaunchableApps] = useState<LaunchableAppItem[]>([]);
   const [runningApps, setRunningApps] = useState<RunningAppItem[]>([]);
   const [pendingActionRequestId, setPendingActionRequestId] = useState<string | null>(null);
+  const [clipboardHistory, setClipboardHistory] = useState<string[]>([]);
+  const [clipboardHistoryLoading, setClipboardHistoryLoading] = useState(false);
+  const [clipboardHistoryMessage, setClipboardHistoryMessage] = useState("");
+  const [pendingClipboardRequestId, setPendingClipboardRequestId] = useState<string | null>(null);
+  const [clipboardTargetDeviceId, setClipboardTargetDeviceId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationBody, setNotificationBody] = useState("");
@@ -140,6 +145,7 @@ function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
+  const clipboardAutoFetchKeyRef = useRef<string>("");
   const myDeviceId = getDeviceId();
 
   const resolvedTheme: EffectiveTheme = themeMode === "system" ? systemTheme : themeMode;
@@ -984,6 +990,73 @@ function App() {
   }, [devices, selectedDeviceDetailId]);
 
   useEffect(() => {
+    if (!selectedDeviceDetail) {
+      clipboardAutoFetchKeyRef.current = "";
+      setClipboardHistory([]);
+      setClipboardHistoryMessage("");
+      setClipboardHistoryLoading(false);
+      setPendingClipboardRequestId(null);
+      setClipboardTargetDeviceId(null);
+      return;
+    }
+
+    const key = `${selectedDeviceDetail.id}:${selectedDeviceDetail.type}:${selectedDeviceDetail.isOnline}`;
+    if (clipboardAutoFetchKeyRef.current === key) {
+      return;
+    }
+
+    clipboardAutoFetchKeyRef.current = key;
+
+    if (selectedDeviceDetail.type === "Android") {
+      setClipboardHistory([]);
+      setClipboardHistoryLoading(false);
+      setPendingClipboardRequestId(null);
+      setClipboardTargetDeviceId(null);
+      setClipboardHistoryMessage("Clipboard history for Android targets is not available due OS-level clipboard access restrictions.");
+      return;
+    }
+
+    if (!selectedDeviceDetail.isOnline) {
+      setClipboardHistory([]);
+      setClipboardHistoryLoading(false);
+      setPendingClipboardRequestId(null);
+      setClipboardTargetDeviceId(null);
+      setClipboardHistoryMessage("Target device must be online to fetch clipboard history.");
+      return;
+    }
+
+    const requestClipboardHistory = async (): Promise<void> => {
+      if (!isAuthed || !online) {
+        return;
+      }
+
+      const requestId = crypto.randomUUID();
+      setClipboardHistory([]);
+      setClipboardHistoryMessage("");
+      setClipboardHistoryLoading(true);
+      setPendingClipboardRequestId(requestId);
+      setClipboardTargetDeviceId(selectedDeviceDetail.id);
+
+      try {
+        await api.sendAction({
+          senderDeviceId: myDeviceId,
+          targetDeviceId: selectedDeviceDetail.id,
+          actionType: "get_clipboard_history",
+          payloadJson: null,
+          correlationId: requestId,
+        });
+      } catch {
+        setClipboardHistoryLoading(false);
+        setPendingClipboardRequestId(null);
+        setClipboardTargetDeviceId(null);
+        setClipboardHistoryMessage("Failed to request clipboard history.");
+      }
+    };
+
+    void requestClipboardHistory();
+  }, [isAuthed, myDeviceId, online, selectedDeviceDetail]);
+
+  useEffect(() => {
     if (notificationTargetDeviceId && devices.some((entry) => entry.id === notificationTargetDeviceId)) {
       return;
     }
@@ -1383,7 +1456,8 @@ function App() {
       | "list_launchable_apps"
       | "list_running_apps"
       | "open_app"
-      | "close_app",
+      | "close_app"
+      | "get_clipboard_history",
     payloadJson?: string | null,
     correlationId?: string | null,
   ): Promise<void> => {
@@ -1444,6 +1518,10 @@ function App() {
     if (actionType === "close_app") {
       await performLocalAction("close_app", payloadJson);
       return null;
+    }
+
+    if (actionType === "get_clipboard_history") {
+      return performLocalAction("get_clipboard_history");
     }
 
     return null;
@@ -1518,6 +1596,59 @@ function App() {
     await sendActionCommand("close_app", JSON.stringify({ pid: app.pid, name: app.name }), crypto.randomUUID());
   };
 
+  const refreshClipboardHistory = async (): Promise<void> => {
+    if (!selectedDeviceDetail) {
+      return;
+    }
+
+    if (!isAuthed || !online) {
+      setClipboardHistoryMessage("No connection available");
+      return;
+    }
+
+    if (selectedDeviceDetail.type === "Android") {
+      setClipboardHistory([]);
+      setClipboardHistoryMessage("Clipboard history for Android targets is not available due OS-level clipboard access restrictions.");
+      return;
+    }
+
+    if (!selectedDeviceDetail.isOnline) {
+      setClipboardHistory([]);
+      setClipboardHistoryMessage("Target device must be online to fetch clipboard history.");
+      return;
+    }
+
+    const requestId = crypto.randomUUID();
+    setClipboardHistory([]);
+    setClipboardHistoryMessage("");
+    setClipboardHistoryLoading(true);
+    setPendingClipboardRequestId(requestId);
+    setClipboardTargetDeviceId(selectedDeviceDetail.id);
+
+    try {
+      await api.sendAction({
+        senderDeviceId: myDeviceId,
+        targetDeviceId: selectedDeviceDetail.id,
+        actionType: "get_clipboard_history",
+        payloadJson: null,
+        correlationId: requestId,
+      });
+    } catch {
+      setClipboardHistoryLoading(false);
+      setPendingClipboardRequestId(null);
+      setClipboardTargetDeviceId(null);
+      setClipboardHistoryMessage("Failed to request clipboard history.");
+    }
+  };
+
+  const copyClipboardHistoryEntry = async (value: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      setError("Failed to copy clipboard entry");
+    }
+  };
+
   const pullActionResults = async (): Promise<void> => {
     if (!isAuthed || !online) {
       return;
@@ -1525,6 +1656,55 @@ function App() {
 
     const results = await api.pullActionResults(myDeviceId);
     for (const result of results) {
+      if (result.actionType === "get_clipboard_history") {
+        if (pendingClipboardRequestId && result.correlationId !== pendingClipboardRequestId) {
+          continue;
+        }
+
+        if (clipboardTargetDeviceId && result.senderDeviceId !== clipboardTargetDeviceId) {
+          continue;
+        }
+
+        if (result.status.toLowerCase() !== "success") {
+          setClipboardHistory([]);
+          setClipboardHistoryMessage(result.error ?? "Failed to fetch clipboard history from target device.");
+          setClipboardHistoryLoading(false);
+          setPendingClipboardRequestId(null);
+          setClipboardTargetDeviceId(null);
+          continue;
+        }
+
+        try {
+          const parsed = JSON.parse(result.payloadJson ?? "[]") as unknown[];
+          const values = parsed
+            .map((entry) => {
+              if (typeof entry === "string") {
+                return entry;
+              }
+
+              if (entry && typeof entry === "object" && "content" in entry) {
+                const content = (entry as { content?: unknown }).content;
+                return typeof content === "string" ? content : "";
+              }
+
+              return "";
+            })
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0);
+
+          setClipboardHistory(values);
+          setClipboardHistoryMessage(values.length === 0 ? "No clipboard history available." : "");
+        } catch {
+          setClipboardHistory([]);
+          setClipboardHistoryMessage("Failed to parse clipboard history payload.");
+        }
+
+        setClipboardHistoryLoading(false);
+        setPendingClipboardRequestId(null);
+        setClipboardTargetDeviceId(null);
+        continue;
+      }
+
       if (result.status.toLowerCase() !== "success") {
         setError(result.error ?? `Action ${result.actionType} failed`);
         continue;
@@ -1591,6 +1771,11 @@ function App() {
     setLaunchableApps([]);
     setRunningApps([]);
     setPendingActionRequestId(null);
+    setClipboardHistory([]);
+    setClipboardHistoryLoading(false);
+    setClipboardHistoryMessage("");
+    setPendingClipboardRequestId(null);
+    setClipboardTargetDeviceId(null);
     setNotificationSchedules([]);
     setNotificationHistory([]);
     setHistory([]);
@@ -1763,6 +1948,13 @@ function App() {
             onUnlinkCurrentDevice={() => void unlinkCurrentDevice()}
             formatRam={formatRam}
             formatBattery={formatBattery}
+            clipboardHistory={clipboardHistory}
+            clipboardHistoryLoading={clipboardHistoryLoading}
+            clipboardHistoryMessage={clipboardHistoryMessage}
+            onRefreshClipboardHistory={() => void refreshClipboardHistory()}
+            onCopyClipboardHistoryEntry={(value) => {
+              void copyClipboardHistoryEntry(value);
+            }}
           />
         )}
 

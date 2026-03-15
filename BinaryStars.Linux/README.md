@@ -6,8 +6,16 @@ BinaryStars Linux reproduces the Android app feature set with a responsive deskt
 - File transfers (send/list/download/reject)
 - Notes (create/edit/delete, markdown preview)
 - Messaging (chat list + device chat, websocket + REST fallback)
+- Notifications (send now, schedule, sync, local history)
 - Map (device location history + background location posting)
+- Actions (Linux target remote commands: lock, shutdown, reboot, open/close/list apps)
+- Device details clipboard history (for online Linux targets)
 - Settings (profile, connected devices, dark mode, sign out)
+
+Clipboard history notes:
+
+- Linux targets: supported when online through remote action results.
+- Android targets: not supported due Android clipboard access restrictions.
 
 ## Toolchain (Latest Verified)
 

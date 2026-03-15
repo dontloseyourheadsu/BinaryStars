@@ -271,6 +271,33 @@ fn try_command(program: &str, args: &[&str]) -> Result<(), String> {
     Err(format!("{} exited with status {}: {}", program, output.status, detail))
 }
 
+fn read_command_output(program: &str, args: &[&str]) -> Result<String, String> {
+    let output = Command::new(program).args(args).output();
+    let output = match output {
+        Ok(value) => value,
+        Err(error) => {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                return Err(format!("missing:{}", program));
+            }
+            return Err(format!("{} failed to start: {}", program, error));
+        }
+    };
+
+    if output.status.success() {
+        return Ok(String::from_utf8(output.stdout).unwrap_or_default());
+    }
+
+    let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+    let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+    let detail = if !stderr.trim().is_empty() {
+        stderr.trim().to_string()
+    } else {
+        stdout.trim().to_string()
+    };
+
+    Err(format!("{} exited with status {}: {}", program, output.status, detail))
+}
+
 fn block_screen_linux() -> Result<(), String> {
     let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_ascii_lowercase();
     let session = std::env::var("DESKTOP_SESSION").unwrap_or_default().to_ascii_lowercase();
@@ -509,6 +536,55 @@ fn close_app_linux(payload_json: Option<String>) -> Result<(), String> {
     Err("close_app payload must include pid or name".to_string())
 }
 
+fn list_clipboard_history_json() -> Result<String, String> {
+    let mut entries: Vec<String> = Vec::new();
+
+    if let Ok(raw_count) = read_command_output("copyq", &["count"]) {
+        let count = raw_count.trim().parse::<usize>().unwrap_or(0);
+        let max_items = count.min(20);
+        for index in 0..max_items {
+            let index_text = index.to_string();
+            if let Ok(value) = read_command_output("copyq", &["read", index_text.as_str()]) {
+                let normalized = value.trim().to_string();
+                if !normalized.is_empty() && !entries.iter().any(|item| item == &normalized) {
+                    entries.push(normalized);
+                }
+            }
+        }
+    }
+
+    if entries.is_empty() {
+        if let Ok(raw_list) = read_command_output("cliphist", &["list"]) {
+            for line in raw_list.lines().take(20) {
+                let preview = if let Some((_, value)) = line.split_once('\t') {
+                    value.trim()
+                } else {
+                    line.trim()
+                };
+
+                if !preview.is_empty() && !entries.iter().any(|item| item == preview) {
+                    entries.push(preview.to_string());
+                }
+            }
+        }
+    }
+
+    if entries.is_empty() {
+        let current = read_command_output("wl-paste", &["-n"])
+            .or_else(|_| read_command_output("xclip", &["-selection", "clipboard", "-o"]))
+            .or_else(|_| read_command_output("xsel", &["--clipboard", "--output"]));
+
+        if let Ok(value) = current {
+            let normalized = value.trim().to_string();
+            if !normalized.is_empty() {
+                entries.push(normalized);
+            }
+        }
+    }
+
+    serde_json::to_string(&entries).map_err(|e| format!("failed to serialize clipboard history: {}", e))
+}
+
 fn is_running_as_root() -> bool {
     let output = Command::new("id").arg("-u").output();
     match output {
@@ -580,6 +656,7 @@ async fn perform_local_action(action_type: String, payload_json: Option<String>)
                 close_app_linux(payload_json)?;
                 Ok("{}".to_string())
             }
+            "get_clipboard_history" => list_clipboard_history_json(),
             _ => Err("Unsupported local action".to_string()),
         }
     })

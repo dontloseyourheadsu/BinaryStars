@@ -3,6 +3,13 @@
 BinaryStars is a multi-client system (API + Android + Kafka) for device
 management, notes, file transfers, messaging, and location history.
 
+Current feature set also includes:
+
+- Notification send/schedule/sync flows
+- Remote Linux actions (screen lock, power, app open/close/list)
+- Device presence and live location websocket events
+- Clipboard history retrieval from online Linux targets
+
 ## Repository Layout
 
 - API service: [BinaryStars.Api/README.md](BinaryStars.Api/README.md)
@@ -13,9 +20,9 @@ management, notes, file transfers, messaging, and location history.
 ## Architecture Overview
 
 BinaryStars is centered on the API service, which handles auth, device
-management, notes, messaging, and file transfer coordination. Kafka streams
-file payloads and queued messages, while PostgreSQL stores durable state.
-Hangfire runs background cleanup and transfer jobs.
+management, notes, notifications, messaging, remote actions, and file transfer
+coordination. Kafka streams file payloads and queued messages, while PostgreSQL
+stores durable state. Hangfire runs background cleanup and transfer jobs.
 
 ```mermaid
 flowchart LR

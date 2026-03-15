@@ -2,8 +2,10 @@
 @token = REPLACE_WITH_ACCESS_TOKEN
 @deviceId = android-ssa-id-123
 @deviceId2 = android-ssa-id-456
+@linuxDeviceId = linux-desktop-001
 @noteId = 00000000-0000-0000-0000-000000000000
 @transferId = 00000000-0000-0000-0000-000000000000
+@scheduleId = 00000000-0000-0000-0000-000000000000
 
 ### Register
 POST {{host}}/api/auth/register
@@ -46,6 +48,29 @@ Content-Type: application/json
 GET {{host}}/api/devices
 Authorization: Bearer {{token}}
 
+### Update Device Telemetry
+PUT {{host}}/api/devices/{{deviceId}}/telemetry
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "batteryLevel": 82,
+  "cpuLoadPercent": 14,
+  "isOnline": true,
+  "isAvailable": true,
+  "isSynced": true,
+  "wifiUploadSpeed": "1200 kbps",
+  "wifiDownloadSpeed": "5400 kbps"
+}
+
+### Device Heartbeat
+POST {{host}}/api/devices/{{deviceId}}/heartbeat
+Authorization: Bearer {{token}}
+
+### Unlink Device
+DELETE {{host}}/api/devices/{{deviceId}}
+Authorization: Bearer {{token}}
+
 ### Create Note
 POST {{host}}/api/notes
 Authorization: Bearer {{token}}
@@ -60,6 +85,10 @@ Content-Type: application/json
 
 ### List Notes
 GET {{host}}/api/notes
+Authorization: Bearer {{token}}
+
+### List Notes For Device
+GET {{host}}/api/notes/device/{{deviceId}}
 Authorization: Bearer {{token}}
 
 ### Get Note By Id
@@ -94,6 +123,18 @@ Content-Type: application/json
   "encryptionEnvelope": "{\"alg\":\"RSA\",\"keyId\":\"key-1\"}"
 }
 
+### List Transfers
+GET {{host}}/api/files/transfers
+Authorization: Bearer {{token}}
+
+### List Pending Transfers For Device
+GET {{host}}/api/files/transfers/pending?deviceId={{deviceId2}}
+Authorization: Bearer {{token}}
+
+### Get Transfer By Id
+GET {{host}}/api/files/transfers/{{transferId}}
+Authorization: Bearer {{token}}
+
 ### Upload Transfer Bytes
 # Replace ./sample.bin with a real file path on your machine
 PUT {{host}}/api/files/transfers/{{transferId}}/upload
@@ -123,6 +164,19 @@ Content-Type: application/json
   "recordedAt": "2026-02-08T16:00:00Z"
 }
 
+### Create Live Location
+POST {{host}}/api/locations/live
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "deviceId": "{{deviceId}}",
+  "latitude": 40.7128,
+  "longitude": -74.006,
+  "accuracyMeters": 6.5,
+  "recordedAt": "2026-02-08T16:00:00Z"
+}
+
 ### Get Location History
 GET {{host}}/api/locations/history?deviceId={{deviceId}}&limit=50
 Authorization: Bearer {{token}}
@@ -138,6 +192,105 @@ Content-Type: application/json
   "body": "Hello from BinaryStars",
   "sentAt": "2026-02-08T16:00:00Z"
 }
+
+### Send Notification Now
+POST {{host}}/api/notifications/send
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "senderDeviceId": "{{deviceId}}",
+  "targetDeviceId": "{{deviceId2}}",
+  "title": "Heads up",
+  "body": "Immediate notification from Endpoints.http"
+}
+
+### Get Notification Schedules
+GET {{host}}/api/notifications/schedules?deviceId={{deviceId2}}
+Authorization: Bearer {{token}}
+
+### Create Notification Schedule
+POST {{host}}/api/notifications/schedules
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sourceDeviceId": "{{deviceId}}",
+  "targetDeviceId": "{{deviceId2}}",
+  "title": "Reminder",
+  "body": "Stretch and hydrate",
+  "isEnabled": true,
+  "scheduledForUtc": "2026-03-15T09:00:00Z",
+  "repeatMinutes": 60
+}
+
+### Update Notification Schedule
+PUT {{host}}/api/notifications/schedules/{{scheduleId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sourceDeviceId": "{{deviceId}}",
+  "targetDeviceId": "{{deviceId2}}",
+  "title": "Reminder Updated",
+  "body": "Take a break",
+  "isEnabled": true,
+  "scheduledForUtc": "2026-03-15T10:00:00Z",
+  "repeatMinutes": 120
+}
+
+### Delete Notification Schedule
+DELETE {{host}}/api/notifications/schedules/{{scheduleId}}
+Authorization: Bearer {{token}}
+
+### Pull Notifications
+GET {{host}}/api/notifications/pull?deviceId={{deviceId2}}
+Authorization: Bearer {{token}}
+
+### Acknowledge Notification Sync
+POST {{host}}/api/notifications/ack
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "deviceId": "{{deviceId2}}"
+}
+
+### Send Action - Clipboard History
+POST {{host}}/api/actions/send
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "senderDeviceId": "{{deviceId}}",
+  "targetDeviceId": "{{linuxDeviceId}}",
+  "actionType": "get_clipboard_history",
+  "payloadJson": null,
+  "correlationId": "clipboard-request-1"
+}
+
+### Pull Pending Actions
+GET {{host}}/api/actions/pull?deviceId={{linuxDeviceId}}
+Authorization: Bearer {{token}}
+
+### Publish Action Result - Clipboard History
+POST {{host}}/api/actions/results
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "senderDeviceId": "{{linuxDeviceId}}",
+  "targetDeviceId": "{{deviceId}}",
+  "actionType": "get_clipboard_history",
+  "status": "success",
+  "payloadJson": "[\"first\",\"second\"]",
+  "error": null,
+  "correlationId": "clipboard-request-1"
+}
+
+### Pull Action Results
+GET {{host}}/api/actions/results/pull?deviceId={{deviceId}}
+Authorization: Bearer {{token}}
 
 ### Decode JWT (Development Only)
 POST {{host}}/api/debug/token
