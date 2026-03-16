@@ -70,9 +70,9 @@ export default function ActionsTab({
         <h3>Actions</h3>
         {!isElevated && (
           <>
-            <p className="muted">Sudo mode is required for shutdown/reset execution on target Linux apps.</p>
+            <p className="muted">Running as root is optional. Shutdown/reset will request system authorization on the target device when needed.</p>
             <button className="ghost" onClick={onRequestElevation} type="button" disabled={busy}>
-              Enable Sudo Mode
+              Refresh Elevation Status
             </button>
           </>
         )}

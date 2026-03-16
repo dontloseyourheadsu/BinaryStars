@@ -108,6 +108,41 @@ Start the infrastructure stack (PostgreSQL, Kafka, Grafana/Loki):
 docker compose up -d
 ```
 
+Start/rebuild API container:
+
+```bash
+docker compose up -d --build binarystars.api
+```
+
+Check API logs:
+
+```bash
+docker compose logs -f binarystars.api
+```
+
+### Android Networking With Docker Compose
+
+`docker-compose.yaml` publishes API on host port `5004` (`5004 -> 8080`), so Android clients should call the host machine IP on port `5004`.
+
+- Emulator endpoint: `http://10.0.2.2:5004/api`
+- Physical device endpoint: `http://<HOST_IP>:5004/api`
+- WebSocket endpoint: `ws://<HOST_IP>:5004/ws/messaging`
+
+Get host IP on Linux:
+
+```bash
+ip route get 1.1.1.1
+```
+
+Example output includes `src <HOST_IP>`.
+
+Physical device install example:
+
+```bash
+cd BinaryStars.Android
+./gradlew :app:installDeviceDebug -PapiHost=<HOST_IP> -PapiPort=5004
+```
+
 For Kafka-only setup and TLS/SASL certificate generation, follow
 [kafka/README.md](kafka/README.md).
 

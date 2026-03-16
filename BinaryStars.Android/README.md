@@ -25,6 +25,66 @@ Clipboard history notes:
   your Microsoft redirect URI and signature hash.
 - The debug keystore lives under ~/.android/debug.keystore by default.
 
+## Running On A Physical Android Device (Hotspot/LAN)
+
+When running on a real phone, `10.0.2.2` does not point to your development machine.
+
+1. Start the API so it listens on your machine network interface (not only localhost):
+
+```bash
+ASPNETCORE_URLS="http://0.0.0.0:5004" dotnet run --project ../BinaryStars.Api
+```
+
+2. Find your machine IP on the hotspot/LAN (example: `192.168.43.120`).
+3. Build/run Android with that host:
+
+```bash
+./gradlew :app:installDebug -PapiHost=192.168.43.120 -PapiPort=5004
+```
+
+Notes:
+
+- `apiHost` defaults to `10.0.2.2` for emulator.
+- `apiPort` defaults to `5004`.
+- The same host/port override is used for both REST and WebSocket messaging.
+- If your Linux firewall is enabled, allow inbound TCP on port `5004`.
+
+## Install Commands (Emulator vs Physical Device)
+
+Run from `BinaryStars.Android`:
+
+### Emulator (default endpoint)
+
+```bash
+./gradlew :app:installEmulatorDebug
+```
+
+This uses the emulator default endpoint `10.0.2.2:5004`.
+
+### Physical Android Device (phone/hotspot/LAN)
+
+```bash
+./gradlew :app:installDeviceDebug -PapiHost=192.168.43.120 -PapiPort=5004
+```
+
+Or use the helper script (auto-detects host IP):
+
+```bash
+./scripts/install-device-debug.sh
+```
+
+Optional explicit host/port:
+
+```bash
+./scripts/install-device-debug.sh --host 192.168.43.120 --port 5004
+```
+
+Notes:
+
+- `-PapiHost` is required for `installDeviceDebug`.
+- `-PapiPort` is optional (defaults to `5004`).
+- You can still use `:app:installDebug` directly; these tasks are convenience wrappers.
+
 ## OAuth Setup Instructions
 
 This project supports authentication via Google and Microsoft. Follow the instructions below to configure the necessary Client IDs and keys in your environment.

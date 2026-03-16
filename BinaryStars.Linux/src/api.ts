@@ -27,7 +27,19 @@ const http = axios.create({
 
 export const tokenStore = {
   getToken(): string | null {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token) {
+      return null;
+    }
+
+    const expiryRaw = localStorage.getItem(ACCESS_TOKEN_EXPIRY_KEY);
+    const expiry = Number(expiryRaw);
+    if (!Number.isFinite(expiry) || expiry <= Date.now()) {
+      this.clear();
+      return null;
+    }
+
+    return token;
   },
   setToken(token: string, expiresInSeconds: number): void {
     localStorage.setItem(ACCESS_TOKEN_KEY, token);
@@ -60,7 +72,12 @@ http.interceptors.response.use(
     }
     return response;
   },
-  (error: AxiosError) => Promise.reject(error),
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      tokenStore.clear();
+    }
+    return Promise.reject(error);
+  },
 );
 
 export const api = {

@@ -14,7 +14,6 @@ import {
   isTauriRuntime,
   isWifiConnected,
   performLocalAction,
-  requestElevatedMode,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { LocalNotificationHistoryItem } from "./storage";
@@ -728,8 +727,8 @@ function App() {
       return;
     }
 
-    void ensureElevatedMode().catch((nextError) => {
-      setError(nextError instanceof Error ? nextError.message : "Failed to enter sudo mode");
+    void refreshElevationStatus().catch((nextError) => {
+      setError(nextError instanceof Error ? nextError.message : "Failed to check elevation status");
     });
   }, [isAuthed]);
 
@@ -1736,25 +1735,18 @@ function App() {
     }
   };
 
-  const ensureElevatedMode = async (): Promise<void> => {
+  const refreshElevationStatus = async (): Promise<void> => {
     if (!isTauriRuntime()) {
+      setIsElevated(false);
       return;
     }
 
     const status = await getElevationStatus();
     setIsElevated(status.is_root);
+  };
 
-    if (status.is_root) {
-      return;
-    }
-
-    const shouldElevate = window.confirm("BinaryStars requires sudo mode for shutdown/reset actions. Relaunch in sudo mode now?");
-    if (!shouldElevate) {
-      setError("Sudo mode is required for shutdown/reset actions on this device");
-      return;
-    }
-
-    await requestElevatedMode();
+  const ensureElevatedMode = async (): Promise<void> => {
+    await refreshElevationStatus();
   };
 
   const signOut = (): void => {

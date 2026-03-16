@@ -1,5 +1,6 @@
 package com.tds.binarystars.api
 
+import com.tds.binarystars.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -7,8 +8,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-    // Emulator creates a loopback at 10.0.2.2 pointing to host's localhost
-    private const val BASE_URL = "http://10.0.2.2:5004/api/"
+    private const val BASE_URL = BuildConfig.API_BASE_URL
     private const val HEADER_ACCESS_TOKEN = "X-Access-Token"
     private const val HEADER_ACCESS_TOKEN_EXPIRES = "X-Access-Token-ExpiresIn"
     

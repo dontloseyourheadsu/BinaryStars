@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.google.gson.Gson
+import com.tds.binarystars.BuildConfig
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.DeviceRemovedEventDto
 import com.tds.binarystars.api.DevicePresenceEventDto
@@ -27,7 +28,7 @@ import java.util.concurrent.TimeUnit
  * Manages the websocket connection for device messaging.
  */
 object MessagingSocketManager {
-    private const val WS_BASE_URL = "ws://10.0.2.2:5004/ws/messaging"
+    private const val WS_BASE_URL = BuildConfig.WS_BASE_URL
     private const val MAX_MESSAGE_LENGTH = 500
 
     private val gson = Gson()

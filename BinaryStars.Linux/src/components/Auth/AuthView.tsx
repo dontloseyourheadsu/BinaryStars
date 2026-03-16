@@ -98,7 +98,7 @@ export default function AuthView({ onLoggedIn, busy, setBusy, setError }: Props)
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         setError("No connection available");
       } else {
-        setError(error instanceof Error ? error.message : "Authentication failed");
+        setError(readApiError(error));
       }
     } finally {
       setBusy(false);

@@ -377,6 +377,11 @@ fn power_action_linux(action_type: &str) -> Result<(), String> {
         Err(error) => errors.push(error),
     }
 
+    match try_command("pkexec", &["systemctl", systemctl_arg]) {
+        Ok(_) => return Ok(()),
+        Err(error) => errors.push(error),
+    }
+
     Err(format!(
         "Unable to execute {}. Permission denied or unsupported policy/session. Details: {}",
         action_type,
@@ -596,6 +601,34 @@ fn is_running_as_root() -> bool {
     }
 }
 
+fn open_url_with_fallback(url: &str) -> Result<(), String> {
+    if webbrowser::open(url).is_ok() {
+        return Ok(());
+    }
+
+    let mut errors: Vec<String> = Vec::new();
+
+    let xdg_open = Command::new("xdg-open").arg(url).status();
+    match xdg_open {
+        Ok(status) if status.success() => return Ok(()),
+        Ok(status) => errors.push(format!("xdg-open exited with {}", status)),
+        Err(err) => errors.push(format!("xdg-open failed: {}", err)),
+    }
+
+    let gio_open = Command::new("gio").args(["open", url]).status();
+    match gio_open {
+        Ok(status) if status.success() => return Ok(()),
+        Ok(status) => errors.push(format!("gio open exited with {}", status)),
+        Err(err) => errors.push(format!("gio open failed: {}", err)),
+    }
+
+    Err(format!(
+        "Could not open browser automatically. Open this URL manually: {}. Details: {}",
+        url,
+        errors.join(" | ")
+    ))
+}
+
 #[derive(Serialize)]
 pub struct ElevationStatus {
     pub is_root: bool,
@@ -614,20 +647,7 @@ async fn request_elevated_mode() -> Result<(), String> {
         return Ok(());
     }
 
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("failed to resolve current executable: {}", e))?;
-
-    let pkexec_attempt = Command::new("pkexec").arg(&current_exe).spawn();
-    if pkexec_attempt.is_ok() {
-        std::process::exit(0);
-    }
-
-    let sudo_attempt = Command::new("sudo").arg(&current_exe).spawn();
-    if sudo_attempt.is_ok() {
-        std::process::exit(0);
-    }
-
-    Err("Failed to relaunch app in sudo mode. Ensure pkexec or sudo is installed and permitted.".to_string())
+    Err("Full-app sudo relaunch is deprecated. Run BinaryStars normally and authorize privileged actions (shutdown/reboot) when prompted by PolicyKit.".to_string())
 }
 
 #[tauri::command]
@@ -871,6 +891,10 @@ async fn oauth_get_provider_token(
 ) -> Result<String, String> {
     let provider = OAuthProvider::parse(&provider)?;
 
+    if is_running_as_root() {
+        return Err("OAuth sign-in is disabled in elevated mode. Start BinaryStars normally, sign in, then enable sudo mode from Actions.".to_string());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let redirect = Url::parse(&redirect_uri)
             .map_err(|e| format!("Invalid redirect URI: {}", e))?;
@@ -946,8 +970,7 @@ async fn oauth_get_provider_token(
             }
         };
 
-        webbrowser::open(&auth_url)
-            .map_err(|e| format!("Could not open browser for OAuth login: {}", e))?;
+        open_url_with_fallback(&auth_url)?;
 
         let (mut stream, _) = listener
             .accept()
