@@ -27,11 +27,13 @@ import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.ExternalAuthRequest
 import com.tds.binarystars.api.LoginRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
 
     private val logTag = "BinaryStarsLogin"
+    private var googleSignInInProgress = false
 
     private lateinit var credentialManager: CredentialManager
     private var msalApp: ISingleAccountPublicClientApplication? = null
@@ -153,6 +155,11 @@ class LoginActivity : AppCompatActivity() {
         }
 
         btnLoginGoogle.setOnClickListener {
+            if (googleSignInInProgress) {
+                return@setOnClickListener
+            }
+
+            googleSignInInProgress = true
             lifecycleScope.launch {
                 try {
                     val googleIdOption = GetGoogleIdOption.Builder()
@@ -188,9 +195,13 @@ class LoginActivity : AppCompatActivity() {
                 } catch (e: GetCredentialException) {
                     Log.e(logTag, "Google sign-in failed", e)
                     toast("Google sign-in failed: ${e.message}")
+                } catch (e: CancellationException) {
+                    Log.d(logTag, "Google sign-in canceled/interrupted", e)
                 } catch (e: Exception) {
                     Log.e(logTag, "Google sign-in error", e)
                     toast("Google sign-in error: ${e.message}")
+                } finally {
+                    googleSignInInProgress = false
                 }
             }
         }

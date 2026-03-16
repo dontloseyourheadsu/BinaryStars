@@ -53,6 +53,56 @@ For frontend-only development:
 npm run dev
 ```
 
+## Privileged Linux Actions (Shutdown/Reboot)
+
+BinaryStars no longer requires full-app sudo mode. Run the app normally and authorize privileged actions (shutdown/reboot) on demand through PolicyKit.
+
+### Important
+
+- `npm run tauri dev` and release mode do not share login/session storage.
+- Sign in once in release mode for release usage.
+- Full-app root launch is deprecated because it uses a different profile/session and can break WebKit rendering.
+
+### Build release binary
+
+From `BinaryStars.Linux`:
+
+```bash
+npm run tauri:build:local
+```
+
+Release binary path:
+
+- `BinaryStars.Linux/src-tauri/target/release/binarystarslinux`
+
+### Legacy elevated helper
+
+From `BinaryStars.Linux`:
+
+```bash
+./scripts/run-elevated-release.sh
+```
+
+This script is deprecated and now starts normal release mode.
+
+## Recommended workflow (simple)
+
+From `BinaryStars.Linux`:
+
+1. Build release app:
+
+```bash
+npm run tauri:build:local
+```
+
+2. Run normal release app and sign in:
+
+```bash
+./scripts/run-release.sh
+```
+
+3. Use Actions tab normally. Shutdown/reboot will prompt for authorization only when needed.
+
 ## API Configuration
 
 By default, the Linux app calls:
