@@ -3,6 +3,16 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+val apiHost = (project.findProperty("apiHost") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "10.0.2.2"
+
+val apiPort = (project.findProperty("apiPort") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "5004"
+
 android {
     namespace = "com.tds.binarystars"
     compileSdk = 34
@@ -20,8 +30,12 @@ android {
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"61729786326-qo9frvgb3.apps.googleusercontent.com\"")
         
         // Microsoft Auth (Azure AD)
-        buildConfigField("String", "MICROSOFT_CLIENT_ID", "\"c727b034-bd56-49a1c73\"")
-        buildConfigField("String", "MICROSOFT_TENANT_ID", "\"beef35aa-e9a2-7bf1\"")
+        buildConfigField("String", "MICROSOFT_CLIENT_ID", "\"c727b034-bd56-\"")
+        buildConfigField("String", "MICROSOFT_TENANT_ID", "\"beef35aa-e9a2-\"")
+
+        // API endpoints (emulator default; override with -PapiHost and optional -PapiPort)
+        buildConfigField("String", "API_BASE_URL", "\"http://$apiHost:$apiPort/api/\"")
+        buildConfigField("String", "WS_BASE_URL", "\"ws://$apiHost:$apiPort/ws/messaging\"")
     }
 
     buildFeatures {
@@ -92,4 +106,23 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+}
+
+tasks.register("installEmulatorDebug") {
+    group = "installation"
+    description = "Installs debug APK using emulator defaults (10.0.2.2:5004)."
+    dependsOn(":app:installDebug")
+}
+
+tasks.register("installDeviceDebug") {
+    group = "installation"
+    description = "Installs debug APK for a physical device (requires -PapiHost, optional -PapiPort)."
+
+    doFirst {
+        if (!project.hasProperty("apiHost")) {
+            throw GradleException("Missing -PapiHost. Example: ./gradlew :app:installDeviceDebug -PapiHost=192.168.1.20 -PapiPort=5004")
+        }
+    }
+
+    dependsOn(":app:installDebug")
 }
