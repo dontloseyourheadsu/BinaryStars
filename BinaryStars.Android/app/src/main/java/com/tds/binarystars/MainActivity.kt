@@ -146,6 +146,7 @@ class MainActivity : AppCompatActivity() {
             override fun onAvailable(network: Network) {
                 runOnUiThread {
                     syncCachedDevicesFromServer()
+                    reconnectRealtimeTransports()
                 }
             }
         }
@@ -202,6 +203,17 @@ class MainActivity : AppCompatActivity() {
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
             .commit()
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun reconnectRealtimeTransports() {
+        if (AuthTokenStore.getToken() == null) {
+            return
+        }
+
+        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        MessagingSocketManager.connect(this, deviceId)
+        PresenceHeartbeatManager.start(deviceId)
     }
 
     @SuppressLint("HardwareIds")
