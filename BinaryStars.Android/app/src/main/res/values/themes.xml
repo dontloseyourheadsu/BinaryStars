@@ -12,6 +12,8 @@
         <!-- Status bar color. -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/carbon_bg_panel</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <!-- Background -->
         <item name="android:windowBackground">@color/bg_light</item>
     </style>
