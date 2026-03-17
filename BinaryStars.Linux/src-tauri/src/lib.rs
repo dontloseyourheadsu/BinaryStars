@@ -4,9 +4,10 @@ use std::convert::TryInto;
 use std::io::{BufRead, BufReader, Write};
 use std::net::IpAddr;
 use std::net::TcpListener;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD}, Engine as _};
 use rand::{distributions::Alphanumeric, Rng};
 use reqwest::blocking::Client;
 use serde::Deserialize;
@@ -37,6 +38,8 @@ pub fn run() {
             get_device_info,
             oauth_get_provider_token,
             get_bluetooth_connected_device_names,
+            get_bluetooth_devices,
+            send_file_via_bluetooth,
             is_wifi_connected,
             get_native_location,
             perform_local_action,
@@ -45,6 +48,167 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[derive(Serialize)]
+pub struct LinuxBluetoothDevice {
+    pub name: String,
+    pub address: String,
+    pub connected: bool,
+    pub paired: bool,
+}
+
+fn parse_bluetooth_device_line(line: &str) -> Option<(String, String)> {
+    if !line.starts_with("Device ") {
+        return None;
+    }
+
+    let mut parts = line.split_whitespace();
+    let _device = parts.next()?;
+    let address = parts.next()?.trim().to_string();
+    let name = parts.collect::<Vec<&str>>().join(" ").trim().to_string();
+
+    if address.is_empty() || name.is_empty() {
+        return None;
+    }
+
+    Some((address, name))
+}
+
+#[tauri::command]
+async fn get_bluetooth_devices() -> Result<Vec<LinuxBluetoothDevice>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let paired_output = Command::new("bluetoothctl").args(["devices"]).output();
+        let connected_output = Command::new("bluetoothctl").args(["devices", "Connected"]).output();
+
+        let mut devices: HashMap<String, LinuxBluetoothDevice> = HashMap::new();
+
+        if let Ok(output) = paired_output {
+            if output.status.success() {
+                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+                for line in stdout.lines() {
+                    if let Some((address, name)) = parse_bluetooth_device_line(line) {
+                        devices.insert(
+                            address.clone(),
+                            LinuxBluetoothDevice {
+                                name,
+                                address,
+                                connected: false,
+                                paired: true,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        if let Ok(output) = connected_output {
+            if output.status.success() {
+                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+                for line in stdout.lines() {
+                    if let Some((address, name)) = parse_bluetooth_device_line(line) {
+                        if let Some(existing) = devices.get_mut(&address) {
+                            existing.connected = true;
+                            if existing.name.is_empty() {
+                                existing.name = name;
+                            }
+                        } else {
+                            devices.insert(
+                                address.clone(),
+                                LinuxBluetoothDevice {
+                                    name,
+                                    address,
+                                    connected: true,
+                                    paired: false,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut result = devices.into_values().collect::<Vec<LinuxBluetoothDevice>>();
+        result.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("spawn error: {}", e))?
+}
+
+fn sanitize_file_name(file_name: &str) -> String {
+    let sanitized = file_name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+
+    if sanitized.is_empty() {
+        "transfer.bin".to_string()
+    } else {
+        sanitized
+    }
+}
+
+#[tauri::command]
+async fn send_file_via_bluetooth(
+    device_address: String,
+    file_name: String,
+    content_base64: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let payload = STANDARD
+            .decode(content_base64.as_bytes())
+            .map_err(|e| format!("invalid file payload: {}", e))?;
+
+        if payload.is_empty() {
+            return Err("file payload is empty".to_string());
+        }
+
+        let mut temp_dir = PathBuf::from("/tmp/binarystars-bluetooth");
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("failed to create temp bluetooth directory: {}", e))?;
+
+        let random_suffix = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(8)
+            .map(char::from)
+            .collect::<String>();
+        let safe_name = sanitize_file_name(&file_name);
+        temp_dir.push(format!("{}_{}", random_suffix, safe_name));
+
+        std::fs::write(&temp_dir, payload)
+            .map_err(|e| format!("failed to stage bluetooth file: {}", e))?;
+
+        let device_arg = format!("--device={}", device_address.trim());
+        let output = Command::new("bluetooth-sendto")
+            .arg(device_arg)
+            .arg(&temp_dir)
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    "bluetooth-sendto is not installed. Install the bluez tools package.".to_string()
+                } else {
+                    format!("failed to start bluetooth-sendto: {}", e)
+                }
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+            let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+            let detail = if !stderr.trim().is_empty() { stderr } else { stdout };
+            return Err(format!("bluetooth-sendto failed: {}", detail.trim()));
+        }
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("spawn error: {}", e))?
 }
 
 #[derive(Serialize)]

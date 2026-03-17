@@ -14,6 +14,7 @@ import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.ImageView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -33,6 +34,7 @@ import com.tds.binarystars.bluetooth.BluetoothChatManager
 import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.storage.ChatStorage
+import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.MainActivity
 import com.tds.binarystars.util.NetworkUtils
 import com.tds.binarystars.model.ChatSummary
@@ -62,6 +64,7 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
 
     private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
         bluetoothAvailableDevices = devices.keys
+        newChatButton.isEnabled = if (NetworkUtils.isOnline(requireContext())) true else canStartOfflineBluetoothChat()
         viewLifecycleOwner.lifecycleScope.launch {
             refreshFromCache()
         }
@@ -196,7 +199,7 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
             val isOnline = NetworkUtils.isOnline(requireContext())
             if (!isOnline) {
                 progressBar.visibility = View.GONE
-                newChatButton.isEnabled = false
+                newChatButton.isEnabled = canStartOfflineBluetoothChat()
                 updateItems(summaries, lastNameLookup)
                 if (items.isEmpty()) {
                     setNoConnection(true)
@@ -206,20 +209,27 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                 return@launch
             }
 
-            newChatButton.isEnabled = true
-            val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
-            progressBar.visibility = View.GONE
+            try {
+                newChatButton.isEnabled = true
+                val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
+                progressBar.visibility = View.GONE
 
-            val nameLookup = if (devicesResponse.isSuccessful) {
-                devicesResponse.body().orEmpty().associateBy({ it.id }, { it.name })
-            } else {
-                emptyMap()
+                val nameLookup = if (devicesResponse.isSuccessful) {
+                    devicesResponse.body().orEmpty().associateBy({ it.id }, { it.name })
+                } else {
+                    emptyMap()
+                }
+
+                lastNameLookup = nameLookup
+
+                updateItems(summaries, nameLookup)
+                setNoConnection(false)
+            } catch (_: Exception) {
+                progressBar.visibility = View.GONE
+                newChatButton.isEnabled = canStartOfflineBluetoothChat()
+                updateItems(summaries, lastNameLookup)
+                setNoConnection(items.isEmpty())
             }
-
-            lastNameLookup = nameLookup
-
-            updateItems(summaries, nameLookup)
-            setNoConnection(false)
         }
     }
 
@@ -306,11 +316,24 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
      */
     private fun pickDeviceToChat() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
-            val devices = devicesResponse.body().orEmpty()
             val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
-            val availableDevices = devices.filter { it.id != currentDeviceId }
+            val availableDevices = if (NetworkUtils.isOnline(requireContext())) {
+                try {
+                    val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
+                    devicesResponse.body().orEmpty()
+                        .filter { it.id != currentDeviceId }
+                        .map { CachedChatDevice(it.id, it.name) }
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } else {
+                DeviceCacheStorage.getDevices()
+                    .filter { it.id != currentDeviceId && bluetoothAvailableDevices.contains(it.name) }
+                    .map { CachedChatDevice(it.id, it.name) }
+            }
+
             if (availableDevices.isEmpty()) {
+                Toast.makeText(requireContext(), "No devices available", Toast.LENGTH_SHORT).show()
                 return@launch
             }
 
@@ -325,6 +348,22 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                 .show()
         }
     }
+
+    private fun canStartOfflineBluetoothChat(): Boolean {
+        if (!BluetoothChatManager.isSupported() || !BluetoothChatManager.isEnabled()) {
+            return false
+        }
+
+        val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+        return DeviceCacheStorage.getDevices().any {
+            it.id != currentDeviceId && bluetoothAvailableDevices.contains(it.name)
+        }
+    }
+
+    private data class CachedChatDevice(
+        val id: String,
+        val name: String
+    )
 
     /**
      * Opens the messaging chat activity for the selected device.

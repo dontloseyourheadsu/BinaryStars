@@ -9,6 +9,7 @@ type Props = {
   latestPoint: LocationPoint | null;
   history: LocationPoint[];
   mapDetailOpen: boolean;
+  isElevatedRuntime: boolean;
   locationEnabled: boolean;
   locationMinutes: number;
   geoPermissionState: "granted" | "denied" | "prompt" | "unsupported" | "unknown" | "native";
@@ -32,6 +33,7 @@ export default function MapTab({
   latestPoint,
   history,
   mapDetailOpen,
+  isElevatedRuntime,
   locationEnabled,
   locationMinutes,
   geoPermissionState,
@@ -79,12 +81,14 @@ export default function MapTab({
               <input
                 className="theme-checkbox"
                 checked={locationEnabled}
+                disabled={isElevatedRuntime}
                 onChange={(event) => onSetLocationEnabled(event.target.checked)}
                 type="checkbox"
               />
             </label>
             <select
               aria-label="Location update interval"
+              disabled={isElevatedRuntime}
               onChange={(event) => onSetLocationMinutes(Number(event.target.value))}
               value={locationMinutes}
             >
@@ -97,6 +101,11 @@ export default function MapTab({
             <p className="muted">Permission: {geoPermissionState === "native" ? "managed by desktop (native)" : geoPermissionState}</p>
             <p className="muted">Last source: {lastLocationSource ?? "none"}</p>
             <p className="muted">Last sample: {lastLocationSampleAt ? new Date(lastLocationSampleAt).toLocaleString() : "none"}</p>
+            {isElevatedRuntime && (
+              <p className="muted">
+                Full-app sudo mode is unsupported for location sync. Run BinaryStars normally so the map can use the desktop user session.
+              </p>
+            )}
             {lastGeoError && <p className="muted">Last geolocation error: {lastGeoError}</p>}
           </div>
         </div>

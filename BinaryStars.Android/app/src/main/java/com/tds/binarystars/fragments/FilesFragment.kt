@@ -39,6 +39,7 @@ import com.tds.binarystars.crypto.CryptoManager
 import com.tds.binarystars.storage.FileTransferLocalStore
 import com.tds.binarystars.storage.FileTransferStorage
 import com.tds.binarystars.storage.LocalFileTransfer
+import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.MainActivity
 import com.tds.binarystars.util.NetworkUtils
 import kotlinx.coroutines.Dispatchers
@@ -200,7 +201,7 @@ class FilesFragment : Fragment() {
             if (!isOnline) {
                 val cached = withContext(Dispatchers.IO) { FileTransferStorage.getTransfers() }
                 progressBar.visibility = View.GONE
-                sendButton.isEnabled = false
+                sendButton.isEnabled = canSendOfflineViaBluetooth()
                 if (cached.isEmpty()) {
                     setNoConnection(true)
                     return@launch
@@ -214,38 +215,49 @@ class FilesFragment : Fragment() {
                 return@launch
             }
 
-            sendButton.isEnabled = true
-            setNoConnection(false)
-            val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
-            val transfersResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getFileTransfers() }
-            progressBar.visibility = View.GONE
+            try {
+                sendButton.isEnabled = true
+                setNoConnection(false)
+                val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
+                val transfersResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getFileTransfers() }
+                progressBar.visibility = View.GONE
 
-            if (devicesResponse.isSuccessful && transfersResponse.isSuccessful) {
-                val devices = devicesResponse.body().orEmpty()
-                val deviceLookup = devices.associateBy({ it.id }, { it.name })
+                if (devicesResponse.isSuccessful && transfersResponse.isSuccessful) {
+                    val devices = devicesResponse.body().orEmpty()
+                    val deviceLookup = devices.associateBy({ it.id }, { it.name })
 
-                val locals = transfersResponse.body().orEmpty().map { dto ->
-                    LocalFileTransfer(
-                        id = dto.id,
-                        fileName = dto.fileName,
-                        contentType = dto.contentType,
-                        sizeBytes = dto.sizeBytes,
-                        senderDeviceId = dto.senderDeviceId,
-                        senderDeviceName = deviceLookup[dto.senderDeviceId] ?: dto.senderDeviceId,
-                        targetDeviceId = dto.targetDeviceId,
-                        targetDeviceName = deviceLookup[dto.targetDeviceId] ?: dto.targetDeviceId,
-                        status = dto.status.name,
-                        createdAt = dto.createdAt,
-                        expiresAt = dto.expiresAt,
-                        isSender = dto.isSender
-                    )
+                    val locals = transfersResponse.body().orEmpty().map { dto ->
+                        LocalFileTransfer(
+                            id = dto.id,
+                            fileName = dto.fileName,
+                            contentType = dto.contentType,
+                            sizeBytes = dto.sizeBytes,
+                            senderDeviceId = dto.senderDeviceId,
+                            senderDeviceName = deviceLookup[dto.senderDeviceId] ?: dto.senderDeviceId,
+                            targetDeviceId = dto.targetDeviceId,
+                            targetDeviceName = deviceLookup[dto.targetDeviceId] ?: dto.targetDeviceId,
+                            status = dto.status.name,
+                            createdAt = dto.createdAt,
+                            expiresAt = dto.expiresAt,
+                            isSender = dto.isSender
+                        )
+                    }
+
+                    withContext(Dispatchers.IO) { FileTransferStorage.upsertTransfers(locals) }
+                    refreshTransfersFromCache()
+                } else {
+                    emptyState.text = "Failed to load transfers"
+                    emptyState.visibility = View.VISIBLE
                 }
-
-                withContext(Dispatchers.IO) { FileTransferStorage.upsertTransfers(locals) }
-                refreshTransfersFromCache()
-            } else {
-                emptyState.text = "Failed to load transfers"
-                emptyState.visibility = View.VISIBLE
+            } catch (_: Exception) {
+                progressBar.visibility = View.GONE
+                val cached = withContext(Dispatchers.IO) { FileTransferStorage.getTransfers() }
+                items.clear()
+                val bluetoothStates = withContext(Dispatchers.IO) { BluetoothTransferStore.getAll(requireContext()) }
+                items.addAll(buildUiItemsFromLocal(cached, bluetoothStates, bluetoothAvailableDevices))
+                adapter.notifyDataSetChanged()
+                sendButton.isEnabled = canSendOfflineViaBluetooth()
+                setNoConnection(items.isEmpty())
             }
         }
     }
@@ -336,6 +348,7 @@ class FilesFragment : Fragment() {
             bluetoothAvailableDevices = devices.keys
             viewLifecycleOwner.lifecycleScope.launch {
                 refreshTransfersFromCache()
+                sendButton.isEnabled = if (NetworkUtils.isOnline(requireContext())) true else canSendOfflineViaBluetooth()
             }
         }
         bluetoothManager.startServer()
@@ -432,13 +445,43 @@ class FilesFragment : Fragment() {
      */
     private fun handleFileSelected(uri: Uri) {
         lifecycleScope.launch {
-            val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
-            if (!devicesResponse.isSuccessful || devicesResponse.body().isNullOrEmpty()) {
+            val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+            val devices = if (NetworkUtils.isOnline(requireContext())) {
+                try {
+                    val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
+                    devicesResponse.body().orEmpty()
+                        .filter { it.id != currentDeviceId }
+                        .map {
+                            TargetDeviceOption(
+                                id = it.id,
+                                name = it.name,
+                                type = it.type,
+                                publicKey = it.publicKey,
+                                publicKeyAlgorithm = it.publicKeyAlgorithm
+                            )
+                        }
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } else {
+                DeviceCacheStorage.getDevices()
+                    .filter { it.id != currentDeviceId && bluetoothAvailableDevices.contains(it.name) }
+                    .map {
+                        TargetDeviceOption(
+                            id = it.id,
+                            name = it.name,
+                            type = if (it.type == com.tds.binarystars.model.DeviceType.LINUX) DeviceTypeDto.Linux else DeviceTypeDto.Android,
+                            publicKey = it.publicKey,
+                            publicKeyAlgorithm = it.publicKeyAlgorithm
+                        )
+                    }
+            }
+
+            if (devices.isEmpty()) {
                 Toast.makeText(requireContext(), "No devices available", Toast.LENGTH_SHORT).show()
                 return@launch
             }
 
-            val devices = devicesResponse.body()!!
             val names = devices.map { it.name }.toTypedArray()
             AlertDialog.Builder(requireContext())
                 .setTitle("Send to device")
@@ -465,6 +508,25 @@ class FilesFragment : Fragment() {
                 .show()
         }
     }
+
+    private fun canSendOfflineViaBluetooth(): Boolean {
+        if (!bluetoothManager.isSupported() || !bluetoothManager.isEnabled()) {
+            return false
+        }
+
+        val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+        return DeviceCacheStorage.getDevices().any {
+            it.id != currentDeviceId && bluetoothAvailableDevices.contains(it.name)
+        }
+    }
+
+    private data class TargetDeviceOption(
+        val id: String,
+        val name: String,
+        val type: DeviceTypeDto,
+        val publicKey: String?,
+        val publicKeyAlgorithm: String?
+    )
 
     @SuppressLint("HardwareIds")
     /**

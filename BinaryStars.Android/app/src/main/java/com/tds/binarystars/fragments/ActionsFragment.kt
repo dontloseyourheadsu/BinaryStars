@@ -387,7 +387,7 @@ class ActionsFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvActionDetailName).text = device.name
         root.findViewById<TextView>(R.id.tvActionDetailMeta).text = "${device.id} • ${if (device.isOnline) "Online" else "Offline"}"
         root.findViewById<TextView>(R.id.tvActionSupportInfo).text =
-            "Supported target: Linux desktops (GNOME/KDE/GTK-focused). Shutdown/reset require sudo mode on target app."
+            "Supported target: Linux desktops (GNOME/KDE/GTK-focused). Shutdown/reset request PolicyKit authorization on target when needed."
 
         blockButton.isEnabled = device.isOnline
         shutdownButton.isEnabled = device.isOnline
