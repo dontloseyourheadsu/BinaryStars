@@ -18,8 +18,6 @@ export default function SettingsTab({ profile, devices, themeMode, onSetThemeMod
           <strong>{profile?.username ?? "Unknown"}</strong>
         </p>
         <p className="muted">{profile?.email ?? "Unknown"}</p>
-        <p className="muted">Plan: <span className="plan-badge">{profile?.role ?? "Unknown"}</span></p>
-        <button className="ghost" type="button">Upgrade</button>
         <button onClick={onSignOut} type="button">Sign out</button>
       </div>
       <div className="panel">
