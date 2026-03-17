@@ -37,7 +37,6 @@ import com.tds.binarystars.MainActivity
 import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.storage.DeviceCacheStorage
-import com.tds.binarystars.storage.SettingsStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -157,6 +156,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         val noConnectionView = view.findViewById<View>(R.id.viewNoConnection)
         val retryButton = view.findViewById<Button>(R.id.btnRetry)
         val tvHeaderSubtitle = view.findViewById<TextView>(R.id.tvHeaderSubtitle)
+        val tvOfflineHeader = view.findViewById<TextView>(R.id.tvOfflineHeader)
 
         val isTablet = isTabletLayout()
         rvOnline.layoutManager = if (isTablet) GridLayoutManager(context, 2) else LinearLayoutManager(context)
@@ -181,6 +181,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                     rvOffline = rvOffline,
                     btnLinkDevice = btnLinkDevice,
                     tvHeaderSubtitle = tvHeaderSubtitle,
+                    tvOfflineHeader = tvOfflineHeader,
                     fromCache = true
                 )
                 contentView.visibility = View.VISIBLE
@@ -194,20 +195,12 @@ class DevicesFragment : Fragment(), MessagingEventListener {
 
         contentView.visibility = View.VISIBLE
         noConnectionView.visibility = View.GONE
-        val telemetryEnabled = SettingsStorage.isDeviceTelemetryEnabled(true)
-
         lifecycleScope.launch {
             try {
                 val response = ApiClient.apiService.getDevices()
                 if (response.isSuccessful && response.body() != null) {
                     val dtos = response.body()!!
                     val devices = withBluetoothPresence(dtos.map { dto ->
-                        val effectiveOnline = if (dto.id == currentDeviceId && !telemetryEnabled) {
-                            false
-                        } else {
-                            dto.isOnline
-                        }
-
                         Device(
                             id = dto.id,
                             name = dto.name,
@@ -219,7 +212,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                             publicKey = dto.publicKey,
                             publicKeyAlgorithm = dto.publicKeyAlgorithm,
                             batteryLevel = dto.batteryLevel,
-                            isOnline = effectiveOnline,
+                            isOnline = dto.isOnline,
                             isAvailable = dto.isAvailable,
                             isSynced = dto.isSynced,
                             cpuLoadPercent = dto.cpuLoadPercent,
@@ -238,6 +231,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                         rvOffline = rvOffline,
                         btnLinkDevice = btnLinkDevice,
                         tvHeaderSubtitle = tvHeaderSubtitle,
+                        tvOfflineHeader = tvOfflineHeader,
                         fromCache = false
                     )
                 } else {
@@ -254,6 +248,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                         rvOffline = rvOffline,
                         btnLinkDevice = btnLinkDevice,
                         tvHeaderSubtitle = tvHeaderSubtitle,
+                        tvOfflineHeader = tvOfflineHeader,
                         fromCache = true
                     )
                 }
@@ -269,6 +264,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         rvOffline: RecyclerView,
         btnLinkDevice: Button,
         tvHeaderSubtitle: TextView?,
+        tvOfflineHeader: TextView?,
         fromCache: Boolean
     ) {
         val onlineDevices = devices.filter { it.isOnline || it.isBluetoothOnline }
@@ -280,6 +276,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         } else {
             "${onlineDevices.size} devices online"
         }
+        tvOfflineHeader?.text = "Offline — ${offlineDevices.size}"
 
         rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
             openDeviceDetail(device)

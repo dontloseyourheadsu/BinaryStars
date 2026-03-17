@@ -29,6 +29,7 @@ import com.tds.binarystars.adapter.TransferAction
 import com.tds.binarystars.adapter.TransferUiItem
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.CreateFileTransferRequestDto
+import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.api.FileTransferStatusDto
 import com.tds.binarystars.bluetooth.BluetoothTransferManager
 import com.tds.binarystars.bluetooth.BluetoothTransferState
@@ -49,6 +50,7 @@ import java.io.FileOutputStream
 import java.text.DecimalFormat
 import java.time.Instant
 import java.util.UUID
+import org.json.JSONObject
 import androidx.core.content.ContextCompat
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
@@ -450,13 +452,13 @@ class FilesFragment : Fragment() {
                                 if (methodIndex == 0) {
                                     sendFileToDeviceBluetooth(uri, device.id, device.name, device.publicKey, device.publicKeyAlgorithm)
                                 } else {
-                                    sendFileToDeviceApi(uri, device.id, device.publicKey, device.publicKeyAlgorithm)
+                                    sendFileToDeviceApi(uri, device.id, device.type, device.publicKey, device.publicKeyAlgorithm)
                                 }
                             }
                             .setNegativeButton("Cancel", null)
                             .show()
                     } else {
-                        sendFileToDeviceApi(uri, device.id, device.publicKey, device.publicKeyAlgorithm)
+                        sendFileToDeviceApi(uri, device.id, device.type, device.publicKey, device.publicKeyAlgorithm)
                     }
                 }
                 .setNegativeButton("Cancel", null)
@@ -468,13 +470,20 @@ class FilesFragment : Fragment() {
     /**
      * Encrypts and uploads a file to the selected device.
      */
-    private fun sendFileToDeviceApi(uri: Uri, targetDeviceId: String, publicKey: String?, publicKeyAlgorithm: String?) {
-        if (publicKey.isNullOrBlank() || publicKeyAlgorithm.isNullOrBlank()) {
+    private fun sendFileToDeviceApi(
+        uri: Uri,
+        targetDeviceId: String,
+        targetType: DeviceTypeDto,
+        publicKey: String?,
+        publicKeyAlgorithm: String?
+    ) {
+        val useEncryption = targetType == DeviceTypeDto.Android
+        if (useEncryption && (publicKey.isNullOrBlank() || publicKeyAlgorithm.isNullOrBlank())) {
             Toast.makeText(requireContext(), "Target device encryption key missing", Toast.LENGTH_SHORT).show()
             return
         }
 
-        if (!publicKeyAlgorithm.equals("RSA", ignoreCase = true)) {
+        if (useEncryption && !publicKeyAlgorithm.equals("RSA", ignoreCase = true)) {
             Toast.makeText(requireContext(), "Unsupported device key algorithm", Toast.LENGTH_SHORT).show()
             return
         }
@@ -501,17 +510,26 @@ class FilesFragment : Fragment() {
                     }
                 }
 
-                val encryptedFile = File(requireContext().cacheDir, "${System.currentTimeMillis()}_enc.bin")
-                val envelope = withContext(Dispatchers.IO) {
-                    resolver.openInputStream(uri)?.use { input ->
-                        FileOutputStream(encryptedFile).use { output ->
-                            CryptoManager.encryptToStream(input, output, senderDeviceId, targetDeviceId, publicKey)
-                        }
-                    } ?: ""
+                val uploadFile = if (useEncryption) {
+                    File(requireContext().cacheDir, "${System.currentTimeMillis()}_enc.bin")
+                } else {
+                    originalCopy
+                }
+
+                val envelope = if (useEncryption) {
+                    withContext(Dispatchers.IO) {
+                        resolver.openInputStream(uri)?.use { input ->
+                            FileOutputStream(uploadFile).use { output ->
+                                CryptoManager.encryptToStream(input, output, senderDeviceId, targetDeviceId, publicKey!!)
+                            }
+                        } ?: ""
+                    }
+                } else {
+                    JSONObject(mapOf("alg" to "none")).toString()
                 }
 
                 if (envelope.isBlank()) {
-                    Toast.makeText(requireContext(), "Failed to encrypt file", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Failed to prepare file", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -533,14 +551,16 @@ class FilesFragment : Fragment() {
                 val transferId = createResponse.body()!!.id
                 FileTransferLocalStore.setLocalPath(requireContext(), transferId, originalCopy.absolutePath, "sent")
 
-                val uploadBody = StreamingRequestBody("application/octet-stream", FileInputStream(encryptedFile))
+                val uploadBody = StreamingRequestBody("application/octet-stream", FileInputStream(uploadFile))
                 val uploadResponse = withContext(Dispatchers.IO) { ApiClient.apiService.uploadFileTransfer(transferId, uploadBody) }
 
                 if (!uploadResponse.isSuccessful) {
                     Toast.makeText(requireContext(), "Upload failed", Toast.LENGTH_SHORT).show()
                 }
 
-                encryptedFile.delete()
+                if (useEncryption) {
+                    runCatching { uploadFile.delete() }
+                }
                 loadTransfers()
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Failed to send file", Toast.LENGTH_SHORT).show()
@@ -672,12 +692,9 @@ class FilesFragment : Fragment() {
                 }
 
                 val envelopeHeader = response.headers()["X-Transfer-Envelope"]
-                if (envelopeHeader.isNullOrBlank()) {
-                    Toast.makeText(requireContext(), "Missing encryption envelope", Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-
-                val envelope = String(android.util.Base64.decode(envelopeHeader, android.util.Base64.NO_WRAP))
+                val envelope = envelopeHeader
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { String(android.util.Base64.decode(it, android.util.Base64.NO_WRAP)) }
 
                 val receivedDir = File(requireContext().filesDir, "transfers/received")
                 receivedDir.mkdirs()
@@ -686,7 +703,11 @@ class FilesFragment : Fragment() {
                 withContext(Dispatchers.IO) {
                     response.body()!!.byteStream().use { input ->
                         FileOutputStream(outputFile).use { output ->
-                            CryptoManager.decryptToStream(input, output, envelope)
+                            if (isPlainEnvelope(envelope)) {
+                                input.copyTo(output)
+                            } else {
+                                CryptoManager.decryptToStream(input, output, envelope!!)
+                            }
                         }
                     }
                 }
@@ -697,6 +718,20 @@ class FilesFragment : Fragment() {
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Download failed", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun isPlainEnvelope(envelope: String?): Boolean {
+        if (envelope.isNullOrBlank()) {
+            return true
+        }
+
+        return try {
+            val payload = JSONObject(envelope)
+            payload.optString("alg").equals("none", ignoreCase = true) ||
+                (!payload.has("wrappedKeyForTarget") && !payload.has("iv"))
+        } catch (_: Exception) {
+            false
         }
     }
 
