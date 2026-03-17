@@ -32,7 +32,6 @@ import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
 import com.tds.binarystars.storage.DeviceCacheStorage
-import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.util.NetworkUtils
 
 class MainActivity : AppCompatActivity() {
@@ -160,8 +159,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         val currentDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        val telemetryEnabled = SettingsStorage.isDeviceTelemetryEnabled(true)
-
         lifecycleScope.launch {
             try {
                 val response = ApiClient.apiService.getDevices()
@@ -170,12 +167,6 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val mapped = response.body()!!.map { dto ->
-                    val effectiveOnline = if (dto.id == currentDeviceId && !telemetryEnabled) {
-                        false
-                    } else {
-                        dto.isOnline
-                    }
-
                     Device(
                         id = dto.id,
                         name = dto.name,
@@ -187,7 +178,7 @@ class MainActivity : AppCompatActivity() {
                         publicKey = dto.publicKey,
                         publicKeyAlgorithm = dto.publicKeyAlgorithm,
                         batteryLevel = dto.batteryLevel,
-                        isOnline = effectiveOnline,
+                        isOnline = dto.isOnline,
                         isAvailable = dto.isAvailable,
                         isSynced = dto.isSynced,
                         cpuLoadPercent = dto.cpuLoadPercent,

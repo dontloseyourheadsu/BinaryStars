@@ -15,12 +15,12 @@ val apiPort = (project.findProperty("apiPort") as String?)
 
 android {
     namespace = "com.tds.binarystars"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.tds.binarystars"
         minSdk = 29
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -88,6 +88,7 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.google.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.play.services.location)
     implementation(libs.markwon.core)

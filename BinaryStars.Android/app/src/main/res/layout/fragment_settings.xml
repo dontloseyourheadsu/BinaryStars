@@ -90,30 +90,12 @@
 
                     <TextView
                         android:id="@+id/tvUsername"
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:text="Username"
                         android:textColor="@color/carbon_text_main"
                         android:textSize="16sp"
                         android:textStyle="bold"/>
-
-                    <TextView
-                        android:id="@+id/tvPlanStatus"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Free"
-                        android:textColor="@color/primary_purple"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:layout_marginEnd="8dp"/>
-
-                    <Button
-                        android:id="@+id/btnUpgradePlan"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Upgrade"
-                        android:textSize="12sp"/>
                 </LinearLayout>
 
                 <TextView

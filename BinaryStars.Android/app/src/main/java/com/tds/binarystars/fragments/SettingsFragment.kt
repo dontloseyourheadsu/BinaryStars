@@ -20,7 +20,6 @@ import com.tds.binarystars.R
 import com.tds.binarystars.LoginActivity
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.AuthTokenStore
-import com.tds.binarystars.api.UserRoleDto
 import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.MainActivity
 import com.tds.binarystars.util.NetworkUtils
@@ -32,11 +31,9 @@ class SettingsFragment : Fragment() {
     private lateinit var retryButton: Button
     private lateinit var spinnerTheme: Spinner
     private lateinit var tvUsername: TextView
-    private lateinit var tvPlanStatus: TextView
     private lateinit var tvEmail: TextView
     private lateinit var tvDevicesCount: TextView
     private lateinit var devicesListContainer: LinearLayout
-    private lateinit var btnUpgradePlan: Button
     private lateinit var btnSignOut: Button
 
     /**
@@ -65,11 +62,9 @@ class SettingsFragment : Fragment() {
 
         spinnerTheme = view.findViewById(R.id.spinnerTheme)
         tvUsername = view.findViewById(R.id.tvUsername)
-        tvPlanStatus = view.findViewById(R.id.tvPlanStatus)
         tvEmail = view.findViewById(R.id.tvEmail)
         tvDevicesCount = view.findViewById(R.id.tvDevicesCount)
         devicesListContainer = view.findViewById(R.id.devicesListContainer)
-        btnUpgradePlan = view.findViewById(R.id.btnUpgradePlan)
         btnSignOut = view.findViewById(R.id.btnSignOut)
         
         // Initialize state
@@ -101,10 +96,6 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        btnUpgradePlan.setOnClickListener {
-            toast("Upgrade coming soon")
-        }
-
         btnSignOut.setOnClickListener {
             AuthTokenStore.clear()
             val intent = Intent(requireContext(), LoginActivity::class.java)
@@ -131,15 +122,13 @@ class SettingsFragment : Fragment() {
 
         contentView.visibility = View.VISIBLE
         noConnectionView.visibility = View.GONE
-        loadAccountProfile(tvUsername, tvEmail, tvPlanStatus, btnUpgradePlan)
+        loadAccountProfile(tvUsername, tvEmail)
         loadDevices(tvDevicesCount, devicesListContainer)
     }
 
     private fun loadAccountProfile(
         tvUsername: TextView,
-        tvEmail: TextView,
-        tvPlanStatus: TextView,
-        btnUpgradePlan: Button
+        tvEmail: TextView
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -148,21 +137,6 @@ class SettingsFragment : Fragment() {
                     val profile = response.body()!!
                     tvUsername.text = profile.username
                     tvEmail.text = profile.email
-
-                    when (profile.role) {
-                        UserRoleDto.Premium -> {
-                            tvPlanStatus.text = "Premium"
-                            btnUpgradePlan.visibility = View.GONE
-                        }
-                        UserRoleDto.Free -> {
-                            tvPlanStatus.text = "Free"
-                            btnUpgradePlan.visibility = View.VISIBLE
-                        }
-                        UserRoleDto.Disabled -> {
-                            tvPlanStatus.text = "Disabled"
-                            btnUpgradePlan.visibility = View.GONE
-                        }
-                    }
                 } else {
                     tvUsername.text = "Unknown user"
                 }
@@ -209,9 +183,5 @@ class SettingsFragment : Fragment() {
         params.topMargin = (4 * resources.displayMetrics.density).toInt()
         textView.layoutParams = params
         container.addView(textView)
-    }
-
-    private fun toast(message: String) {
-        android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
     }
 }

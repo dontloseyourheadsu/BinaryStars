@@ -116,6 +116,7 @@ export const api = {
     ipv6Address: string;
     publicKey: string;
     publicKeyAlgorithm: string;
+    type?: "Linux" | "Android";
   }): Promise<Device> {
     const response = await http.post<Device>("/devices/register", payload);
     return response.data;

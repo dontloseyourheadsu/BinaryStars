@@ -23,7 +23,8 @@ public record RegisterDeviceRequest(
     string IpAddress,
     string? Ipv6Address,
     string? PublicKey,
-    string? PublicKeyAlgorithm);
+    string? PublicKeyAlgorithm,
+    DeviceType? Type = null);
 
 /// <summary>
 /// Request payload for updating device telemetry.
@@ -118,6 +119,8 @@ public class DevicesWriteService : IDevicesWriteService
         {
             if (existingDevice.UserId == userId)
             {
+                var resolvedType = request.Type ?? InferDeviceTypeFromId(request.Id);
+
                 // Already registered to this user, update IP/Name potentially
                 existingDevice.Name = request.Name;
                 existingDevice.IpAddress = request.IpAddress;
@@ -127,6 +130,10 @@ public class DevicesWriteService : IDevicesWriteService
                 if (!string.IsNullOrWhiteSpace(request.PublicKey))
                 {
                     existingDevice.PublicKeyCreatedAt = DateTimeOffset.UtcNow;
+                }
+                if (resolvedType.HasValue)
+                {
+                    existingDevice.Type = resolvedType.Value;
                 }
                 existingDevice.LastSeen = DateTimeOffset.UtcNow;
 
@@ -147,6 +154,8 @@ public class DevicesWriteService : IDevicesWriteService
             return Result<Device>.Failure("Max device limit reached. This device will have view-only access.");
         }
 
+        var requestedType = request.Type ?? InferDeviceTypeFromId(request.Id);
+
         var newDevice = new DeviceDbModel
         {
             Id = request.Id,
@@ -164,7 +173,7 @@ public class DevicesWriteService : IDevicesWriteService
             CpuLoadPercent = null,
             WifiDownloadSpeed = "0 Mbps",
             WifiUploadSpeed = "0 Mbps",
-            Type = DeviceType.Android,
+            Type = requestedType ?? DeviceType.Android,
             LastSeen = DateTimeOffset.UtcNow,
             HasPendingNotificationSync = false
         };
@@ -173,6 +182,16 @@ public class DevicesWriteService : IDevicesWriteService
         await _deviceRepository.SaveChangesAsync(cancellationToken);
 
         return Result<Device>.Success(MapToDomain(newDevice));
+    }
+
+    private static DeviceType? InferDeviceTypeFromId(string deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+            return null;
+
+        return deviceId.StartsWith("linux-", StringComparison.OrdinalIgnoreCase)
+            ? DeviceType.Linux
+            : null;
     }
 
     /// <inheritdoc />

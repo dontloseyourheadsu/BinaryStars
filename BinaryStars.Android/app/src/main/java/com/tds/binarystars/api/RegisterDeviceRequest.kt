@@ -7,5 +7,6 @@ data class RegisterDeviceRequest(
     val ipAddress: String,
     val ipv6Address: String?,
     val publicKey: String?,
-    val publicKeyAlgorithm: String?
+    val publicKeyAlgorithm: String?,
+    val type: DeviceTypeDto = DeviceTypeDto.Android
 )
