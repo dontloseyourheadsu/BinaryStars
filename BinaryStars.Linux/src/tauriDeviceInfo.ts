@@ -29,6 +29,13 @@ export interface ElevationStatus {
   is_root: boolean;
 }
 
+export interface LinuxBluetoothDevice {
+  name: string;
+  address: string;
+  connected: boolean;
+  paired: boolean;
+}
+
 export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -62,6 +69,34 @@ export async function getBluetoothConnectedDeviceNames(): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+export async function getBluetoothDevices(): Promise<LinuxBluetoothDevice[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  try {
+    return await invoke<LinuxBluetoothDevice[]>("get_bluetooth_devices");
+  } catch {
+    return [];
+  }
+}
+
+export async function sendFileViaBluetooth(
+  deviceAddress: string,
+  fileName: string,
+  contentBase64: string,
+): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Bluetooth file transfer is supported only in the Linux desktop app runtime");
+  }
+
+  await invoke<void>("send_file_via_bluetooth", {
+    deviceAddress,
+    fileName,
+    contentBase64,
+  });
 }
 
 export async function isWifiConnected(): Promise<boolean> {

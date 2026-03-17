@@ -7,13 +7,14 @@ import "./App.css";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
 import {
-  getBluetoothConnectedDeviceNames,
+  getBluetoothDevices,
   getElevationStatus,
   getNativeLocation,
   getLocalDeviceInfo,
   isTauriRuntime,
   isWifiConnected,
   performLocalAction,
+  sendFileViaBluetooth,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { LocalNotificationHistoryItem } from "./storage";
@@ -124,10 +125,12 @@ function App() {
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
   const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
+  const [bluetoothDevices, setBluetoothDevices] = useState<Array<{ name: string; address: string; connected: boolean; paired: boolean }>>([]);
   const [geoPermissionState, setGeoPermissionState] = useState<"granted" | "denied" | "prompt" | "unsupported" | "unknown" | "native">("unknown");
   const [lastGeoError, setLastGeoError] = useState("");
   const [lastLocationSampleAt, setLastLocationSampleAt] = useState<string | null>(null);
   const [lastLocationSource, setLastLocationSource] = useState<"native" | "geolocation" | null>(null);
+  const isElevatedRuntime = isTauriRuntime() && isElevated;
 
   const normalizeNoteType = (value: unknown): "Plaintext" | "Markdown" => {
     if (typeof value === "string" && value.trim().toLowerCase() === "markdown") {
@@ -443,7 +446,11 @@ function App() {
     if (isTauriRuntime()) {
       const nativeLocation = await getNativeLocation();
       if (!nativeLocation) {
-        setLastGeoError("Native Linux location unavailable or permission denied");
+        setLastGeoError(
+          isElevatedRuntime
+            ? "Native location is blocked in full-app sudo mode (desktop session permission denied)"
+            : "Native Linux location unavailable or permission denied",
+        );
         throw new Error("Native location is unavailable. Ensure desktop location services are enabled.");
       }
 
@@ -511,6 +518,13 @@ function App() {
     if (!enabled) {
       setLocationEnabled(false);
       settingsStore.setLocationEnabled(false);
+      return;
+    }
+
+    if (isElevatedRuntime) {
+      setLocationEnabled(false);
+      settingsStore.setLocationEnabled(false);
+      setError("Background location sharing is disabled in full-app sudo mode. Run BinaryStars normally.");
       return;
     }
 
@@ -676,7 +690,11 @@ function App() {
     }
 
     const refreshBluetoothPresence = async (): Promise<void> => {
-      const names = await getBluetoothConnectedDeviceNames();
+      const knownDevices = await getBluetoothDevices();
+      setBluetoothDevices(knownDevices);
+      const names = knownDevices
+        .filter((entry) => entry.connected)
+        .map((entry) => entry.name);
       setBluetoothConnectedNames(names);
     };
 
@@ -723,14 +741,23 @@ function App() {
   }, [isAuthed, online, myDeviceId, pendingActionRequestId]);
 
   useEffect(() => {
-    if (!isAuthed) {
-      return;
-    }
-
     void refreshElevationStatus().catch((nextError) => {
       setError(nextError instanceof Error ? nextError.message : "Failed to check elevation status");
     });
   }, [isAuthed]);
+
+  useEffect(() => {
+    if (!isElevatedRuntime) {
+      return;
+    }
+
+    if (locationEnabled) {
+      setLocationEnabled(false);
+      settingsStore.setLocationEnabled(false);
+    }
+
+    setLastLocationSource(null);
+  }, [isElevatedRuntime, locationEnabled]);
 
   useEffect(() => {
     if (!isAuthed || !online) {
@@ -1126,6 +1153,40 @@ function App() {
   };
 
   const sendFile = async (file: File, targetDeviceId: string): Promise<void> => {
+    if (!online) {
+      if (!isTauriRuntime()) {
+        setError("Offline file transfer is unavailable in this runtime");
+        return;
+      }
+
+      const target = devices.find((entry) => entry.id === targetDeviceId);
+      if (!target) {
+        setError("Target device not found");
+        return;
+      }
+
+      const bluetoothTarget = bluetoothDevices.find(
+        (entry) => entry.connected && entry.name === target.name,
+      );
+
+      if (!bluetoothTarget) {
+        setError("Bluetooth target device is not connected or in range");
+        return;
+      }
+
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const chunkSize = 0x8000;
+      let binary = "";
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
+        binary += String.fromCharCode(...chunk);
+      }
+
+      await sendFileViaBluetooth(bluetoothTarget.address, file.name, btoa(binary));
+      setError("");
+      return;
+    }
+
     if (!requireOnline()) {
       return;
     }
@@ -1923,6 +1984,16 @@ function App() {
           </section>
         )}
 
+        {isElevatedRuntime && (
+          <section className="panel no-connection">
+            <p className="no-connection-title">Full-app sudo mode detected</p>
+            <p className="muted">
+              Running BinaryStars as root uses a separate profile/session and may break map location and account/device sync.
+              Run the app normally and authorize privileged actions only when prompted.
+            </p>
+          </section>
+        )}
+
         {activeTab === "Devices" && (
           <DevicesTab
             onlineDevices={onlineDevices}
@@ -2042,6 +2113,7 @@ function App() {
             latestPoint={latestPoint}
             history={history}
             mapDetailOpen={mapDetailOpen}
+            isElevatedRuntime={isElevatedRuntime}
             locationEnabled={locationEnabled}
             locationMinutes={locationMinutes}
             geoPermissionState={geoPermissionState}
