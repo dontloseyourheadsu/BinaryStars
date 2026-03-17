@@ -9,11 +9,15 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.material.textfield.TextInputEditText
@@ -28,15 +32,54 @@ import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.ExternalAuthRequest
 import com.tds.binarystars.api.LoginRequest
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
+import org.json.JSONObject
 
 class LoginActivity : AppCompatActivity() {
 
     private val logTag = "BinaryStarsLogin"
+    private val credentialManagerTimeoutMs = 10_000L
     private var googleSignInInProgress = false
+    private var googleFallbackCountdownJob: Job? = null
+    private var defaultGoogleButtonText: CharSequence = ""
 
     private lateinit var credentialManager: CredentialManager
     private var msalApp: ISingleAccountPublicClientApplication? = null
+    private val legacyGoogleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        try {
+            if (result.resultCode != RESULT_OK) {
+                Log.d(logTag, "Legacy Google sign-in canceled, resultCode=${result.resultCode}")
+                return@registerForActivityResult
+            }
+
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            val account = task.getResult(ApiException::class.java)
+            val idToken = account.idToken
+
+            if (idToken.isNullOrBlank()) {
+                Log.e(logTag, "Legacy Google sign-in returned empty idToken")
+                toast("Google sign-in failed: missing ID token")
+                return@registerForActivityResult
+            }
+
+            Log.d(logTag, "Legacy Google sign-in succeeded; submitting token")
+            submitExternalLogin("google", idToken)
+        } catch (e: ApiException) {
+            Log.e(logTag, "Legacy Google sign-in API error code=${e.statusCode}", e)
+            toast("Google sign-in failed: API ${e.statusCode}")
+        } catch (e: Exception) {
+            Log.e(logTag, "Legacy Google sign-in error", e)
+            toast("Google sign-in failed: ${e.message}")
+        } finally {
+            googleSignInInProgress = false
+            Log.d(logTag, "Legacy Google sign-in flow finished")
+        }
+    }
 
     // Configuration values are available via BuildConfig
     // BuildConfig.GOOGLE_WEB_CLIENT_ID
@@ -75,14 +118,16 @@ class LoginActivity : AppCompatActivity() {
             val info = packageManager.getPackageInfo(packageName, flags)
             val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val signingInfo = info.signingInfo
-                if (signingInfo.hasMultipleSigners()) {
-                    signingInfo.apkContentsSigners
+                if (signingInfo == null) {
+                    emptyArray()
+                } else if (signingInfo.hasMultipleSigners()) {
+                    signingInfo.apkContentsSigners ?: emptyArray()
                 } else {
-                    signingInfo.signingCertificateHistory
+                    signingInfo.signingCertificateHistory ?: emptyArray()
                 }
             } else {
                 @Suppress("DEPRECATION")
-                info.signatures
+                info.signatures ?: emptyArray()
             }
             for (signature in signatures) {
                 val md = java.security.MessageDigest.getInstance("SHA")
@@ -117,6 +162,8 @@ class LoginActivity : AppCompatActivity() {
         val btnLoginGoogle = findViewById<Button>(R.id.btnLoginGoogle)
         val btnLoginMicrosoft = findViewById<Button>(R.id.btnLoginMicrosoft)
         val tvRegister = findViewById<TextView>(R.id.tvRegister)
+
+        defaultGoogleButtonText = btnLoginGoogle.text
 
         btnLogin.setOnClickListener {
             val emailOrUsername = etEmail.text.toString()
@@ -155,11 +202,14 @@ class LoginActivity : AppCompatActivity() {
         }
 
         btnLoginGoogle.setOnClickListener {
+            Log.d(logTag, "Google button tapped")
             if (googleSignInInProgress) {
+                Log.d(logTag, "Google sign-in ignored because another request is in progress")
                 return@setOnClickListener
             }
 
             googleSignInInProgress = true
+            startGoogleFallbackCountdown(btnLoginGoogle)
             lifecycleScope.launch {
                 try {
                     val googleIdOption = GetGoogleIdOption.Builder()
@@ -169,14 +219,20 @@ class LoginActivity : AppCompatActivity() {
                         .setNonce(null) // Optional: provide a nonce if your server requires it
                         .build()
 
+                    Log.d(logTag, "Starting Google credential request with configured web client id")
+
                     val request = GetCredentialRequest.Builder()
                         .addCredentialOption(googleIdOption)
                         .build()
 
-                    val result = credentialManager.getCredential(
-                        request = request,
-                        context = this@LoginActivity
-                    )
+                    val result = withTimeout(credentialManagerTimeoutMs) {
+                        credentialManager.getCredential(
+                            request = request,
+                            context = this@LoginActivity
+                        )
+                    }
+
+                    Log.d(logTag, "Google credential returned type=${result.credential.type}")
 
                     val credential = result.credential
                     if (credential is CustomCredential &&
@@ -194,14 +250,22 @@ class LoginActivity : AppCompatActivity() {
                     }
                 } catch (e: GetCredentialException) {
                     Log.e(logTag, "Google sign-in failed", e)
-                    toast("Google sign-in failed: ${e.message}")
+                    toast("Google sign-in issue. Opening fallback...")
+                    startLegacyGoogleSignInFallback("credentials_exception")
+                } catch (e: TimeoutCancellationException) {
+                    Log.e(logTag, "Google sign-in timed out waiting for credential UI/result", e)
+                    toast("Google sign-in is taking too long. Opening fallback...")
+                    startLegacyGoogleSignInFallback("timeout")
                 } catch (e: CancellationException) {
                     Log.d(logTag, "Google sign-in canceled/interrupted", e)
+                    googleSignInInProgress = false
+                    stopGoogleFallbackCountdown(btnLoginGoogle)
                 } catch (e: Exception) {
                     Log.e(logTag, "Google sign-in error", e)
-                    toast("Google sign-in error: ${e.message}")
+                    toast("Google sign-in issue. Opening fallback...")
+                    startLegacyGoogleSignInFallback("unexpected_exception")
                 } finally {
-                    googleSignInInProgress = false
+                    Log.d(logTag, "Google credential-manager flow finished")
                 }
             }
         }
@@ -259,6 +323,7 @@ class LoginActivity : AppCompatActivity() {
     private fun submitExternalLogin(provider: String, token: String) {
         lifecycleScope.launch {
             try {
+                Log.d(logTag, "Submitting external login to API for provider=$provider tokenLength=${token.length}")
                 // Initial login with empty username
                 val response = ApiClient.apiService.externalLogin(ExternalAuthRequest(provider, token, ""))
                 if (response.isSuccessful) {
@@ -270,19 +335,22 @@ class LoginActivity : AppCompatActivity() {
                 } else if (response.code() == 401) {
                     // Possible registration required
                     val errorBody = response.errorBody()?.string()
+                    val errorMessage = parseApiErrorMessage(errorBody)
                     Log.w(logTag, "External login returned 401: $errorBody")
                     
-                    if (errorBody != null && errorBody.contains("Registration required")) {
+                    if ((errorMessage ?: "").contains("Registration required", ignoreCase = true)) {
                          val intent = Intent(this@LoginActivity, UsernameInputActivity::class.java)
                          intent.putExtra("EXTRA_PROVIDER", provider)
                         intent.putExtra("EXTRA_TOKEN", token)
                          startActivity(intent)
                     } else {
-                        toast("Login Failed: Authentication rejected")
+                        toast("Login failed: ${errorMessage ?: "Authentication rejected"}")
                     }
                 } else {
+                    val errorBody = response.errorBody()?.string()
+                    val errorMessage = parseApiErrorMessage(errorBody)
                     Log.w(logTag, "External login failed for provider=$provider status=${response.code()}")
-                    toast("Login Failed: ${response.code()}")
+                    toast("Login failed (${response.code()}): ${errorMessage ?: "Unknown server error"}")
                 }
             } catch (e: Exception) {
                 Log.e(logTag, "External login error for provider=$provider", e)
@@ -291,7 +359,97 @@ class LoginActivity : AppCompatActivity() {
                 } else {
                     toast("Error: ${e.message}")
                 }
+            } finally {
+                if (provider.equals("google", ignoreCase = true)) {
+                    googleSignInInProgress = false
+                    val button = findViewById<Button>(R.id.btnLoginGoogle)
+                    stopGoogleFallbackCountdown(button)
+                }
             }
+        }
+    }
+
+    private fun startLegacyGoogleSignInFallback(reason: String) {
+        Log.w(logTag, "Falling back to legacy Google Sign-In; reason=$reason")
+        try {
+            val button = findViewById<Button>(R.id.btnLoginGoogle)
+            stopGoogleFallbackCountdown(button)
+
+            val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestIdToken(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+                .build()
+
+            val client = GoogleSignIn.getClient(this, options)
+            legacyGoogleSignInLauncher.launch(client.signInIntent)
+        } catch (e: Exception) {
+            Log.e(logTag, "Failed to start legacy Google sign-in fallback", e)
+            toast("Google sign-in failed: ${e.message}")
+            googleSignInInProgress = false
+            val button = findViewById<Button>(R.id.btnLoginGoogle)
+            stopGoogleFallbackCountdown(button)
+        }
+    }
+
+    private fun startGoogleFallbackCountdown(button: Button) {
+        stopGoogleFallbackCountdown(button)
+
+        googleFallbackCountdownJob = lifecycleScope.launch {
+            var secondsLeft = (credentialManagerTimeoutMs / 1000).toInt()
+            while (secondsLeft > 0 && googleSignInInProgress) {
+                button.text = "$defaultGoogleButtonText (fallback in ${secondsLeft}s)"
+                delay(1000)
+                secondsLeft -= 1
+            }
+            if (googleSignInInProgress) {
+                button.text = "$defaultGoogleButtonText (opening fallback...)"
+            }
+        }
+    }
+
+    private fun stopGoogleFallbackCountdown(button: Button) {
+        googleFallbackCountdownJob?.cancel()
+        googleFallbackCountdownJob = null
+        button.text = defaultGoogleButtonText
+    }
+
+    private fun parseApiErrorMessage(raw: String?): String? {
+        if (raw.isNullOrBlank()) {
+            return null
+        }
+
+        return try {
+            val trimmed = raw.trim()
+            when {
+                trimmed.startsWith("[") -> {
+                    val array = JSONArray(trimmed)
+                    (0 until array.length())
+                        .mapNotNull { index -> array.optString(index).takeIf { it.isNotBlank() } }
+                        .joinToString("; ")
+                        .ifBlank { null }
+                }
+                trimmed.startsWith("{") -> {
+                    val obj = JSONObject(trimmed)
+                    when {
+                        obj.has("errors") -> {
+                            val errors = obj.optJSONArray("errors")
+                            if (errors != null) {
+                                (0 until errors.length())
+                                    .mapNotNull { index -> errors.optString(index).takeIf { it.isNotBlank() } }
+                                    .joinToString("; ")
+                                    .ifBlank { trimmed }
+                            } else {
+                                obj.optString("errors", trimmed)
+                            }
+                        }
+                        obj.has("message") -> obj.optString("message", trimmed)
+                        else -> trimmed
+                    }
+                }
+                else -> trimmed
+            }
+        } catch (_: Exception) {
+            raw
         }
     }
 
