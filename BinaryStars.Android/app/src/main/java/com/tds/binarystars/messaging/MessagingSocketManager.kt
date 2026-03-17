@@ -52,6 +52,9 @@ object MessagingSocketManager {
         val token = AuthTokenStore.getToken() ?: return
         currentDeviceId = deviceId
 
+        webSocket?.close(1000, "Reconnecting")
+        webSocket = null
+
         val request = Request.Builder()
             .url("$WS_BASE_URL?deviceId=$deviceId")
             .addHeader("Authorization", "Bearer $token")
@@ -67,10 +70,16 @@ object MessagingSocketManager {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (this@MessagingSocketManager.webSocket === webSocket) {
+                    this@MessagingSocketManager.webSocket = null
+                }
                 notifyConnection(false)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (this@MessagingSocketManager.webSocket === webSocket) {
+                    this@MessagingSocketManager.webSocket = null
+                }
                 notifyConnection(false)
             }
         })
