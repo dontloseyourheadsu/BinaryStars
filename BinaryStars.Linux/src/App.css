@@ -471,11 +471,6 @@ textarea {
   padding: 12px;
 }
 
-.plan-badge {
-  color: var(--primary-purple);
-  font-weight: 700;
-}
-
 .map-wrap {
   position: relative;
   height: var(--map-height);

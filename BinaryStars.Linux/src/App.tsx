@@ -1098,6 +1098,7 @@ function App() {
       ipv6Address: local.ipv6_address,
       publicKey: "local-linux-key",
       publicKeyAlgorithm: "RSA",
+      type: "Linux",
     });
 
     await api.updateTelemetry(myDeviceId, {
