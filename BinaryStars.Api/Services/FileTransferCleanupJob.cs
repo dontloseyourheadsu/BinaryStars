@@ -1,6 +1,8 @@
 using BinaryStars.Application.Databases.Repositories.Transfers;
 using BinaryStars.Application.Services.Transfers;
 using BinaryStars.Domain.Transfers;
+using BinaryStars.Api.Models;
+using Microsoft.Extensions.Options;
 
 namespace BinaryStars.Api.Services;
 
@@ -12,6 +14,7 @@ public class FileTransferCleanupJob
     private readonly IFileTransferRepository _repository;
     private readonly IFileTransfersWriteService _writeService;
     private readonly FileTransferKafkaService _kafkaService;
+    private readonly FileTransferSettings _settings;
     private readonly ILogger<FileTransferCleanupJob> _logger;
 
     /// <summary>
@@ -25,11 +28,13 @@ public class FileTransferCleanupJob
         IFileTransferRepository repository,
         IFileTransfersWriteService writeService,
         FileTransferKafkaService kafkaService,
+        IOptions<FileTransferSettings> settings,
         ILogger<FileTransferCleanupJob> logger)
     {
         _repository = repository;
         _writeService = writeService;
         _kafkaService = kafkaService;
+        _settings = settings.Value;
         _logger = logger;
     }
 
@@ -43,13 +48,34 @@ public class FileTransferCleanupJob
         {
             try
             {
-                await _kafkaService.DeleteTransferPacketsAsync(transfer, KafkaAuthMode.Scram, null, CancellationToken.None);
+                TryDeleteStoredFile(transfer.Id);
+                if (transfer.PacketCount > 0)
+                {
+                    await _kafkaService.DeleteTransferPacketsAsync(transfer, KafkaAuthMode.Scram, null, CancellationToken.None);
+                }
+
                 await _writeService.UpdateStatusAsync(transfer.Id, FileTransferStatus.Expired, "Expired", null, CancellationToken.None);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to cleanup expired transfer {TransferId}.", transfer.Id);
             }
+        }
+    }
+
+    private void TryDeleteStoredFile(Guid transferId)
+    {
+        try
+        {
+            var path = Path.Combine(_settings.TempPath, "store", $"{transferId:D}.bin");
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to delete stored transfer file for {TransferId}", transferId);
         }
     }
 

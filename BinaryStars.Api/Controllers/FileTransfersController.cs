@@ -3,10 +3,9 @@ using System.Text;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
 using BinaryStars.Application.Databases.Repositories.Accounts;
-using BinaryStars.Application.Databases.Repositories.Transfers;
 using BinaryStars.Application.Services.Transfers;
+using BinaryStars.Application.Databases.Repositories.Transfers;
 using BinaryStars.Domain.Transfers;
-using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -63,14 +62,24 @@ public class FileTransfersController : ControllerBase
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The list of transfers.</returns>
     [HttpGet]
-    public async Task<IActionResult> GetTransfers(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetTransfers([FromQuery] string? deviceId, CancellationToken cancellationToken)
     {
         var userId = GetUserId();
         var result = await _readService.GetTransfersByUserAsync(userId, cancellationToken);
         if (!result.IsSuccess)
             return BadRequest(result.Errors);
 
-        return Ok(result.Value);
+        if (string.IsNullOrWhiteSpace(deviceId))
+            return Ok(result.Value);
+
+        var projected = result.Value
+            .Select(transfer => transfer with
+            {
+                IsSender = transfer.SenderDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase)
+            })
+            .ToList();
+
+        return Ok(projected);
     }
 
     /// <summary>
@@ -145,11 +154,11 @@ public class FileTransfersController : ControllerBase
     }
 
     /// <summary>
-    /// Uploads transfer bytes and queues Kafka publishing.
+    /// Uploads transfer bytes and stores them for direct download.
     /// </summary>
     /// <param name="transferId">The transfer identifier.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>Accepted when queued for processing.</returns>
+    /// <returns>Ok when upload is ready for download.</returns>
     [HttpPut("{transferId:guid}/upload")]
     [DisableRequestSizeLimit]
     public async Task<IActionResult> UploadTransfer(Guid transferId, CancellationToken cancellationToken)
@@ -169,21 +178,29 @@ public class FileTransfersController : ControllerBase
             return BadRequest(new[] { "Transfer expired." });
         }
 
-        Directory.CreateDirectory(_settings.TempPath);
-        var tempFilePath = Path.Combine(_settings.TempPath, $"{transferId:D}.bin");
+        var storedFilePath = GetStoredFilePath(transferId);
+        var storeDirectory = Path.GetDirectoryName(storedFilePath);
+        if (!string.IsNullOrWhiteSpace(storeDirectory))
+        {
+            Directory.CreateDirectory(storeDirectory);
+        }
 
-        await using (var targetStream = System.IO.File.Create(tempFilePath))
+        await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Uploading, null, null, cancellationToken);
+
+        await using (var targetStream = System.IO.File.Create(storedFilePath))
         {
             await Request.Body.CopyToAsync(targetStream, cancellationToken);
         }
 
-        var authMode = ParseAuthMode(transfer.KafkaAuthMode);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+        var storedInfo = new FileInfo(storedFilePath);
+        if (storedInfo.Length != transfer.SizeBytes)
+        {
+            await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Failed, "Uploaded size does not match transfer metadata.", null, cancellationToken);
+            return BadRequest(new[] { "Uploaded file size does not match transfer metadata." });
+        }
 
-        BackgroundJob.Enqueue<FileTransferJob>(job => job.SendToKafkaAsync(
-            new FileTransferJobRequest(transferId, tempFilePath, transfer.KafkaAuthMode, oauthToken)));
-
-        return Accepted(new { transferId });
+        await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Available, null, null, cancellationToken);
+        return Ok(new { transferId });
     }
 
     /// <summary>
@@ -227,13 +244,24 @@ public class FileTransfersController : ControllerBase
         }
         Response.Headers["X-Transfer-ChunkSize"] = transfer.ChunkSizeBytes.ToString();
 
-        var authMode = ParseAuthMode(transfer.KafkaAuthMode);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+        var storedFilePath = GetStoredFilePath(transferId);
 
         try
         {
-            await _kafkaService.StreamToAsync(transfer, Response.Body, authMode, oauthToken, cancellationToken);
-            await _kafkaService.DeleteTransferPacketsAsync(transfer, KafkaAuthMode.Scram, null, cancellationToken);
+            if (System.IO.File.Exists(storedFilePath))
+            {
+                await using var sourceStream = System.IO.File.OpenRead(storedFilePath);
+                await sourceStream.CopyToAsync(Response.Body, cancellationToken);
+            }
+            else
+            {
+                var authMode = ParseAuthMode(transfer.KafkaAuthMode);
+                var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+                await _kafkaService.StreamToAsync(transfer, Response.Body, authMode, oauthToken, cancellationToken);
+                await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, oauthToken, cancellationToken);
+            }
+
+            TryDeleteStoredFile(storedFilePath);
             await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Downloaded, null, DateTimeOffset.UtcNow, cancellationToken);
             return new EmptyResult();
         }
@@ -267,10 +295,70 @@ public class FileTransfersController : ControllerBase
         if (transfer == null)
             return NotFound();
 
-        await _kafkaService.DeleteTransferPacketsAsync(transfer, KafkaAuthMode.Scram, null, cancellationToken);
+        TryDeleteStoredFile(GetStoredFilePath(transferId));
+        if (transfer.PacketCount > 0)
+        {
+            var authMode = ParseAuthMode(transfer.KafkaAuthMode);
+            var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+            await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, oauthToken, cancellationToken);
+        }
         await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Rejected, "Rejected", DateTimeOffset.UtcNow, cancellationToken);
 
         return Ok();
+    }
+
+    /// <summary>
+    /// Clears transfers for the current device by scope.
+    /// </summary>
+    [HttpPost("clear")]
+    public async Task<IActionResult> ClearTransfers([FromBody] ClearFileTransfersRequestDto request, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (string.IsNullOrWhiteSpace(request.DeviceId))
+            return BadRequest(new[] { "DeviceId is required." });
+
+        var scope = (request.Scope ?? "all").Trim().ToLowerInvariant();
+        if (scope is not ("all" or "sent" or "received"))
+            return BadRequest(new[] { "Scope must be one of: all, sent, received." });
+
+        var allResult = await _readService.GetTransfersByUserAsync(userId, cancellationToken);
+        if (!allResult.IsSuccess)
+            return BadRequest(allResult.Errors);
+
+        var toDelete = allResult.Value
+            .Where(transfer =>
+                scope == "all" &&
+                (transfer.SenderDeviceId.Equals(request.DeviceId, StringComparison.OrdinalIgnoreCase) ||
+                 transfer.TargetDeviceId.Equals(request.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
+                scope == "sent" && transfer.SenderDeviceId.Equals(request.DeviceId, StringComparison.OrdinalIgnoreCase) ||
+                scope == "received" && transfer.TargetDeviceId.Equals(request.DeviceId, StringComparison.OrdinalIgnoreCase))
+            .Select(transfer => transfer.Id)
+            .Distinct()
+            .ToList();
+
+        var deleted = 0;
+        foreach (var transferId in toDelete)
+        {
+            var transfer = await _repository.GetByIdAsync(transferId, cancellationToken);
+            if (transfer == null)
+                continue;
+
+            TryDeleteStoredFile(GetStoredFilePath(transferId));
+            if (transfer.PacketCount > 0)
+            {
+                var authMode = ParseAuthMode(transfer.KafkaAuthMode);
+                var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+                await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, oauthToken, cancellationToken);
+            }
+
+            await _repository.DeleteAsync(transfer, cancellationToken);
+            deleted++;
+        }
+
+        if (deleted > 0)
+            await _repository.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { deleted });
     }
 
     private Guid GetUserId()
@@ -301,6 +389,26 @@ public class FileTransfersController : ControllerBase
 
         return null;
     }
+
+    private string GetStoredFilePath(Guid transferId)
+    {
+        return Path.Combine(_settings.TempPath, "store", $"{transferId:D}.bin");
+    }
+
+    private static void TryDeleteStoredFile(string path)
+    {
+        try
+        {
+            if (System.IO.File.Exists(path))
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup.
+        }
+    }
 }
 
 /// <summary>
@@ -319,3 +427,10 @@ public record CreateFileTransferRequestDto(
     string SenderDeviceId,
     string TargetDeviceId,
     string EncryptionEnvelope);
+
+/// <summary>
+/// Request payload for clearing transfers by scope.
+/// </summary>
+public record ClearFileTransfersRequestDto(
+    string DeviceId,
+    string Scope);

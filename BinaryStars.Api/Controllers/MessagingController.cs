@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
+using BinaryStars.Application.Databases.DatabaseModels.Messaging;
 using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
+using BinaryStars.Application.Databases.Repositories.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,6 +23,7 @@ public class MessagingController : ControllerBase
     private readonly MessagingKafkaService _kafkaService;
     private readonly IDeviceRepository _deviceRepository;
     private readonly IAccountRepository _accountRepository;
+    private readonly IMessageHistoryRepository _messageHistoryRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MessagingController"/> class.
@@ -29,16 +32,106 @@ public class MessagingController : ControllerBase
     /// <param name="kafkaService">The Kafka messaging service.</param>
     /// <param name="deviceRepository">The device repository.</param>
     /// <param name="accountRepository">The account repository.</param>
+    /// <param name="messageHistoryRepository">The message history repository.</param>
     public MessagingController(
         MessagingConnectionManager connectionManager,
         MessagingKafkaService kafkaService,
         IDeviceRepository deviceRepository,
-        IAccountRepository accountRepository)
+        IAccountRepository accountRepository,
+        IMessageHistoryRepository messageHistoryRepository)
     {
         _connectionManager = connectionManager;
         _kafkaService = kafkaService;
         _deviceRepository = deviceRepository;
         _accountRepository = accountRepository;
+        _messageHistoryRepository = messageHistoryRepository;
+    }
+
+    /// <summary>
+    /// Gets recent chat thread summaries for a device.
+    /// </summary>
+    /// <param name="deviceId">The current device identifier.</param>
+    /// <param name="limit">Maximum history messages to scan when building summaries.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    [HttpGet("chats")]
+    public async Task<IActionResult> GetChats([FromQuery] string deviceId, [FromQuery] int limit = 500, CancellationToken cancellationToken = default)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (device == null || device.UserId != userId)
+            return Forbid();
+
+        var rows = await _messageHistoryRepository.GetByDeviceAsync(userId, deviceId, limit, cancellationToken);
+        var summaries = rows
+            .GroupBy(row => row.SenderDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase)
+                ? row.TargetDeviceId
+                : row.SenderDeviceId)
+            .Select(group => group
+                .OrderByDescending(row => row.SentAt)
+                .Select(row => new ChatSummaryResponse(
+                    group.Key,
+                    row.Body,
+                    row.SentAt))
+                .First())
+            .OrderByDescending(summary => summary.LastSentAt)
+            .ToList();
+
+        return Ok(summaries);
+    }
+
+    /// <summary>
+    /// Gets recent conversation history between two devices.
+    /// </summary>
+    /// <param name="deviceId">The current device identifier.</param>
+    /// <param name="targetDeviceId">The other device identifier.</param>
+    /// <param name="limit">Maximum number of messages to return.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    [HttpGet("history")]
+    public async Task<IActionResult> GetHistory([FromQuery] string deviceId, [FromQuery] string targetDeviceId, [FromQuery] int limit = 200, CancellationToken cancellationToken = default)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        var sourceDevice = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        var targetDevice = await _deviceRepository.GetByIdAsync(targetDeviceId, cancellationToken);
+        if (sourceDevice == null || targetDevice == null)
+            return BadRequest(new[] { "Invalid device." });
+
+        if (sourceDevice.UserId != userId || targetDevice.UserId != userId)
+            return Forbid();
+
+        var rows = await _messageHistoryRepository.GetConversationAsync(userId, deviceId, targetDeviceId, limit, cancellationToken);
+        var payload = rows
+            .OrderBy(row => row.SentAt)
+            .Select(row => new MessagingMessage(
+                row.Id.ToString("D"),
+                row.UserId,
+                row.SenderDeviceId,
+                row.TargetDeviceId,
+                row.Body,
+                row.SentAt))
+            .ToList();
+
+        return Ok(payload);
+    }
+
+    /// <summary>
+    /// Clears persisted conversation history between two devices.
+    /// </summary>
+    [HttpPost("clear")]
+    public async Task<IActionResult> ClearConversation([FromBody] ClearConversationRequest request, CancellationToken cancellationToken)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var sourceDevice = await _deviceRepository.GetByIdAsync(request.DeviceId, cancellationToken);
+        var targetDevice = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
+        if (sourceDevice == null || targetDevice == null)
+            return BadRequest(new[] { "Invalid device." });
+
+        if (sourceDevice.UserId != userId || targetDevice.UserId != userId)
+            return Forbid();
+
+        await _messageHistoryRepository.DeleteConversationAsync(userId, request.DeviceId, request.TargetDeviceId, cancellationToken);
+        await _messageHistoryRepository.SaveChangesAsync(cancellationToken);
+        return Ok();
     }
 
     /// <summary>
@@ -72,6 +165,8 @@ public class MessagingController : ControllerBase
             request.Body,
             sentAt);
 
+        await PersistMessageAsync(message, cancellationToken);
+
         if (_connectionManager.TryGet(request.TargetDeviceId, out var connection) && connection?.Socket.State == System.Net.WebSockets.WebSocketState.Open)
         {
             var payload = MessagingJson.SerializeEnvelope("message", message);
@@ -81,10 +176,27 @@ public class MessagingController : ControllerBase
         else
         {
             var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
-            await _kafkaService.PublishMessageAsync(message, authMode, null, cancellationToken);
+            var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+            await _kafkaService.PublishMessageAsync(message, authMode, oauthToken, cancellationToken);
         }
 
         return Ok(message);
+    }
+
+    private async Task PersistMessageAsync(MessagingMessage message, CancellationToken cancellationToken)
+    {
+        await _messageHistoryRepository.AddAsync(new MessageHistoryDbModel
+        {
+            Id = Guid.Parse(message.Id),
+            UserId = message.UserId,
+            SenderDeviceId = message.SenderDeviceId,
+            TargetDeviceId = message.TargetDeviceId,
+            Body = message.Body,
+            SentAt = message.SentAt,
+            CreatedAt = DateTimeOffset.UtcNow,
+        }, cancellationToken);
+
+        await _messageHistoryRepository.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId, CancellationToken cancellationToken)
@@ -95,5 +207,14 @@ public class MessagingController : ControllerBase
 
         var logins = await _accountRepository.GetLoginsAsync(user);
         return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
+    }
+
+    private string? ExtractBearerToken()
+    {
+        var header = Request.Headers.Authorization.ToString();
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            return header["Bearer ".Length..].Trim();
+
+        return null;
     }
 }

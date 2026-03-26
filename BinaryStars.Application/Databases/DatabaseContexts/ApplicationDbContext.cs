@@ -1,6 +1,7 @@
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using BinaryStars.Application.Databases.DatabaseModels.Locations;
+using BinaryStars.Application.Databases.DatabaseModels.Messaging;
 using BinaryStars.Application.Databases.DatabaseModels.Notes;
 using BinaryStars.Application.Databases.DatabaseModels.Notifications;
 using BinaryStars.Application.Databases.DatabaseModels.Transfers;
@@ -37,6 +38,11 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
     public DbSet<LocationHistoryDbModel> LocationHistory { get; set; }
 
     /// <summary>
+    /// Gets or sets persisted chat message history records.
+    /// </summary>
+    public DbSet<MessageHistoryDbModel> MessageHistory { get; set; }
+
+    /// <summary>
     /// Gets or sets notification schedule records.
     /// </summary>
     public DbSet<NotificationScheduleDbModel> NotificationSchedules { get; set; }
@@ -63,6 +69,7 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
         builder.ApplyConfiguration(new NoteDbModelConfiguration());
         builder.ApplyConfiguration(new FileTransferDbModelConfiguration());
         builder.ApplyConfiguration(new LocationHistoryDbModelConfiguration());
+        builder.ApplyConfiguration(new MessageHistoryDbModelConfiguration());
         builder.ApplyConfiguration(new NotificationScheduleDbModelConfiguration());
     }
 }

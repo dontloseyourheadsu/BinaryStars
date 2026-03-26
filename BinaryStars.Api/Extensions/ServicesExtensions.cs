@@ -3,6 +3,7 @@ using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Locations;
+using BinaryStars.Application.Databases.Repositories.Messaging;
 using BinaryStars.Application.Databases.Repositories.Notes;
 using BinaryStars.Application.Databases.Repositories.Notifications;
 using BinaryStars.Application.Databases.Repositories.Transfers;
@@ -38,6 +39,7 @@ public static class ServicesExtensions
         services.AddScoped<INotificationScheduleRepository, NotificationScheduleRepository>();
         services.AddScoped<IFileTransferRepository, FileTransferRepository>();
         services.AddScoped<ILocationHistoryRepository, LocationHistoryRepository>();
+        services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
 
         // Services
         services.AddScoped<IAccountsWriteService, AccountsWriteService>();
