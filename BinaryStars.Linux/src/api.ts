@@ -252,8 +252,10 @@ export const api = {
   async deleteNote(noteId: string): Promise<void> {
     await http.delete(`/notes/${encodeURIComponent(noteId)}`);
   },
-  async getTransfers(): Promise<FileTransfer[]> {
-    const response = await http.get<FileTransfer[]>("/files/transfers");
+  async getTransfers(deviceId?: string): Promise<FileTransfer[]> {
+    const response = await http.get<FileTransfer[]>("/files/transfers", {
+      params: deviceId ? { deviceId } : undefined,
+    });
     return response.data;
   },
   async createTransfer(payload: {
@@ -293,9 +295,31 @@ export const api = {
       params: { deviceId },
     });
   },
+  async clearTransfers(deviceId: string, scope: "all" | "sent" | "received"): Promise<number> {
+    const response = await http.post<{ deleted: number }>("/files/transfers/clear", {
+      deviceId,
+      scope,
+    });
+    return response.data.deleted;
+  },
   async sendMessage(payload: SendMessageRequest): Promise<MessageDto> {
     const response = await http.post<MessageDto>("/messaging/send", payload);
     return response.data;
+  },
+  async getMessagingChats(deviceId: string): Promise<Array<{ deviceId: string; lastMessage: string; lastSentAt: string }>> {
+    const response = await http.get<Array<{ deviceId: string; lastMessage: string; lastSentAt: string }>>("/messaging/chats", {
+      params: { deviceId },
+    });
+    return response.data;
+  },
+  async getMessageHistory(deviceId: string, targetDeviceId: string, limit = 200): Promise<MessageDto[]> {
+    const response = await http.get<MessageDto[]>("/messaging/history", {
+      params: { deviceId, targetDeviceId, limit },
+    });
+    return response.data;
+  },
+  async clearConversation(deviceId: string, targetDeviceId: string): Promise<void> {
+    await http.post("/messaging/clear", { deviceId, targetDeviceId });
   },
   async sendLocation(payload: {
     deviceId: string;

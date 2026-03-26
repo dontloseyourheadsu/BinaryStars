@@ -3,6 +3,7 @@ import type { ChatSummary } from "./types";
 
 type Props = {
   devices: Device[];
+  myDeviceId: string;
   chatSummaries: ChatSummary[];
   chatDevice: Device | null;
   chatMessages: ChatMessage[];
@@ -11,11 +12,13 @@ type Props = {
   onSelectChat: (deviceId: string) => void;
   onSetNewMessage: (value: string) => void;
   onClearCurrentChat: () => void;
+  onBackToChats: () => void;
   onSendChatMessage: () => void;
 };
 
 export default function MessagingTab({
   devices,
+  myDeviceId,
   chatSummaries,
   chatDevice,
   chatMessages,
@@ -24,17 +27,34 @@ export default function MessagingTab({
   onSelectChat,
   onSetNewMessage,
   onClearCurrentChat,
+  onBackToChats,
   onSendChatMessage,
 }: Props) {
+  const chatTargets = devices.filter((entry) => entry.id !== myDeviceId && entry.isOnline);
+
   return (
     <section className="panel-grid">
-      <div className="panel">
+      <div className={`panel messaging-list ${selectedChatDeviceId ? "hide-on-mobile" : ""}`}>
         <div className="split-row">
           <h3>Chats</h3>
+          <select
+            aria-label="Chat target"
+            onChange={(event) => onSelectChat(event.target.value)}
+            title="Chat target"
+            value={selectedChatDeviceId}
+          >
+            <option value="">Choose device</option>
+            {chatTargets.map((device) => (
+              <option key={device.id} value={device.id}>
+                {device.name}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => {
-              if (devices.length > 0) {
-                onSelectChat(devices[0].id);
+              if (chatTargets.length > 0) {
+                const fallback = selectedChatDeviceId || chatTargets[0].id;
+                onSelectChat(fallback);
               }
             }}
             type="button"
@@ -57,10 +77,11 @@ export default function MessagingTab({
           ))}
         </div>
       </div>
-      <div className="panel">
+      <div className={`panel messaging-chat ${selectedChatDeviceId ? "show-on-mobile" : "hide-chat-on-mobile"}`}>
         <div className="split-row">
+          <button className="ghost mobile-only" onClick={onBackToChats} type="button">Back</button>
           <h3>{chatDevice ? chatDevice.name : "Select a chat"}</h3>
-          <button className="ghost" onClick={onClearCurrentChat} type="button">Clear</button>
+          <button className="ghost" onClick={onClearCurrentChat} type="button">Clear Chat</button>
         </div>
         <div className="chat-box">
           {chatMessages.map((message) => (
@@ -76,8 +97,8 @@ export default function MessagingTab({
             placeholder="Write a message"
             value={newMessage}
           />
-          <button className="send-btn" disabled={!selectedChatDeviceId} onClick={onSendChatMessage} type="button">
-            ➤
+          <button className="send-btn send-text" disabled={!selectedChatDeviceId || !newMessage.trim()} onClick={onSendChatMessage} type="button">
+            Send
           </button>
         </div>
       </div>

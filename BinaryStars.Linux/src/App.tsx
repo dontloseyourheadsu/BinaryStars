@@ -14,7 +14,6 @@ import {
   isTauriRuntime,
   isWifiConnected,
   performLocalAction,
-  sendFileViaBluetooth,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { LocalNotificationHistoryItem } from "./storage";
@@ -92,6 +91,7 @@ function App() {
   const [mapFocusPoint, setMapFocusPoint] = useState<LocationPoint | null>(null);
   const [selectedMapDeviceId, setSelectedMapDeviceId] = useState("");
   const [selectedChatDeviceId, setSelectedChatDeviceId] = useState("");
+  const [selectedFileTargetDeviceId, setSelectedFileTargetDeviceId] = useState("");
   const [selectedDeviceDetailId, setSelectedDeviceDetailId] = useState("");
   const [selectedActionDeviceId, setSelectedActionDeviceId] = useState("");
   const [actionMode, setActionMode] = useState<"base" | "open-app" | "close-app">("base");
@@ -125,7 +125,6 @@ function App() {
   const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
   const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
-  const [bluetoothDevices, setBluetoothDevices] = useState<Array<{ name: string; address: string; connected: boolean; paired: boolean }>>([]);
   const [geoPermissionState, setGeoPermissionState] = useState<"granted" | "denied" | "prompt" | "unsupported" | "unknown" | "native">("unknown");
   const [lastGeoError, setLastGeoError] = useState("");
   const [lastLocationSampleAt, setLastLocationSampleAt] = useState<string | null>(null);
@@ -295,8 +294,18 @@ function App() {
         lastMessage,
         name: devices.find((entry) => entry.id === deviceId)?.name ?? deviceId,
       }))
+      .filter((entry) => devices.some((device) => device.id === entry.deviceId && device.id !== myDeviceId && device.isOnline))
       .sort((left, right) => right.lastMessage.sentAt - left.lastMessage.sentAt);
-  }, [devices, messages]);
+  }, [devices, messages, myDeviceId]);
+
+  useEffect(() => {
+    if (selectedFileTargetDeviceId && devices.some((entry) => entry.id === selectedFileTargetDeviceId && entry.id !== myDeviceId && entry.isOnline)) {
+      return;
+    }
+
+    const fallback = devices.find((entry) => entry.id !== myDeviceId && entry.isOnline)?.id ?? "";
+    setSelectedFileTargetDeviceId(fallback);
+  }, [devices, myDeviceId, selectedFileTargetDeviceId]);
 
   useEffect(() => {
     cacheStore.setMessages(messages);
@@ -352,7 +361,7 @@ function App() {
   };
 
   const refreshTransfers = async (): Promise<void> => {
-    const next = await api.getTransfers();
+    const next = await api.getTransfers(myDeviceId);
     setTransfers(next);
   };
 
@@ -691,7 +700,6 @@ function App() {
 
     const refreshBluetoothPresence = async (): Promise<void> => {
       const knownDevices = await getBluetoothDevices();
-      setBluetoothDevices(knownDevices);
       const names = knownDevices
         .filter((entry) => entry.connected)
         .map((entry) => entry.name);
@@ -820,7 +828,7 @@ function App() {
     if (!token) {
       return;
     }
-    const socket = new WebSocket(toWsUrl(myDeviceId), [token]);
+    const socket = new WebSocket(toWsUrl(myDeviceId, token));
     wsRef.current = socket;
 
     socket.onmessage = (event) => {
@@ -1153,40 +1161,6 @@ function App() {
   };
 
   const sendFile = async (file: File, targetDeviceId: string): Promise<void> => {
-    if (!online) {
-      if (!isTauriRuntime()) {
-        setError("Offline file transfer is unavailable in this runtime");
-        return;
-      }
-
-      const target = devices.find((entry) => entry.id === targetDeviceId);
-      if (!target) {
-        setError("Target device not found");
-        return;
-      }
-
-      const bluetoothTarget = bluetoothDevices.find(
-        (entry) => entry.connected && entry.name === target.name,
-      );
-
-      if (!bluetoothTarget) {
-        setError("Bluetooth target device is not connected or in range");
-        return;
-      }
-
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const chunkSize = 0x8000;
-      let binary = "";
-      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-        const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
-        binary += String.fromCharCode(...chunk);
-      }
-
-      await sendFileViaBluetooth(bluetoothTarget.address, file.name, btoa(binary));
-      setError("");
-      return;
-    }
-
     if (!requireOnline()) {
       return;
     }
@@ -1208,21 +1182,15 @@ function App() {
     if (!file) {
       return;
     }
-    const targets = devices.filter((entry) => entry.id !== myDeviceId);
-    if (targets.length === 0) {
+
+    if (!selectedFileTargetDeviceId) {
       setError("No target device available");
       return;
     }
-    const targetId = window.prompt(
-      `Send to device ID (available: ${targets.map((entry) => entry.id).join(", ")})`,
-      targets[0].id,
-    );
-    if (!targetId) {
-      return;
-    }
+
     try {
       setBusy(true);
-      await sendFile(file, targetId);
+      await sendFile(file, selectedFileTargetDeviceId);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to send file");
     } finally {
@@ -1252,6 +1220,15 @@ function App() {
     }
 
     await api.rejectTransfer(transfer.id, myDeviceId);
+    await refreshTransfers();
+  };
+
+  const clearTransfersByScope = async (scope: "sent" | "received"): Promise<void> => {
+    if (!requireOnline()) {
+      return;
+    }
+
+    await api.clearTransfers(myDeviceId, scope);
     await refreshTransfers();
   };
 
@@ -1338,34 +1315,58 @@ function App() {
     setActiveTab("Messaging");
   };
 
+  const refreshConversationHistory = async (targetDeviceId: string): Promise<void> => {
+    if (!isAuthed || !online || !targetDeviceId) {
+      return;
+    }
+
+    const history = await api.getMessageHistory(myDeviceId, targetDeviceId, 200);
+    const mapped: ChatMessage[] = history.map((entry) => ({
+      id: entry.id,
+      deviceId: entry.senderDeviceId === myDeviceId ? entry.targetDeviceId : entry.senderDeviceId,
+      senderDeviceId: entry.senderDeviceId,
+      body: entry.body,
+      sentAt: Date.parse(entry.sentAt),
+      isOutgoing: entry.senderDeviceId === myDeviceId,
+    }));
+
+    setMessages((prev) => {
+      const withoutCurrentConversation = prev.filter((entry) => entry.deviceId !== targetDeviceId);
+      const merged = [...withoutCurrentConversation];
+      mapped.forEach((entry) => {
+        const found = merged.findIndex((candidate) => candidate.id === entry.id);
+        if (found >= 0) {
+          merged[found] = entry;
+        } else {
+          merged.push(entry);
+        }
+      });
+
+      return merged.sort((left, right) => left.sentAt - right.sentAt);
+    });
+  };
+
+  useEffect(() => {
+    if (!selectedChatDeviceId) {
+      return;
+    }
+
+    void refreshConversationHistory(selectedChatDeviceId);
+  }, [isAuthed, myDeviceId, online, selectedChatDeviceId]);
+
   const openDeviceDetail = (deviceId: string): void => {
     setSelectedDeviceDetailId(deviceId);
   };
 
   const sendChatMessage = async (): Promise<void> => {
-    if (!selectedChatDeviceId || !newMessage.trim()) {
+    const body = newMessage.trim();
+    if (!selectedChatDeviceId || !body) {
       return;
     }
-    const request = {
-      senderDeviceId: myDeviceId,
-      targetDeviceId: selectedChatDeviceId,
-      body: newMessage.trim(),
-      sentAt: new Date().toISOString(),
-    };
-    setNewMessage("");
 
-    const socket = wsRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "message", payload: request }));
-      const localMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        deviceId: selectedChatDeviceId,
-        senderDeviceId: myDeviceId,
-        body: request.body,
-        sentAt: Date.now(),
-        isOutgoing: true,
-      };
-      setMessages((prev) => upsertMessage(prev, localMessage));
+    const targetDevice = devices.find((entry) => entry.id === selectedChatDeviceId);
+    if (!targetDevice || !targetDevice.isOnline || targetDevice.id === myDeviceId) {
+      setError("Target device must be online");
       return;
     }
 
@@ -1373,16 +1374,29 @@ function App() {
       return;
     }
 
-    const sent = await api.sendMessage(request);
-    const storedMessage: ChatMessage = {
-      id: sent.id,
-      deviceId: selectedChatDeviceId,
-      senderDeviceId: sent.senderDeviceId,
-      body: sent.body,
-      sentAt: Date.parse(sent.sentAt),
-      isOutgoing: true,
+    const request = {
+      senderDeviceId: myDeviceId,
+      targetDeviceId: selectedChatDeviceId,
+      body,
+      sentAt: new Date().toISOString(),
     };
-    setMessages((prev) => upsertMessage(prev, storedMessage));
+
+    try {
+      const sent = await api.sendMessage(request);
+      const storedMessage: ChatMessage = {
+        id: sent.id,
+        deviceId: selectedChatDeviceId,
+        senderDeviceId: sent.senderDeviceId,
+        body: sent.body,
+        sentAt: Date.parse(sent.sentAt),
+        isOutgoing: true,
+      };
+      setMessages((prev) => upsertMessage(prev, storedMessage));
+      setNewMessage("");
+      setError("");
+    } catch {
+      setError("Failed to send message.");
+    }
   };
 
   const resetNotificationEditor = (): void => {
@@ -1506,7 +1520,20 @@ function App() {
     if (!selectedChatDeviceId) {
       return;
     }
-    setMessages((prev) => prev.filter((entry) => entry.deviceId !== selectedChatDeviceId));
+
+    if (!online) {
+      setError("No connection available");
+      return;
+    }
+
+    void (async () => {
+      try {
+        await api.clearConversation(myDeviceId, selectedChatDeviceId);
+        setMessages((prev) => prev.filter((entry) => entry.deviceId !== selectedChatDeviceId));
+      } catch {
+        setError("Failed to clear conversation");
+      }
+    })();
   };
 
   const sendActionCommand = async (
@@ -2024,6 +2051,12 @@ function App() {
 
         {activeTab === "Files" && (
           <FilesTab
+            devices={devices.map((entry) => ({ id: entry.id, name: entry.name, isOnline: entry.isOnline }))}
+            myDeviceId={myDeviceId}
+            selectedTargetDeviceId={selectedFileTargetDeviceId}
+            onSelectTargetDevice={setSelectedFileTargetDeviceId}
+            onClearSent={() => void clearTransfersByScope("sent")}
+            onClearReceived={() => void clearTransfersByScope("received")}
             transfers={transfers}
             filePickerRef={filePickerRef}
             onPickFile={(event) => void onPickFile(event)}
@@ -2059,6 +2092,7 @@ function App() {
         {activeTab === "Messaging" && (
           <MessagingTab
             devices={devices}
+            myDeviceId={myDeviceId}
             chatSummaries={chatSummaries}
             chatDevice={chatDevice}
             chatMessages={chatMessages}
@@ -2067,6 +2101,7 @@ function App() {
             onSelectChat={setSelectedChatDeviceId}
             onSetNewMessage={setNewMessage}
             onClearCurrentChat={clearCurrentChat}
+            onBackToChats={() => setSelectedChatDeviceId("")}
             onSendChatMessage={() => void sendChatMessage()}
           />
         )}
