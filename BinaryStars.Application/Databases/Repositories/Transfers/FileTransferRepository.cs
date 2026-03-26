@@ -78,6 +78,20 @@ public class FileTransferRepository : IFileTransferRepository
     }
 
     /// <inheritdoc />
+    public Task DeleteAsync(FileTransferDbModel transfer, CancellationToken cancellationToken)
+    {
+        _context.FileTransfers.Remove(transfer);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task DeleteRangeAsync(IEnumerable<FileTransferDbModel> transfers, CancellationToken cancellationToken)
+    {
+        _context.FileTransfers.RemoveRange(transfers);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         return _context.SaveChangesAsync(cancellationToken);
