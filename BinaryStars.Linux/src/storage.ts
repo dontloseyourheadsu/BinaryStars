@@ -11,6 +11,7 @@ import type {
 const NOTES_KEY = "binarystars.notes.cache";
 const TRANSFERS_KEY = "binarystars.transfers.cache";
 const MESSAGES_KEY = "binarystars.messages.cache";
+const PENDING_MESSAGES_KEY = "binarystars.messages.pending";
 const DEVICES_KEY = "binarystars.devices.cache";
 const PROFILE_KEY = "binarystars.profile.cache";
 const NOTIFICATION_HISTORY_KEY = "binarystars.notifications.history.cache";
@@ -38,6 +39,14 @@ export interface PendingLocationUpload {
   longitude: number;
   accuracyMeters: number | null;
   recordedAt: string;
+}
+
+export interface PendingChatMessage {
+  localMessageId: string;
+  senderDeviceId: string;
+  targetDeviceId: string;
+  body: string;
+  sentAt: string;
 }
 
 export interface LocalNotificationHistoryItem extends DeviceNotificationMessage {
@@ -78,6 +87,26 @@ export const cacheStore = {
   },
   setMessages(messages: ChatMessage[]): void {
     writeJson(MESSAGES_KEY, messages);
+  },
+  getPendingChatMessages(): PendingChatMessage[] {
+    return readJson<PendingChatMessage[]>(PENDING_MESSAGES_KEY, []);
+  },
+  addPendingChatMessage(message: PendingChatMessage): void {
+    const all = readJson<PendingChatMessage[]>(PENDING_MESSAGES_KEY, []);
+    const found = all.findIndex((entry) => entry.localMessageId === message.localMessageId);
+    if (found >= 0) {
+      const next = [...all];
+      next[found] = message;
+      writeJson(PENDING_MESSAGES_KEY, next);
+      return;
+    }
+
+    writeJson(PENDING_MESSAGES_KEY, [...all, message].slice(-2_000));
+  },
+  removePendingChatMessage(localMessageId: string): void {
+    const next = readJson<PendingChatMessage[]>(PENDING_MESSAGES_KEY, [])
+      .filter((entry) => entry.localMessageId !== localMessageId);
+    writeJson(PENDING_MESSAGES_KEY, next);
   },
   getDevices(): Device[] {
     return readJson<Device[]>(DEVICES_KEY, []);

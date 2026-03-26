@@ -25,15 +25,20 @@ export function statusLabel(status: FileTransferStatus, isSender: boolean): stri
   return status;
 }
 
-export function toWsUrl(deviceId: string): string {
+export function toWsUrl(deviceId: string, accessToken?: string | null): string {
   const base = getApiBaseUrl().replace(/\/$/, "").replace(/\/api$/, "");
+  const query = new URLSearchParams({ deviceId });
+  if (accessToken) {
+    query.set("access_token", accessToken);
+  }
+
   if (base.startsWith("https://")) {
-    return `${base.replace("https://", "wss://")}/ws/messaging?deviceId=${encodeURIComponent(deviceId)}`;
+    return `${base.replace("https://", "wss://")}/ws/messaging?${query.toString()}`;
   }
   if (base.startsWith("http://")) {
-    return `${base.replace("http://", "ws://")}/ws/messaging?deviceId=${encodeURIComponent(deviceId)}`;
+    return `${base.replace("http://", "ws://")}/ws/messaging?${query.toString()}`;
   }
-  return `ws://localhost:5004/ws/messaging?deviceId=${encodeURIComponent(deviceId)}`;
+  return `ws://localhost:5004/ws/messaging?${query.toString()}`;
 }
 
 export function upsertMessage(list: ChatMessage[], next: ChatMessage): ChatMessage[] {

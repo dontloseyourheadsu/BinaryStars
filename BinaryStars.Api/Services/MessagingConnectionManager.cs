@@ -28,7 +28,27 @@ public class MessagingConnectionManager
     /// <returns>True if added; otherwise false.</returns>
     public bool TryAdd(string deviceId, Guid userId, WebSocket socket)
     {
-        return _connections.TryAdd(deviceId, new MessagingConnection(deviceId, userId, socket));
+        _connections.AddOrUpdate(
+            deviceId,
+            _ => new MessagingConnection(deviceId, userId, socket),
+            (_, existing) =>
+            {
+                try
+                {
+                    if (existing.Socket.State == WebSocketState.Open || existing.Socket.State == WebSocketState.CloseReceived)
+                    {
+                        existing.Socket.Abort();
+                    }
+                }
+                catch
+                {
+                    // Ignore socket cleanup failures while replacing stale connection.
+                }
+
+                return new MessagingConnection(deviceId, userId, socket);
+            });
+
+        return true;
     }
 
     /// <summary>

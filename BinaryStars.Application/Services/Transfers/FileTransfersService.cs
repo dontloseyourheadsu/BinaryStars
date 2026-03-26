@@ -216,6 +216,9 @@ public class FileTransfersService : IFileTransfersReadService, IFileTransfersWri
         if (string.IsNullOrWhiteSpace(request.TargetDeviceId))
             return Result<FileTransferDetailResponse>.Failure(FileTransferErrors.TargetDeviceIdCannotBeNullOrWhitespace);
 
+        if (request.SenderDeviceId.Equals(request.TargetDeviceId, StringComparison.OrdinalIgnoreCase))
+            return Result<FileTransferDetailResponse>.Failure(FileTransferErrors.TransferNotOwnedByUser);
+
         if (string.IsNullOrWhiteSpace(request.EncryptionEnvelope))
             return Result<FileTransferDetailResponse>.Failure(FileTransferErrors.EncryptionEnvelopeMissing);
 
@@ -225,6 +228,9 @@ public class FileTransfersService : IFileTransfersReadService, IFileTransfersWri
 
         var targetDevice = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
         if (targetDevice == null || targetDevice.UserId != userId)
+            return Result<FileTransferDetailResponse>.Failure(FileTransferErrors.TransferNotOwnedByUser);
+
+        if (!targetDevice.IsOnline)
             return Result<FileTransferDetailResponse>.Failure(FileTransferErrors.TransferNotOwnedByUser);
 
         var now = DateTimeOffset.UtcNow;

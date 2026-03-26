@@ -63,6 +63,20 @@ public interface IFileTransferRepository
     Task UpdateAsync(FileTransferDbModel transfer, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Deletes an existing transfer record.
+    /// </summary>
+    /// <param name="transfer">The transfer to delete.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    Task DeleteAsync(FileTransferDbModel transfer, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes a batch of transfer records.
+    /// </summary>
+    /// <param name="transfers">The transfers to delete.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    Task DeleteRangeAsync(IEnumerable<FileTransferDbModel> transfers, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Persists pending changes.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>

@@ -14,6 +14,16 @@
         android:orientation="horizontal"
         android:paddingHorizontal="16dp">
 
+        <ImageView
+            android:id="@+id/btnBackChat"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_icon_circle"
+            android:padding="8dp"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/primary_purple" />
+
         <TextView
             android:id="@+id/tvChatTitle"
             android:layout_width="0dp"
@@ -36,7 +46,7 @@
             android:id="@+id/btnClearChat"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Clear"
+            android:text="Clear chat"
             android:textColor="@color/carbon_text_main" />
     </LinearLayout>
 
@@ -83,7 +93,7 @@
             android:layout_marginStart="12dp"
             android:background="@drawable/bg_icon_circle"
             android:padding="8dp"
-            android:src="@drawable/ic_share"
+            android:src="@drawable/ic_send"
             app:tint="@color/primary_purple" />
     </LinearLayout>
 

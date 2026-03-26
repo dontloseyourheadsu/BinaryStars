@@ -47,6 +47,58 @@
         android:background="@color/carbon_border" />
 
     <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:background="@color/carbon_bg_panel">
+
+        <Button
+            android:id="@+id/btnFilterAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="All"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnFilterSent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sent"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnFilterReceived"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Received" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="8dp"
+        android:background="@color/carbon_bg_panel">
+
+        <Button
+            android:id="@+id/btnClearSent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Clear Sent"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnClearReceived"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Clear Received" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/viewContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

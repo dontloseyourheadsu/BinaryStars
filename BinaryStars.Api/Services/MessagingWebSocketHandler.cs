@@ -4,8 +4,10 @@ using System.Security.Claims;
 using System.Text;
 using System.Linq;
 using BinaryStars.Api.Models;
+using BinaryStars.Application.Databases.DatabaseModels.Messaging;
 using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
+using BinaryStars.Application.Databases.Repositories.Messaging;
 
 namespace BinaryStars.Api.Services;
 
@@ -19,6 +21,7 @@ public class MessagingWebSocketHandler
     private readonly MessagingKafkaService _kafkaService;
     private readonly IDeviceRepository _deviceRepository;
     private readonly IAccountRepository _accountRepository;
+    private readonly IMessageHistoryRepository _messageHistoryRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MessagingWebSocketHandler"/> class.
@@ -27,16 +30,19 @@ public class MessagingWebSocketHandler
     /// <param name="kafkaService">The Kafka messaging service.</param>
     /// <param name="deviceRepository">The device repository.</param>
     /// <param name="accountRepository">The account repository.</param>
+    /// <param name="messageHistoryRepository">The message history repository.</param>
     public MessagingWebSocketHandler(
         MessagingConnectionManager connectionManager,
         MessagingKafkaService kafkaService,
         IDeviceRepository deviceRepository,
-        IAccountRepository accountRepository)
+        IAccountRepository accountRepository,
+        IMessageHistoryRepository messageHistoryRepository)
     {
         _connectionManager = connectionManager;
         _kafkaService = kafkaService;
         _deviceRepository = deviceRepository;
         _accountRepository = accountRepository;
+        _messageHistoryRepository = messageHistoryRepository;
     }
 
     /// <summary>
@@ -69,7 +75,8 @@ public class MessagingWebSocketHandler
         if (device == null || device.UserId != userId)
         {
             using var tempSocket = await context.WebSockets.AcceptWebSocketAsync();
-            await SendRemovalOnlyAsync(tempSocket, deviceId, userId, context.RequestAborted);
+            var removalToken = ExtractBearerToken(context);
+            await SendRemovalOnlyAsync(tempSocket, deviceId, userId, removalToken, context.RequestAborted);
             await tempSocket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Device removed", context.RequestAborted);
             return;
         }
@@ -77,44 +84,48 @@ public class MessagingWebSocketHandler
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         _connectionManager.TryAdd(deviceId, userId, socket);
 
-        await SendPendingAsync(socket, deviceId, userId, context.RequestAborted);
+        var oauthToken = ExtractBearerToken(context);
 
-        await ReceiveLoopAsync(socket, deviceId, userId, context.RequestAborted);
+        await SendPendingAsync(socket, deviceId, userId, oauthToken, context.RequestAborted);
+
+        await ReceiveLoopAsync(socket, deviceId, userId, oauthToken, context.RequestAborted);
 
         _connectionManager.TryRemove(deviceId);
     }
 
-    private async Task SendPendingAsync(WebSocket socket, string deviceId, Guid userId, CancellationToken cancellationToken)
+    private async Task SendPendingAsync(WebSocket socket, string deviceId, Guid userId, string? oauthToken, CancellationToken cancellationToken)
     {
         var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
+        var kafkaToken = authMode == KafkaAuthMode.OauthBearer ? oauthToken : null;
 
-        var pendingMessages = await _kafkaService.ConsumePendingMessagesAsync(deviceId, userId, authMode, null, cancellationToken);
+        var pendingMessages = await _kafkaService.ConsumePendingMessagesAsync(deviceId, userId, authMode, kafkaToken, cancellationToken);
         foreach (var message in pendingMessages)
         {
             await SendEnvelopeAsync(socket, "message", message, cancellationToken);
-            await _kafkaService.DeleteMessageAsync(message.Id, authMode, null, cancellationToken);
+            await _kafkaService.DeleteMessageAsync(message.Id, authMode, kafkaToken, cancellationToken);
         }
 
-        var pendingRemoved = await _kafkaService.ConsumePendingDeviceRemovedAsync(deviceId, userId, authMode, null, cancellationToken);
+        var pendingRemoved = await _kafkaService.ConsumePendingDeviceRemovedAsync(deviceId, userId, authMode, kafkaToken, cancellationToken);
         foreach (var removal in pendingRemoved)
         {
             await SendEnvelopeAsync(socket, "device_removed", removal, cancellationToken);
-            await _kafkaService.DeleteDeviceRemovedAsync(removal.Id, authMode, null, cancellationToken);
+            await _kafkaService.DeleteDeviceRemovedAsync(removal.Id, authMode, kafkaToken, cancellationToken);
         }
     }
 
-    private async Task SendRemovalOnlyAsync(WebSocket socket, string deviceId, Guid userId, CancellationToken cancellationToken)
+    private async Task SendRemovalOnlyAsync(WebSocket socket, string deviceId, Guid userId, string? oauthToken, CancellationToken cancellationToken)
     {
         var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
-        var pendingRemoved = await _kafkaService.ConsumePendingDeviceRemovedAsync(deviceId, userId, authMode, null, cancellationToken);
+        var kafkaToken = authMode == KafkaAuthMode.OauthBearer ? oauthToken : null;
+        var pendingRemoved = await _kafkaService.ConsumePendingDeviceRemovedAsync(deviceId, userId, authMode, kafkaToken, cancellationToken);
         foreach (var removal in pendingRemoved.Where(r => r.RemovedDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase)))
         {
             await SendEnvelopeAsync(socket, "device_removed", removal, cancellationToken);
-            await _kafkaService.DeleteDeviceRemovedAsync(removal.Id, authMode, null, cancellationToken);
+            await _kafkaService.DeleteDeviceRemovedAsync(removal.Id, authMode, kafkaToken, cancellationToken);
         }
     }
 
-    private async Task ReceiveLoopAsync(WebSocket socket, string deviceId, Guid userId, CancellationToken cancellationToken)
+    private async Task ReceiveLoopAsync(WebSocket socket, string deviceId, Guid userId, string? oauthToken, CancellationToken cancellationToken)
     {
         var buffer = new byte[8192];
         while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
@@ -139,12 +150,12 @@ public class MessagingWebSocketHandler
 
             if (envelope.Type.Equals("message", StringComparison.OrdinalIgnoreCase))
             {
-                await HandleIncomingMessageAsync(envelope, deviceId, userId, cancellationToken);
+                await HandleIncomingMessageAsync(envelope, deviceId, userId, oauthToken, cancellationToken);
             }
         }
     }
 
-    private async Task HandleIncomingMessageAsync(MessagingEnvelope envelope, string deviceId, Guid userId, CancellationToken cancellationToken)
+    private async Task HandleIncomingMessageAsync(MessagingEnvelope envelope, string deviceId, Guid userId, string? oauthToken, CancellationToken cancellationToken)
     {
         if (!MessagingJson.TryReadPayload<SendMessageRequest>(envelope, out var request) || request == null)
             return;
@@ -159,7 +170,7 @@ public class MessagingWebSocketHandler
         if (targetDevice == null || targetDevice.UserId != userId)
             return;
 
-        var sentAt = request.SentAt ?? DateTimeOffset.UtcNow;
+        var sentAt = (request.SentAt ?? DateTimeOffset.UtcNow).ToUniversalTime();
         var message = new MessagingMessage(
             Guid.NewGuid().ToString("D"),
             userId,
@@ -168,6 +179,8 @@ public class MessagingWebSocketHandler
             request.Body,
             sentAt);
 
+        await PersistMessageAsync(message, cancellationToken);
+
         if (_connectionManager.TryGet(request.TargetDeviceId, out var connection) && connection?.Socket.State == WebSocketState.Open)
         {
             await SendEnvelopeAsync(connection.Socket, "message", message, cancellationToken);
@@ -175,7 +188,8 @@ public class MessagingWebSocketHandler
         else
         {
             var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
-            await _kafkaService.PublishMessageAsync(message, authMode, null, cancellationToken);
+            var kafkaToken = authMode == KafkaAuthMode.OauthBearer ? oauthToken : null;
+            await _kafkaService.PublishMessageAsync(message, authMode, kafkaToken, cancellationToken);
         }
     }
 
@@ -212,5 +226,34 @@ public class MessagingWebSocketHandler
 
         var logins = await _accountRepository.GetLoginsAsync(user);
         return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
+    }
+
+    private static string? ExtractBearerToken(HttpContext? context)
+    {
+        if (context == null)
+            return null;
+
+        var header = context.Request.Headers.Authorization.ToString();
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            return header["Bearer ".Length..].Trim();
+
+        var accessToken = context.Request.Query["access_token"].ToString();
+        return string.IsNullOrWhiteSpace(accessToken) ? null : accessToken;
+    }
+
+    private async Task PersistMessageAsync(MessagingMessage message, CancellationToken cancellationToken)
+    {
+        await _messageHistoryRepository.AddAsync(new MessageHistoryDbModel
+        {
+            Id = Guid.Parse(message.Id),
+            UserId = message.UserId,
+            SenderDeviceId = message.SenderDeviceId,
+            TargetDeviceId = message.TargetDeviceId,
+            Body = message.Body,
+            SentAt = message.SentAt,
+            CreatedAt = DateTimeOffset.UtcNow,
+        }, cancellationToken);
+
+        await _messageHistoryRepository.SaveChangesAsync(cancellationToken);
     }
 }

@@ -68,7 +68,8 @@ public class NotificationsController : ControllerBase
             DateTimeOffset.UtcNow);
 
         var authMode = await ResolveKafkaAuthModeAsync(userId);
-        await _kafkaService.PublishNotificationAsync(message, authMode, null, cancellationToken);
+        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+        await _kafkaService.PublishNotificationAsync(message, authMode, oauthToken, cancellationToken);
 
         var pendingResult = await _notificationsWriteService.SetPendingSyncFlagAsync(userId, request.TargetDeviceId, true, cancellationToken);
         if (!pendingResult.IsSuccess)
@@ -185,10 +186,11 @@ public class NotificationsController : ControllerBase
             return BadRequest(schedulesResult.Errors);
 
         var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var notifications = await _kafkaService.ConsumePendingNotificationsAsync(deviceId, userId, authMode, null, cancellationToken);
+        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+        var notifications = await _kafkaService.ConsumePendingNotificationsAsync(deviceId, userId, authMode, oauthToken, cancellationToken);
         foreach (var notification in notifications)
         {
-            await _kafkaService.DeleteNotificationAsync(notification.Id, authMode, null, cancellationToken);
+            await _kafkaService.DeleteNotificationAsync(notification.Id, authMode, oauthToken, cancellationToken);
         }
 
         var response = new PullNotificationsResponseDto(
@@ -224,6 +226,15 @@ public class NotificationsController : ControllerBase
 
         var logins = await _accountRepository.GetLoginsAsync(user);
         return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
+    }
+
+    private string? ExtractBearerToken()
+    {
+        var header = Request.Headers.Authorization.ToString();
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            return header["Bearer ".Length..].Trim();
+
+        return null;
     }
 }
 

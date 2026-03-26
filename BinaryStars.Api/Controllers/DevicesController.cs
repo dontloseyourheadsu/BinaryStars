@@ -109,7 +109,8 @@ public class DevicesController : ControllerBase
                 DateTimeOffset.UtcNow);
 
             var authMode = await ResolveKafkaAuthModeAsync(userId);
-            await _messagingKafkaService.PublishDeviceRemovedAsync(removalEvent, authMode, null, cancellationToken);
+            var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+            await _messagingKafkaService.PublishDeviceRemovedAsync(removalEvent, authMode, oauthToken, cancellationToken);
 
             await NotifyConnectedDevicesAsync(userId, removalEvent, cancellationToken);
             return Ok();
@@ -169,6 +170,15 @@ public class DevicesController : ControllerBase
 
         var logins = await _accountRepository.GetLoginsAsync(user);
         return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
+    }
+
+    private string? ExtractBearerToken()
+    {
+        var header = Request.Headers.Authorization.ToString();
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            return header["Bearer ".Length..].Trim();
+
+        return null;
     }
 
     private async Task NotifyConnectedDevicesAsync(Guid userId, DeviceRemovedEvent removalEvent, CancellationToken cancellationToken)

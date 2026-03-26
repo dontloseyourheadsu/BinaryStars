@@ -33,6 +33,26 @@ public record SendMessageRequest(
     DateTimeOffset? SentAt);
 
 /// <summary>
+/// Summary payload for a chat thread.
+/// </summary>
+/// <param name="DeviceId">The other device identifier in this chat thread.</param>
+/// <param name="LastMessage">The latest message body.</param>
+/// <param name="LastSentAt">The latest message timestamp.</param>
+public record ChatSummaryResponse(
+    string DeviceId,
+    string LastMessage,
+    DateTimeOffset LastSentAt);
+
+/// <summary>
+/// Request payload for clearing one conversation.
+/// </summary>
+/// <param name="DeviceId">The current device identifier.</param>
+/// <param name="TargetDeviceId">The other device identifier.</param>
+public record ClearConversationRequest(
+    string DeviceId,
+    string TargetDeviceId);
+
+/// <summary>
 /// Event emitted when a device is removed.
 /// </summary>
 /// <param name="Id">The event identifier.</param>

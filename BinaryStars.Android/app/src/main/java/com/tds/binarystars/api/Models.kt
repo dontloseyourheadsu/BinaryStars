@@ -137,6 +137,12 @@ data class CreateFileTransferRequestDto(
     val encryptionEnvelope: String
 )
 
+/** Request payload to clear transfers by scope for a device. */
+data class ClearFileTransfersRequestDto(
+    val deviceId: String,
+    val scope: String
+)
+
 // Notes Models
 /** Note content type. */
 enum class NoteType {
@@ -185,6 +191,19 @@ data class MessagingMessageDto(
     val targetDeviceId: String,
     val body: String,
     val sentAt: String
+)
+
+/** Chat summary payload returned by messaging/chats. */
+data class ChatSummaryDto(
+    val deviceId: String,
+    val lastMessage: String,
+    val lastSentAt: String
+)
+
+/** Request payload for clearing one conversation. */
+data class ClearConversationRequestDto(
+    val deviceId: String,
+    val targetDeviceId: String
 )
 
 /** Send message request payload. */
