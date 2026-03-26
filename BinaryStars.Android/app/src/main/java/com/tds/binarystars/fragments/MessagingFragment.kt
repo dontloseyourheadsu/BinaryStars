@@ -216,14 +216,13 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                 val chatsResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getMessagingChats(currentDeviceId) }
                 progressBar.visibility = View.GONE
 
-                val onlineDevices = if (devicesResponse.isSuccessful) {
-                    devicesResponse.body().orEmpty().filter { it.id != currentDeviceId && it.isOnline }
+                val accountDevices = if (devicesResponse.isSuccessful) {
+                    devicesResponse.body().orEmpty().filter { it.id != currentDeviceId }
                 } else {
                     emptyList()
                 }
 
-                val nameLookup = onlineDevices.associateBy({ it.id }, { it.name })
-                val onlineIds = onlineDevices.map { it.id }.toSet()
+                val nameLookup = accountDevices.associateBy({ it.id }, { it.name })
 
                 lastNameLookup = nameLookup
 
@@ -234,11 +233,11 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                             lastMessage = it.lastMessage,
                             lastSentAt = parseSentAt(it.lastSentAt)
                         )
-                    }.filter { onlineIds.contains(it.deviceId) }
+                    }
 
                     updateItems(chatMessages, nameLookup)
                 } else {
-                    updateItems(summaries.filter { onlineIds.contains(it.deviceId) }, nameLookup)
+                    updateItems(summaries, nameLookup)
                 }
 
                 setNoConnection(false)
@@ -347,7 +346,7 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                 try {
                     val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
                     devicesResponse.body().orEmpty()
-                        .filter { it.id != currentDeviceId && it.isOnline }
+                        .filter { it.id != currentDeviceId }
                         .map { CachedChatDevice(it.id, it.name) }
                 } catch (_: Exception) {
                     emptyList()

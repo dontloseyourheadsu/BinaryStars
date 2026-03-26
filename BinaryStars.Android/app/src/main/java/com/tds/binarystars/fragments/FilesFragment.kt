@@ -606,23 +606,23 @@ class FilesFragment : Fragment() {
         val resolver = requireContext().contentResolver
         val fileName = resolveFileName(uri)
         val contentType = resolver.getType(uri) ?: "application/octet-stream"
-        val sizeBytes = resolveFileSize(uri)
         val senderDeviceId = Settings.Secure.getString(resolver, Settings.Secure.ANDROID_ID)
-
-        if (sizeBytes <= 0) {
-            Toast.makeText(requireContext(), "File size not available", Toast.LENGTH_SHORT).show()
-            return
-        }
 
         lifecycleScope.launch {
             try {
                 val sentDir = File(requireContext().filesDir, "transfers/sent")
                 sentDir.mkdirs()
                 val originalCopy = File(sentDir, "${System.currentTimeMillis()}_$fileName")
-                resolver.openInputStream(uri)?.use { input ->
+                val copied = resolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(originalCopy).use { output ->
                         input.copyTo(output)
                     }
+                    true
+                } ?: false
+
+                if (!copied || originalCopy.length() <= 0L) {
+                    Toast.makeText(requireContext(), "Unable to read selected file", Toast.LENGTH_SHORT).show()
+                    return@launch
                 }
 
                 val uploadFile = if (useEncryption) {
@@ -648,10 +648,16 @@ class FilesFragment : Fragment() {
                     return@launch
                 }
 
+                val transferSizeBytes = uploadFile.length()
+                if (transferSizeBytes <= 0L) {
+                    Toast.makeText(requireContext(), "File size not available", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
                 val createRequest = CreateFileTransferRequestDto(
                     fileName = fileName,
                     contentType = contentType,
-                    sizeBytes = sizeBytes,
+                    sizeBytes = transferSizeBytes,
                     senderDeviceId = senderDeviceId,
                     targetDeviceId = targetDeviceId,
                     encryptionEnvelope = envelope
@@ -1046,10 +1052,36 @@ class FilesFragment : Fragment() {
             if (it.moveToFirst()) {
                 val index = it.getColumnIndex(OpenableColumns.SIZE)
                 if (index >= 0) {
-                    return it.getLong(index)
+                    val reported = it.getLong(index)
+                    if (reported > 0) {
+                        return reported
+                    }
                 }
             }
         }
+
+        // Some providers do not report OpenableColumns.SIZE; fall back to descriptor length.
+        val descriptorLength = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        if (descriptorLength > 0) {
+            return descriptorLength
+        }
+
+        // Final fallback: count bytes from stream.
+        resolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var total = 0L
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) {
+                    break
+                }
+                total += read
+            }
+            if (total > 0) {
+                return total
+            }
+        }
+
         return 0
     }
 

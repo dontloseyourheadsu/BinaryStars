@@ -170,7 +170,7 @@ public class MessagingWebSocketHandler
         if (targetDevice == null || targetDevice.UserId != userId)
             return;
 
-        var sentAt = request.SentAt ?? DateTimeOffset.UtcNow;
+        var sentAt = (request.SentAt ?? DateTimeOffset.UtcNow).ToUniversalTime();
         var message = new MessagingMessage(
             Guid.NewGuid().ToString("D"),
             userId,

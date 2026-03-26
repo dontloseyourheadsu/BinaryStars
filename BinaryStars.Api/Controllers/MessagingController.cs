@@ -156,7 +156,7 @@ public class MessagingController : ControllerBase
         if (senderDevice.UserId != userId || targetDevice.UserId != userId)
             return Forbid();
 
-        var sentAt = request.SentAt ?? DateTimeOffset.UtcNow;
+        var sentAt = (request.SentAt ?? DateTimeOffset.UtcNow).ToUniversalTime();
         var message = new MessagingMessage(
             Guid.NewGuid().ToString("D"),
             userId,

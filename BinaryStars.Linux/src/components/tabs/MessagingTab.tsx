@@ -30,7 +30,7 @@ export default function MessagingTab({
   onBackToChats,
   onSendChatMessage,
 }: Props) {
-  const chatTargets = devices.filter((entry) => entry.id !== myDeviceId && entry.isOnline);
+  const chatTargets = devices.filter((entry) => entry.id !== myDeviceId);
 
   return (
     <section className="panel-grid">

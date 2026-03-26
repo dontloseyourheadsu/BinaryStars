@@ -294,7 +294,7 @@ function App() {
         lastMessage,
         name: devices.find((entry) => entry.id === deviceId)?.name ?? deviceId,
       }))
-      .filter((entry) => devices.some((device) => device.id === entry.deviceId && device.id !== myDeviceId && device.isOnline))
+        .filter((entry) => devices.some((device) => device.id === entry.deviceId && device.id !== myDeviceId))
       .sort((left, right) => right.lastMessage.sentAt - left.lastMessage.sentAt);
   }, [devices, messages, myDeviceId]);
 
