@@ -49,6 +49,21 @@ object FileTransferStorage {
         }
     }
 
+    /** Replaces all cached transfers with the provided set. */
+    fun replaceTransfers(transfers: List<LocalFileTransfer>) {
+        val db = dbHelper?.writableDatabase ?: return
+        db.beginTransaction()
+        try {
+            db.delete(TABLE_TRANSFERS, null, null)
+            transfers.forEach { transfer ->
+                upsertTransferInternal(db, transfer)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** Upserts a single transfer. */
     fun upsertTransfer(transfer: LocalFileTransfer) {
         val db = dbHelper?.writableDatabase ?: return

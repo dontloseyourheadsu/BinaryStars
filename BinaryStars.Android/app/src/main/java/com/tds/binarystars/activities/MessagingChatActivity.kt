@@ -25,6 +25,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tds.binarystars.R
 import com.tds.binarystars.adapter.MessagingMessagesAdapter
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.ClearConversationRequestDto
 import com.tds.binarystars.api.SendMessageRequestDto
 import com.tds.binarystars.bluetooth.BluetoothChatListener
 import com.tds.binarystars.bluetooth.BluetoothChatManager
@@ -32,11 +33,11 @@ import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.model.ChatMessage
 import com.tds.binarystars.storage.ChatStorage
+import com.tds.binarystars.util.NetworkUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
-import java.util.UUID
 
 class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, BluetoothChatListener {
     companion object {
@@ -50,6 +51,7 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
     private lateinit var adapter: MessagingMessagesAdapter
     private lateinit var input: EditText
     private lateinit var sendButton: ImageView
+    private lateinit var backButton: ImageView
     private lateinit var clearButton: Button
     private lateinit var titleView: TextView
     private lateinit var bluetoothToggle: SwitchCompat
@@ -99,6 +101,7 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
         recyclerView = findViewById(R.id.rvChatMessages)
         input = findViewById(R.id.etChatInput)
         sendButton = findViewById(R.id.btnSendMessage)
+        backButton = findViewById(R.id.btnBackChat)
         clearButton = findViewById(R.id.btnClearChat)
         titleView = findViewById(R.id.tvChatTitle)
         bluetoothToggle = findViewById(R.id.switchChatBluetooth)
@@ -116,6 +119,10 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
 
         sendButton.setOnClickListener {
             sendMessage()
+        }
+
+        backButton.setOnClickListener {
+            finish()
         }
 
         bluetoothToggle.setOnCheckedChangeListener { _, isChecked ->
@@ -236,15 +243,22 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
      * Loads the initial page of chat history.
      */
     private fun loadInitial() {
-        val loaded = ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
-        messages.clear()
-        messages.addAll(loaded)
-        adapter.notifyDataSetChanged()
+        lifecycleScope.launch {
+            val loaded = if (NetworkUtils.isOnline(this@MessagingChatActivity)) {
+                fetchHistoryFromApi(PAGE_SIZE)
+            } else {
+                ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
+            }
 
-        oldestTimestamp = loaded.firstOrNull()?.sentAt
-        hasMore = loaded.size == PAGE_SIZE
-        if (loaded.isNotEmpty()) {
-            recyclerView.scrollToPosition(messages.lastIndex)
+            messages.clear()
+            messages.addAll(loaded)
+            adapter.notifyDataSetChanged()
+
+            oldestTimestamp = loaded.firstOrNull()?.sentAt
+            hasMore = loaded.size == PAGE_SIZE
+            if (loaded.isNotEmpty()) {
+                recyclerView.scrollToPosition(messages.lastIndex)
+            }
         }
     }
 
@@ -252,12 +266,19 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
      * Reloads the latest messages from storage.
      */
     private fun loadLatest() {
-        val loaded = ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
-        adapter.replaceAll(loaded)
-        oldestTimestamp = loaded.firstOrNull()?.sentAt
-        hasMore = loaded.size == PAGE_SIZE
-        if (loaded.isNotEmpty()) {
-            recyclerView.scrollToPosition(messages.lastIndex)
+        lifecycleScope.launch {
+            val loaded = if (NetworkUtils.isOnline(this@MessagingChatActivity)) {
+                fetchHistoryFromApi(PAGE_SIZE)
+            } else {
+                ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
+            }
+
+            adapter.replaceAll(loaded)
+            oldestTimestamp = loaded.firstOrNull()?.sentAt
+            hasMore = loaded.size == PAGE_SIZE
+            if (loaded.isNotEmpty()) {
+                recyclerView.scrollToPosition(messages.lastIndex)
+            }
         }
     }
 
@@ -265,6 +286,11 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
      * Loads older messages when the user scrolls to the top.
      */
     private fun loadMore() {
+        if (NetworkUtils.isOnline(this)) {
+            hasMore = false
+            return
+        }
+
         if (oldestTimestamp == null) return
         isLoading = true
         val older = ChatStorage.getMessages(deviceId, oldestTimestamp, PAGE_SIZE)
@@ -289,31 +315,8 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
             return
         }
 
-        if (bluetoothEnabled) {
-            if (!bluetoothConnected) {
-                Toast.makeText(this, "Waiting for Bluetooth connection", Toast.LENGTH_SHORT).show()
-                return
-            }
-            val senderDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-            val sentAt = OffsetDateTime.now().toString()
-            val sent = BluetoothChatManager.sendMessage(deviceId, body, sentAt)
-            if (!sent) {
-                Toast.makeText(this, "Bluetooth send failed", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            val localMessage = ChatMessage(
-                id = UUID.randomUUID().toString(),
-                deviceId = deviceId,
-                senderDeviceId = senderDeviceId,
-                body = body,
-                sentAt = OffsetDateTime.parse(sentAt).toInstant().toEpochMilli(),
-                isOutgoing = true
-            )
-            ChatStorage.upsertMessage(localMessage)
-            adapter.append(localMessage)
-            recyclerView.scrollToPosition(messages.lastIndex)
-            input.setText("")
+        if (!NetworkUtils.isOnline(this)) {
+            Toast.makeText(this, "No connection available", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -325,23 +328,6 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
             body = body,
             sentAt = sentAt
         )
-
-        val sentViaSocket = MessagingSocketManager.sendMessage(request)
-        if (sentViaSocket) {
-            val localMessage = ChatMessage(
-                id = UUID.randomUUID().toString(),
-                deviceId = deviceId,
-                senderDeviceId = senderDeviceId,
-                body = body,
-                sentAt = OffsetDateTime.parse(sentAt).toInstant().toEpochMilli(),
-                isOutgoing = true
-            )
-            ChatStorage.upsertMessage(localMessage)
-            adapter.append(localMessage)
-            recyclerView.scrollToPosition(messages.lastIndex)
-            input.setText("")
-            return
-        }
 
         lifecycleScope.launch {
             val response = withContext(Dispatchers.IO) { ApiClient.apiService.sendMessage(request) }
@@ -371,13 +357,59 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
     private fun confirmClearChat() {
         AlertDialog.Builder(this)
             .setTitle("Clear chat")
-            .setMessage("This will remove all messages on this device only.")
+            .setMessage("This will clear conversation history for both devices.")
             .setPositiveButton("Clear") { _, _ ->
-                ChatStorage.clearChat(deviceId)
-                loadInitial()
+                if (!NetworkUtils.isOnline(this)) {
+                    Toast.makeText(this, "No connection available", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                val senderDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                lifecycleScope.launch {
+                    val response = withContext(Dispatchers.IO) {
+                        ApiClient.apiService.clearConversation(
+                            ClearConversationRequestDto(
+                                deviceId = senderDeviceId,
+                                targetDeviceId = deviceId
+                            )
+                        )
+                    }
+
+                    if (response.isSuccessful) {
+                        ChatStorage.clearChat(deviceId)
+                        loadInitial()
+                    } else {
+                        Toast.makeText(this@MessagingChatActivity, "Failed to clear conversation", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private suspend fun fetchHistoryFromApi(limit: Int): List<ChatMessage> {
+        val senderDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        val response = withContext(Dispatchers.IO) {
+            ApiClient.apiService.getMessageHistory(senderDeviceId, deviceId, limit)
+        }
+
+        if (!response.isSuccessful) {
+            return ChatStorage.getMessages(deviceId, null, limit)
+        }
+
+        val mapped = response.body().orEmpty().map { dto ->
+            ChatMessage(
+                id = dto.id,
+                deviceId = if (dto.senderDeviceId.equals(senderDeviceId, true)) dto.targetDeviceId else dto.senderDeviceId,
+                senderDeviceId = dto.senderDeviceId,
+                body = dto.body,
+                sentAt = OffsetDateTime.parse(dto.sentAt).toInstant().toEpochMilli(),
+                isOutgoing = dto.senderDeviceId.equals(senderDeviceId, true)
+            )
+        }
+
+        mapped.forEach { message -> ChatStorage.upsertMessage(message) }
+        return mapped
     }
 
     private fun updateBluetoothUi() {

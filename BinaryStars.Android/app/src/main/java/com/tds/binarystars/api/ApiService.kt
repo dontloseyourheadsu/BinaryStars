@@ -88,7 +88,11 @@ interface ApiService {
     // File transfers
     /** List file transfers for the authenticated user. */
     @GET("files/transfers")
-    suspend fun getFileTransfers(): Response<List<FileTransferSummaryDto>>
+    suspend fun getFileTransfers(@Query("deviceId") deviceId: String): Response<List<FileTransferSummaryDto>>
+
+    /** Clear transfers by scope for a device. */
+    @POST("files/transfers/clear")
+    suspend fun clearFileTransfers(@Body request: ClearFileTransfersRequestDto): Response<Void>
 
     /** List pending transfers for a device. */
     @GET("files/transfers/pending")
@@ -115,6 +119,22 @@ interface ApiService {
     /** Send a device-to-device message. */
     @POST("messaging/send")
     suspend fun sendMessage(@Body request: SendMessageRequestDto): Response<MessagingMessageDto>
+
+    /** List chat summaries for a device. */
+    @GET("messaging/chats")
+    suspend fun getMessagingChats(@Query("deviceId") deviceId: String): Response<List<ChatSummaryDto>>
+
+    /** List message history between two devices. */
+    @GET("messaging/history")
+    suspend fun getMessageHistory(
+        @Query("deviceId") deviceId: String,
+        @Query("targetDeviceId") targetDeviceId: String,
+        @Query("limit") limit: Int = 200
+    ): Response<List<MessagingMessageDto>>
+
+    /** Clear one conversation between two devices. */
+    @POST("messaging/clear")
+    suspend fun clearConversation(@Body request: ClearConversationRequestDto): Response<Void>
 
     // Location
     /** Send a location update. */
