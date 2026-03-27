@@ -592,14 +592,14 @@ class FilesFragment : Fragment() {
         publicKey: String?,
         publicKeyAlgorithm: String?
     ) {
-        val useEncryption = targetType == DeviceTypeDto.Android
-        if (useEncryption && (publicKey.isNullOrBlank() || publicKeyAlgorithm.isNullOrBlank())) {
-            Toast.makeText(requireContext(), "Target device encryption key missing", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val hasUsableAndroidKey = !publicKey.isNullOrBlank() &&
+            publicKeyAlgorithm.equals("RSA", ignoreCase = true) &&
+            publicKey.startsWith("MIIB")
+        val isLikelyLinuxDevice = targetDeviceId.startsWith("linux-", ignoreCase = true)
+        val useEncryption = targetType == DeviceTypeDto.Android && !isLikelyLinuxDevice && hasUsableAndroidKey
 
-        if (useEncryption && !publicKeyAlgorithm.equals("RSA", ignoreCase = true)) {
-            Toast.makeText(requireContext(), "Unsupported device key algorithm", Toast.LENGTH_SHORT).show()
+        if (targetType == DeviceTypeDto.Android && !isLikelyLinuxDevice && !hasUsableAndroidKey) {
+            Toast.makeText(requireContext(), "Target device encryption key missing", Toast.LENGTH_SHORT).show()
             return
         }
 
