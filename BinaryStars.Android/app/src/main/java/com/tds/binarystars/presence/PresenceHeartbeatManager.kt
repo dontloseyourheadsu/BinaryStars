@@ -40,11 +40,15 @@ object PresenceHeartbeatManager {
                         if (deviceDto?.hasPendingNotificationSync == true) {
                             val pullResp = ApiClient.apiService.pullNotifications(deviceId)
                             if (pullResp.isSuccessful) {
-                                val notifications = pullResp.body()?.notifications
-                                notifications?.forEach { msg ->
+                                val instant = pullResp.body()?.instant ?: emptyList()
+                                val ackIds = mutableListOf<String>()
+                                instant.forEach { msg ->
                                     NotificationUtils.showNotification(appContext, msg.title, msg.body)
+                                    ackIds.add(msg.id)
                                 }
-                                ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId))
+                                if (ackIds.isNotEmpty()) {
+                                    ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId, ackIds))
+                                }
                             }
                         }
                     }

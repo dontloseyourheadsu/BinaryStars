@@ -200,6 +200,40 @@ data class ChatSummaryDto(
     val lastSentAt: String
 )
 
+// Notification Models
+
+data class DeviceNotificationMessage(
+    val id: String,
+    val title: String,
+    val body: String,
+    val sentAt: String,
+    val ack: Boolean
+)
+
+data class NotificationsPullResponse(
+    val scheduled: List<DeviceNotificationMessage>,
+    val instant: List<DeviceNotificationMessage>
+)
+
+data class NotificationScheduleResponse(
+    val scheduledCount: Int,
+    val instantCount: Int,
+    val synced: Boolean
+)
+
+data class SendNotificationRequestDto(
+    val senderDeviceId: String,
+    val targetDeviceId: String,
+    val title: String,
+    val body: String,
+    val scheduleAt: String? = null
+)
+
+data class NotificationSyncAckRequestDto(
+    val senderDeviceId: String,
+    val ackMessageIds: List<String>
+)
+
 /** Request payload for clearing one conversation. */
 data class ClearConversationRequestDto(
     val deviceId: String,

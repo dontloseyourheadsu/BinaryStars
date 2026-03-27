@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
 
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         MessagingSocketManager.connect(this, deviceId)
-        PresenceHeartbeatManager.start(deviceId)
+        PresenceHeartbeatManager.start(this, deviceId)
 
         drawerLayout = findViewById(R.id.drawer_layout)
 
@@ -219,7 +219,7 @@ class MainActivity : AppCompatActivity() {
 
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         MessagingSocketManager.connect(this, deviceId)
-        PresenceHeartbeatManager.start(deviceId)
+        PresenceHeartbeatManager.start(this, deviceId)
     }
 
     @SuppressLint("HardwareIds")
