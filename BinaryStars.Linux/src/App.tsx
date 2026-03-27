@@ -592,6 +592,9 @@ function App() {
         setNotificationHistory((prev) => {
           const byId = new Map(prev.map((entry) => [entry.id, entry]));
           payload.notifications.forEach((entry) => {
+            if (!byId.has(entry.id)) {
+              invoke("show_notification", { title: entry.title, body: entry.body }).catch(console.error);
+            }
             byId.set(entry.id, {
               ...entry,
               receivedAt: new Date().toISOString(),
@@ -2114,7 +2117,7 @@ function App() {
 
         {activeTab === "Notifications" && (
           <NotificationsTab
-            devices={devices}
+            devices={devices.filter((d) => d.isOnline || d.id === myDeviceId)}
             selectedTargetDeviceId={notificationTargetDeviceId}
             notificationTitle={notificationTitle}
             notificationBody={notificationBody}

@@ -30,11 +30,22 @@ struct RunningAppItem {
     command_line: String,
 }
 
+#[tauri::command]
+fn show_notification(title: String, body: String) -> Result<(), String> {
+    std::process::Command::new("notify-send")
+        .arg(&title)
+        .arg(&body)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            show_notification,
             get_device_info,
             oauth_get_provider_token,
             get_bluetooth_connected_device_names,
