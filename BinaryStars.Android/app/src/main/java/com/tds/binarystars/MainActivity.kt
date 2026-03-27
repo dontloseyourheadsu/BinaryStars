@@ -84,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         val navMessaging = findViewById<LinearLayout>(R.id.nav_messaging)
         val navMap = findViewById<LinearLayout>(R.id.nav_map)
         val navActions = findViewById<LinearLayout>(R.id.nav_actions)
+        val navNotifications = findViewById<LinearLayout>(R.id.nav_notifications)
         val navSettings = findViewById<LinearLayout>(R.id.nav_settings)
 
         navDevices.setOnClickListener {
@@ -113,6 +114,11 @@ class MainActivity : AppCompatActivity() {
 
         navActions.setOnClickListener {
             loadFragment(ActionsFragment())
+            drawerLayout.closeDrawers()
+        }
+
+        navNotifications.setOnClickListener {
+            loadFragment(com.tds.binarystars.fragments.NotificationsFragment())
             drawerLayout.closeDrawers()
         }
 
