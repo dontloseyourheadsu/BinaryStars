@@ -72,16 +72,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicyName, policy =>
     {
-        policy.WithOrigins(
-                "http://localhost",
-                "http://localhost:1420",
-                "http://127.0.0.1",
-                "http://127.0.0.1:1420",
-                "tauri://localhost",
-                "http://tauri.localhost",
-                "https://tauri.localhost")
+        policy.SetIsOriginAllowed(_ => true) // Allow any origin, useful for LAN IP addresses between devices
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials(); // Often needed for websocket/auth, though AllowCredentials might conflict with AllowAnyOrigin so let's stick to true AllowAnyOrigin without AllowCredentials if possible, or use SetIsOriginAllowed
     });
 });
 

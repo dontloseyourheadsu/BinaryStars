@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
+import kotlinx.coroutines.isActive
 
 class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, BluetoothChatListener {
     companion object {
@@ -184,6 +185,7 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
         super.onResume()
         MessagingSocketManager.addListener(this)
         BluetoothChatManager.addListener(this)
+        startPolling()
     }
 
     /**
@@ -193,6 +195,56 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
         super.onPause()
         MessagingSocketManager.removeListener(this)
         BluetoothChatManager.removeListener(this)
+        stopPolling()
+    }
+
+    private var pollingJob: kotlinx.coroutines.Job? = null
+
+    private fun startPolling() {
+        if (pollingJob != null) return
+        pollingJob = lifecycleScope.launch {
+            while (isActive) {
+                kotlinx.coroutines.delay(3000)
+                loadLatestSilently()
+            }
+        }
+    }
+
+    private fun stopPolling() {
+        pollingJob?.cancel()
+        pollingJob = null
+    }
+
+    /**
+     * Reloads the latest messages silently for polling without disrupting scroll.
+     */
+    private suspend fun loadLatestSilently() {
+        val loaded = try {
+            if (NetworkUtils.isOnline(this@MessagingChatActivity)) {
+                fetchHistoryFromApi(PAGE_SIZE)
+            } else {
+                ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
+            }
+        } catch (e: Exception) {
+            emptyList<ChatMessage>()
+        }
+
+        if (loaded.isEmpty() && messages.isEmpty()) {
+            return
+        }
+
+        val currentLast = messages.lastOrNull()
+        val newLast = loaded.lastOrNull()
+
+        if (messages.size != loaded.size || currentLast?.id != newLast?.id) {
+            val shouldScroll = !recyclerView.canScrollVertically(1)
+            adapter.replaceAll(loaded)
+            oldestTimestamp = loaded.firstOrNull()?.sentAt
+            hasMore = loaded.size == PAGE_SIZE
+            if (shouldScroll && loaded.isNotEmpty()) {
+                recyclerView.scrollToPosition(messages.lastIndex)
+            }
+        }
     }
 
     override fun onStart() {

@@ -181,11 +181,21 @@ public class MessagingWebSocketHandler
 
         await PersistMessageAsync(message, cancellationToken);
 
+        var delivered = false;
         if (_connectionManager.TryGet(request.TargetDeviceId, out var connection) && connection?.Socket.State == WebSocketState.Open)
         {
-            await SendEnvelopeAsync(connection.Socket, "message", message, cancellationToken);
+            try
+            {
+                await SendEnvelopeAsync(connection.Socket, "message", message, cancellationToken);
+                delivered = true;
+            }
+            catch
+            {
+                delivered = false;
+            }
         }
-        else
+
+        if (!delivered)
         {
             var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
             var kafkaToken = authMode == KafkaAuthMode.OauthBearer ? oauthToken : null;

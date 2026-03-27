@@ -52,6 +52,18 @@ interface ApiService {
     @POST("devices/{id}/heartbeat")
     suspend fun sendDeviceHeartbeat(@Path("id") deviceId: String): Response<DeviceDto>
 
+    /** Pull pending notifications and schedules. */
+    @GET("notifications/pull")
+    suspend fun pullNotifications(@Query("deviceId") deviceId: String): Response<NotificationsPullResponse>
+
+    /** Acknowledge notification sync. */
+    @POST("notifications/ack")
+    suspend fun ackNotificationSync(@Body request: NotificationSyncAckRequestDto): Response<Unit>
+
+    /** Send a direct notification. */
+    @POST("notifications/send")
+    suspend fun sendNotification(@Body request: SendNotificationRequestDto): Response<DeviceNotificationMessage>
+
     /** Send a remote action command to a target device. */
     @POST("actions/send")
     suspend fun sendAction(@Body request: SendActionRequestDto): Response<DeviceActionCommandDto>

@@ -4,6 +4,7 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "./App.css";
+import { invoke } from "@tauri-apps/api/core";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
 import {
@@ -592,6 +593,9 @@ function App() {
         setNotificationHistory((prev) => {
           const byId = new Map(prev.map((entry) => [entry.id, entry]));
           payload.notifications.forEach((entry) => {
+            if (!byId.has(entry.id)) {
+              invoke("show_notification", { title: entry.title, body: entry.body }).catch(console.error);
+            }
             byId.set(entry.id, {
               ...entry,
               receivedAt: new Date().toISOString(),
@@ -1352,6 +1356,12 @@ function App() {
     }
 
     void refreshConversationHistory(selectedChatDeviceId);
+
+    const intervalId = setInterval(() => {
+      void refreshConversationHistory(selectedChatDeviceId);
+    }, 3000);
+
+    return () => clearInterval(intervalId);
   }, [isAuthed, myDeviceId, online, selectedChatDeviceId]);
 
   const openDeviceDetail = (deviceId: string): void => {
@@ -2108,7 +2118,7 @@ function App() {
 
         {activeTab === "Notifications" && (
           <NotificationsTab
-            devices={devices}
+            devices={devices.filter((d) => d.isOnline || d.id === myDeviceId)}
             selectedTargetDeviceId={notificationTargetDeviceId}
             notificationTitle={notificationTitle}
             notificationBody={notificationBody}

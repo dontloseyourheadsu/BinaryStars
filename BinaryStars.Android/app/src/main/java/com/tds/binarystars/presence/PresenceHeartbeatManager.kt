@@ -1,6 +1,9 @@
 package com.tds.binarystars.presence
 
+import android.content.Context
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.NotificationSyncAckRequestDto
+import com.tds.binarystars.util.NotificationUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,18 +22,36 @@ object PresenceHeartbeatManager {
     private var heartbeatJob: Job? = null
     private var currentDeviceId: String? = null
 
-    fun start(deviceId: String) {
+    fun start(context: Context, deviceId: String) {
         if (heartbeatJob != null && currentDeviceId == deviceId) {
             return
         }
 
         stop()
         currentDeviceId = deviceId
+        val appContext = context.applicationContext
         heartbeatScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         heartbeatJob = heartbeatScope?.launch {
             while (isActive) {
                 try {
-                    ApiClient.apiService.sendDeviceHeartbeat(deviceId)
+                    val response = ApiClient.apiService.sendDeviceHeartbeat(deviceId)
+                    if (response.isSuccessful) {
+                        val deviceDto = response.body()
+                        if (deviceDto?.hasPendingNotificationSync == true) {
+                            val pullResp = ApiClient.apiService.pullNotifications(deviceId)
+                            if (pullResp.isSuccessful) {
+                                val instant = pullResp.body()?.instant ?: emptyList()
+                                val ackIds = mutableListOf<String>()
+                                instant.forEach { msg ->
+                                    NotificationUtils.showNotification(appContext, msg.title, msg.body)
+                                    ackIds.add(msg.id)
+                                }
+                                if (ackIds.isNotEmpty()) {
+                                    ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId, ackIds))
+                                }
+                            }
+                        }
+                    }
                 } catch (_: Exception) {
                 }
                 delay(HEARTBEAT_INTERVAL_MS)

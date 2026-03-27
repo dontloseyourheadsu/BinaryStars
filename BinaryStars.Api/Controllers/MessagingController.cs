@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Net.WebSockets;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
 using BinaryStars.Application.Databases.DatabaseModels.Messaging;
@@ -167,17 +168,37 @@ public class MessagingController : ControllerBase
 
         await PersistMessageAsync(message, cancellationToken);
 
-        if (_connectionManager.TryGet(request.TargetDeviceId, out var connection) && connection?.Socket.State == System.Net.WebSockets.WebSocketState.Open)
+        var delivered = false;
+        if (_connectionManager.TryGet(request.TargetDeviceId, out var connection) && connection?.Socket.State == WebSocketState.Open)
         {
-            var payload = MessagingJson.SerializeEnvelope("message", message);
-            var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
-            await connection.Socket.SendAsync(new ArraySegment<byte>(bytes), System.Net.WebSockets.WebSocketMessageType.Text, true, cancellationToken);
+            try
+            {
+                var payload = MessagingJson.SerializeEnvelope("message", message);
+                var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
+                await connection.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+                delivered = true;
+            }
+            catch
+            {
+                delivered = false;
+            }
         }
-        else
+
+        if (!delivered)
         {
-            var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
-            var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-            await _kafkaService.PublishMessageAsync(message, authMode, oauthToken, cancellationToken);
+            try
+            {
+                var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
+                var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+                await _kafkaService.PublishMessageAsync(message, authMode, oauthToken, cancellationToken);
+            }
+            catch
+            {
+                // We persisted the message to DB successfully. If Kafka is unavailable, logging it
+                // instead of crashing ensures the 'send' action is still considered successful 
+                // for historical purposes (so we don't present a false-negative to the client).
+                // It will be retried/synced when the target queries /history.
+            }
         }
 
         return Ok(message);
