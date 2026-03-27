@@ -1352,6 +1352,12 @@ function App() {
     }
 
     void refreshConversationHistory(selectedChatDeviceId);
+
+    const intervalId = setInterval(() => {
+      void refreshConversationHistory(selectedChatDeviceId);
+    }, 3000);
+
+    return () => clearInterval(intervalId);
   }, [isAuthed, myDeviceId, online, selectedChatDeviceId]);
 
   const openDeviceDetail = (deviceId: string): void => {
