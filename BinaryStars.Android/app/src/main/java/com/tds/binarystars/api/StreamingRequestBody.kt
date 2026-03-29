@@ -8,10 +8,15 @@ import java.io.InputStream
 
 class StreamingRequestBody(
     private val contentType: String,
-    private val inputStream: InputStream
+    private val inputStream: InputStream,
+    private val expectedLength: Long = -1L
 ) : RequestBody() {
     /** Returns the media type for the request body. */
     override fun contentType() = contentType.toMediaTypeOrNull()
+    
+    override fun contentLength(): Long {
+        return expectedLength
+    }
 
     /** Streams the input into the sink without buffering the whole file. */
     override fun writeTo(sink: BufferedSink) {

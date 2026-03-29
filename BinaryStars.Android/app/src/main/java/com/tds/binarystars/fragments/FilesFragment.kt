@@ -672,7 +672,7 @@ class FilesFragment : Fragment() {
                 val transferId = createResponse.body()!!.id
                 FileTransferLocalStore.setLocalPath(requireContext(), transferId, originalCopy.absolutePath, "sent")
 
-                val uploadBody = StreamingRequestBody("application/octet-stream", FileInputStream(uploadFile))
+                val uploadBody = StreamingRequestBody("application/octet-stream", FileInputStream(uploadFile), uploadFile.length())
                 val uploadResponse = withContext(Dispatchers.IO) { ApiClient.apiService.uploadFileTransfer(transferId, uploadBody) }
 
                 if (!uploadResponse.isSuccessful) {
