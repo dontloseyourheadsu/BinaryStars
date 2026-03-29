@@ -17,6 +17,12 @@ using BinaryStars.Api.Middleware;
 var builder = WebApplication.CreateBuilder(args);
 const string CorsPolicyName = "BinaryStarsClient";
 
+// Configure Kestrel to allow large file uploads (or handle unlimited request bodies)
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    serverOptions.Limits.MaxRequestBodySize = null;
+});
+
 // Configure Serilog
 builder.Host.UseSerilog((context, configuration) =>
 {
@@ -135,6 +141,19 @@ builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
+
+app.UseSerilogRequestLogging(options =>
+{
+    options.GetLevel = (httpContext, elapsed, ex) =>
+    {
+        if (httpContext.Request.Path.Value?.EndsWith("/heartbeat") == true ||
+            httpContext.Request.Path.Value?.EndsWith("/telemetry") == true)
+        {
+            return Serilog.Events.LogEventLevel.Verbose;
+        }
+        return ex == null && httpContext.Response.StatusCode < 500 ? Serilog.Events.LogEventLevel.Information : Serilog.Events.LogEventLevel.Error;
+    };
+});
 
 // Apply EF Core migrations in development
 if (app.Environment.IsDevelopment())
