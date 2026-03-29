@@ -77,14 +77,6 @@ Release binary path:
 
 ### Legacy elevated helper
 
-From `BinaryStars.Linux`:
-
-```bash
-./scripts/run-elevated-release.sh
-```
-
-This script is deprecated and now starts normal release mode.
-
 ## Recommended workflow (simple)
 
 From `BinaryStars.Linux`:
