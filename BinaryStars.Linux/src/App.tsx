@@ -1169,6 +1169,8 @@ function App() {
       return;
     }
 
+    console.log(`[FileTransfer] Initiating send of file: ${file.name} (${file.size} bytes) to device ${targetDeviceId}`);
+
     const created = await api.createTransfer({
       fileName: file.name,
       contentType: file.type || "application/octet-stream",
@@ -1177,7 +1179,10 @@ function App() {
       targetDeviceId,
       encryptionEnvelope: JSON.stringify({ alg: "none" }),
     });
+    
+    console.log(`[FileTransfer] Transfer created with ID: ${created.id}. Starting upload...`);
     await api.uploadTransfer(created.id, file);
+    console.log(`[FileTransfer] Upload completed for transfer ID: ${created.id}`);
     await refreshTransfers();
   };
 
@@ -1208,14 +1213,22 @@ function App() {
       return;
     }
 
-    const blob = await api.downloadTransfer(transfer.id, myDeviceId);
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = transfer.fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    await refreshTransfers();
+    console.log(`[FileTransfer] Initiating download for transfer ID: ${transfer.id}, File: ${transfer.fileName}`);
+    try {
+      const blob = await api.downloadTransfer(transfer.id, myDeviceId);
+      console.log(`[FileTransfer] Download successful, blob size: ${blob.size} bytes`);
+      
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = transfer.fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      await refreshTransfers();
+    } catch (error) {
+      console.error(`[FileTransfer] Error downloading transfer ID: ${transfer.id}`, error);
+      setError("Failed to download file");
+    }
   };
 
   const rejectTransfer = async (transfer: FileTransfer): Promise<void> => {
@@ -1223,6 +1236,7 @@ function App() {
       return;
     }
 
+    console.log(`[FileTransfer] Rejecting transfer ID: ${transfer.id}`);
     await api.rejectTransfer(transfer.id, myDeviceId);
     await refreshTransfers();
   };
