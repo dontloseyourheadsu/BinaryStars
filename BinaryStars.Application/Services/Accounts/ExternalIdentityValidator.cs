@@ -86,8 +86,8 @@ public class ExternalIdentityValidator
 
             return ExternalIdentityValidationResult.Success(payload.Email, payload.Subject);
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
+            _logger.LogWarning("Exception caught.");
             _logger.LogError(ex, "Google token validation failed");
             return ExternalIdentityValidationResult.Failure($"Google token validation failed: {ex.Message}");
         }
@@ -148,8 +148,8 @@ public class ExternalIdentityValidator
 
             return ExternalIdentityValidationResult.Success(email, subject);
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
+            _logger.LogWarning("Exception caught.");
             _logger.LogError(ex, "Microsoft token validation failed");
             return ExternalIdentityValidationResult.Failure($"Microsoft token validation failed: {ex.Message}");
         }

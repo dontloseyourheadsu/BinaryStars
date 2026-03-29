@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Api.Services;
 
 namespace BinaryStars.Api.Middleware;
@@ -7,6 +8,8 @@ namespace BinaryStars.Api.Middleware;
 /// </summary>
 public sealed class TokenRefreshMiddleware
 {
+    private readonly ILogger<TokenRefreshMiddleware> _logger;
+
     private const string HeaderAccessToken = "X-Access-Token";
     private const string HeaderAccessTokenExpiresIn = "X-Access-Token-ExpiresIn";
 
@@ -16,8 +19,10 @@ public sealed class TokenRefreshMiddleware
     /// Initializes a new instance of the <see cref="TokenRefreshMiddleware"/> class.
     /// </summary>
     /// <param name="next">The next middleware in the pipeline.</param>
-    public TokenRefreshMiddleware(RequestDelegate next)
+    public TokenRefreshMiddleware(RequestDelegate next, ILogger<TokenRefreshMiddleware> logger)
     {
+        _logger = logger;
+
         _next = next;
     }
 

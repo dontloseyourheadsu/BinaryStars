@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using BinaryStars.Application.Databases.DatabaseModels.Locations;
@@ -17,6 +18,8 @@ namespace BinaryStars.Application.Databases.DatabaseContexts;
 /// </summary>
 public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<Guid>, Guid>
 {
+    private readonly ILogger<ApplicationDbContext> _logger;
+
     /// <summary>
     /// Gets or sets the device records.
     /// </summary>
@@ -51,9 +54,11 @@ public class ApplicationDbContext : IdentityDbContext<UserDbModel, IdentityRole<
     /// Initializes a new instance of the <see cref="ApplicationDbContext"/> class.
     /// </summary>
     /// <param name="options">The context options.</param>
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, ILogger<ApplicationDbContext> logger)
         : base(options)
     {
+        _logger = logger;
+
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Messaging;
 using Microsoft.EntityFrameworkCore;
@@ -9,13 +10,17 @@ namespace BinaryStars.Application.Databases.Repositories.Messaging;
 /// </summary>
 public class MessageHistoryRepository : IMessageHistoryRepository
 {
+    private readonly ILogger<MessageHistoryRepository> _logger;
+
     private readonly ApplicationDbContext _context;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MessageHistoryRepository"/> class.
     /// </summary>
-    public MessageHistoryRepository(ApplicationDbContext context)
+    public MessageHistoryRepository(ApplicationDbContext context, ILogger<MessageHistoryRepository> logger)
     {
+        _logger = logger;
+
         _context = context;
     }
 

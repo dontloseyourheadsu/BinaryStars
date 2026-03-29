@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -14,14 +15,18 @@ namespace BinaryStars.Api.Services;
 /// </summary>
 public class JwtTokenService
 {
+    private readonly ILogger<JwtTokenService> _logger;
+
     private readonly JwtSettings _settings;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="JwtTokenService"/> class.
     /// </summary>
     /// <param name="options">The JWT settings.</param>
-    public JwtTokenService(IOptions<JwtSettings> options)
+    public JwtTokenService(IOptions<JwtSettings> options, ILogger<JwtTokenService> logger)
     {
+        _logger = logger;
+
         _settings = options.Value;
     }
 

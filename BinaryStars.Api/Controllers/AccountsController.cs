@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using BinaryStars.Api.Models;
 using BinaryStars.Application.Services.Accounts;
@@ -14,14 +15,18 @@ namespace BinaryStars.Api.Controllers;
 [Authorize]
 public class AccountsController : ControllerBase
 {
+    private readonly ILogger<AccountsController> _logger;
+
     private readonly IAccountsReadService _accountsReadService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AccountsController"/> class.
     /// </summary>
     /// <param name="accountsReadService">The account read service.</param>
-    public AccountsController(IAccountsReadService accountsReadService)
+    public AccountsController(IAccountsReadService accountsReadService, ILogger<AccountsController> logger)
     {
+        _logger = logger;
+
         _accountsReadService = accountsReadService;
     }
 

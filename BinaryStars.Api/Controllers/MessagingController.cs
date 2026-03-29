@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System.Net.WebSockets;
 using BinaryStars.Api.Models;
@@ -19,6 +20,8 @@ namespace BinaryStars.Api.Controllers;
 [Authorize]
 public class MessagingController : ControllerBase
 {
+    private readonly ILogger<MessagingController> _logger;
+
     private const int MaxMessageLength = 500;
     private readonly MessagingConnectionManager _connectionManager;
     private readonly MessagingKafkaService _kafkaService;
@@ -39,8 +42,10 @@ public class MessagingController : ControllerBase
         MessagingKafkaService kafkaService,
         IDeviceRepository deviceRepository,
         IAccountRepository accountRepository,
-        IMessageHistoryRepository messageHistoryRepository)
+        IMessageHistoryRepository messageHistoryRepository, ILogger<MessagingController> logger)
     {
+        _logger = logger;
+
         _connectionManager = connectionManager;
         _kafkaService = kafkaService;
         _deviceRepository = deviceRepository;

@@ -73,8 +73,8 @@ public class FileTransferCleanupJob
                 File.Delete(path);
             }
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
+            _logger.LogWarning("Exception caught.");
             _logger.LogDebug(ex, "Failed to delete stored transfer file for {TransferId}", transferId);
         }
     }

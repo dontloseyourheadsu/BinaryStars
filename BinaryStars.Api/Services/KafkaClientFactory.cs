@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.IdentityModel.Tokens.Jwt;
 using BinaryStars.Api.Models;
 using Confluent.Kafka;
@@ -10,14 +11,18 @@ namespace BinaryStars.Api.Services;
 /// </summary>
 public class KafkaClientFactory
 {
+    private readonly ILogger<KafkaClientFactory> _logger;
+
     private readonly KafkaSettings _settings;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="KafkaClientFactory"/> class.
     /// </summary>
     /// <param name="settings">Kafka settings.</param>
-    public KafkaClientFactory(IOptions<KafkaSettings> settings)
+    public KafkaClientFactory(IOptions<KafkaSettings> settings, ILogger<KafkaClientFactory> logger)
     {
+        _logger = logger;
+
         _settings = settings.Value;
     }
 
@@ -151,6 +156,7 @@ public class KafkaClientFactory
         }
         catch (Exception)
         {
+            // Can't use instance logger here
             return (DateTimeOffset.UtcNow.AddMinutes(30), "binarystars");
         }
     }

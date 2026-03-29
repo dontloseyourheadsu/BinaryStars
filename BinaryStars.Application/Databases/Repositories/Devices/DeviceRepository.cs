@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using Microsoft.EntityFrameworkCore;
@@ -9,14 +10,18 @@ namespace BinaryStars.Application.Databases.Repositories.Devices;
 /// </summary>
 public class DeviceRepository : IDeviceRepository
 {
+    private readonly ILogger<DeviceRepository> _logger;
+
     private readonly ApplicationDbContext _context;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceRepository"/> class.
     /// </summary>
     /// <param name="context">The application database context.</param>
-    public DeviceRepository(ApplicationDbContext context)
+    public DeviceRepository(ApplicationDbContext context, ILogger<DeviceRepository> logger)
     {
+        _logger = logger;
+
         _context = context;
     }
 

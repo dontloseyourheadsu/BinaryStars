@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
@@ -17,6 +18,8 @@ namespace BinaryStars.Api.Controllers;
 [Authorize]
 public class NotificationsController : ControllerBase
 {
+    private readonly ILogger<NotificationsController> _logger;
+
     private readonly INotificationsReadService _notificationsReadService;
     private readonly INotificationsWriteService _notificationsWriteService;
     private readonly IDeviceRepository _deviceRepository;
@@ -31,8 +34,10 @@ public class NotificationsController : ControllerBase
         INotificationsWriteService notificationsWriteService,
         IDeviceRepository deviceRepository,
         IAccountRepository accountRepository,
-        MessagingKafkaService kafkaService)
+        MessagingKafkaService kafkaService, ILogger<NotificationsController> logger)
     {
+        _logger = logger;
+
         _notificationsReadService = notificationsReadService;
         _notificationsWriteService = notificationsWriteService;
         _deviceRepository = deviceRepository;

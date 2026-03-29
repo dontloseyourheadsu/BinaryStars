@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BinaryStars.Application.Services.Notes;
@@ -13,6 +14,8 @@ namespace BinaryStars.Api.Controllers;
 [Authorize]
 public class NotesController : ControllerBase
 {
+    private readonly ILogger<NotesController> _logger;
+
     private readonly INotesReadService _notesReadService;
     private readonly INotesWriteService _notesWriteService;
 
@@ -21,8 +24,10 @@ public class NotesController : ControllerBase
     /// </summary>
     /// <param name="notesReadService">The note read service.</param>
     /// <param name="notesWriteService">The note write service.</param>
-    public NotesController(INotesReadService notesReadService, INotesWriteService notesWriteService)
+    public NotesController(INotesReadService notesReadService, INotesWriteService notesWriteService, ILogger<NotesController> logger)
     {
+        _logger = logger;
+
         _notesReadService = notesReadService;
         _notesWriteService = notesWriteService;
     }

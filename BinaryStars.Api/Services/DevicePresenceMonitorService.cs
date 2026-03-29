@@ -39,8 +39,8 @@ public sealed class DevicePresenceMonitorService : BackgroundService
             {
                 await SweepAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
-            {
+            catch (OperationCanceledException) {
+            _logger.LogWarning("Exception caught.");
                 // Ignore cancellation.
             }
             catch (Exception exception)

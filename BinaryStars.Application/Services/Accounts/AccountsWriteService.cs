@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Validators.Accounts;
@@ -42,6 +43,8 @@ public interface IAccountsWriteService
 /// </summary>
 public class AccountsWriteService : IAccountsWriteService
 {
+    private readonly ILogger<AccountsWriteService> _logger;
+
     private readonly IAccountRepository _accountRepository;
     private readonly AuthValidator _validator;
     private readonly ExternalIdentityValidator _identityValidator;
@@ -49,8 +52,10 @@ public class AccountsWriteService : IAccountsWriteService
     public AccountsWriteService(
         IAccountRepository accountRepository,
         AuthValidator validator,
-        ExternalIdentityValidator identityValidator)
+        ExternalIdentityValidator identityValidator, ILogger<AccountsWriteService> logger)
     {
+        _logger = logger;
+
         _accountRepository = accountRepository;
         _validator = validator;
         _identityValidator = identityValidator;

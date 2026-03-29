@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Services.Locations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,8 @@ namespace BinaryStars.Api.Controllers;
 [Authorize]
 public class LocationsController : ControllerBase
 {
+    private readonly ILogger<LocationsController> _logger;
+
     private readonly ILocationHistoryReadService _readService;
     private readonly ILocationHistoryWriteService _writeService;
     private readonly MessagingConnectionManager _connectionManager;
@@ -31,8 +34,10 @@ public class LocationsController : ControllerBase
         ILocationHistoryReadService readService,
         ILocationHistoryWriteService writeService,
         MessagingConnectionManager connectionManager,
-        DeviceLiveLocationCache liveLocationCache)
+        DeviceLiveLocationCache liveLocationCache, ILogger<LocationsController> logger)
     {
+        _logger = logger;
+
         _readService = readService;
         _writeService = writeService;
         _connectionManager = connectionManager;

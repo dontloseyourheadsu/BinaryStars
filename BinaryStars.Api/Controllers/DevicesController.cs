@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BinaryStars.Application.Services.Devices;
@@ -18,6 +19,8 @@ namespace BinaryStars.Api.Controllers;
 [Authorize] // Ensure authentication is required
 public class DevicesController : ControllerBase
 {
+    private readonly ILogger<DevicesController> _logger;
+
     private readonly IDevicesReadService _devicesReadService;
     private readonly IDevicesWriteService _devicesWriteService;
     private readonly MessagingKafkaService _messagingKafkaService;
@@ -37,8 +40,10 @@ public class DevicesController : ControllerBase
         IDevicesWriteService devicesWriteService,
         MessagingKafkaService messagingKafkaService,
         MessagingConnectionManager connectionManager,
-        IAccountRepository accountRepository)
+        IAccountRepository accountRepository, ILogger<DevicesController> logger)
     {
+        _logger = logger;
+
         _devicesReadService = devicesReadService;
         _devicesWriteService = devicesWriteService;
         _messagingKafkaService = messagingKafkaService;

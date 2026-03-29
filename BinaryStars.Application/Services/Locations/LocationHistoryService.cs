@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseModels.Locations;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Locations;
@@ -72,14 +73,18 @@ public interface ILocationHistoryReadService
 /// </summary>
 public class LocationHistoryService : ILocationHistoryWriteService, ILocationHistoryReadService
 {
+    private readonly ILogger<LocationHistoryService> _logger;
+
     private const int DefaultLimit = 50;
     private static readonly TimeSpan HistorySpacing = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan DetailedRetentionWindow = TimeSpan.FromDays(1);
     private readonly ILocationHistoryRepository _repository;
     private readonly IDeviceRepository _deviceRepository;
 
-    public LocationHistoryService(ILocationHistoryRepository repository, IDeviceRepository deviceRepository)
+    public LocationHistoryService(ILocationHistoryRepository repository, IDeviceRepository deviceRepository, ILogger<LocationHistoryService> logger)
     {
+        _logger = logger;
+
         _repository = repository;
         _deviceRepository = deviceRepository;
     }

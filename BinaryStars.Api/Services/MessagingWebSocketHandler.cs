@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.WebSockets;
 using System.Security.Claims;
@@ -16,6 +17,8 @@ namespace BinaryStars.Api.Services;
 /// </summary>
 public class MessagingWebSocketHandler
 {
+    private readonly ILogger<MessagingWebSocketHandler> _logger;
+
     private const int MaxMessageLength = 500;
     private readonly MessagingConnectionManager _connectionManager;
     private readonly MessagingKafkaService _kafkaService;
@@ -36,8 +39,10 @@ public class MessagingWebSocketHandler
         MessagingKafkaService kafkaService,
         IDeviceRepository deviceRepository,
         IAccountRepository accountRepository,
-        IMessageHistoryRepository messageHistoryRepository)
+        IMessageHistoryRepository messageHistoryRepository, ILogger<MessagingWebSocketHandler> logger)
     {
+        _logger = logger;
+
         _connectionManager = connectionManager;
         _kafkaService = kafkaService;
         _deviceRepository = deviceRepository;

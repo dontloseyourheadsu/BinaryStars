@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Mappers.Accounts;
 using BinaryStars.Domain;
@@ -24,14 +25,18 @@ public interface IAccountsReadService
 /// </summary>
 public class AccountsReadService : IAccountsReadService
 {
+    private readonly ILogger<AccountsReadService> _logger;
+
     private readonly IAccountRepository _accountRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AccountsReadService"/> class.
     /// </summary>
     /// <param name="accountRepository">Repository for account data.</param>
-    public AccountsReadService(IAccountRepository accountRepository)
+    public AccountsReadService(IAccountRepository accountRepository, ILogger<AccountsReadService> logger)
     {
+        _logger = logger;
+
         _accountRepository = accountRepository;
     }
 
