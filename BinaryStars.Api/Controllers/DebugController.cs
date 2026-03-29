@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Mvc;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.Extensions.Hosting;
@@ -11,14 +12,18 @@ namespace BinaryStars.Api.Controllers;
 [Route("api/[controller]")]
 public class DebugController : ControllerBase
 {
+    private readonly ILogger<DebugController> _logger;
+
     private readonly IHostEnvironment _env;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DebugController"/> class.
     /// </summary>
     /// <param name="env">The hosting environment.</param>
-    public DebugController(IHostEnvironment env)
+    public DebugController(IHostEnvironment env, ILogger<DebugController> logger)
     {
+        _logger = logger;
+
         _env = env;
     }
 
@@ -48,8 +53,8 @@ public class DebugController : ControllerBase
 
             return Ok(new { header, payload });
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
+            _logger.LogWarning("Exception caught.");
             return BadRequest(new { error = ex.Message });
         }
     }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseModels.Devices;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Notes;
@@ -93,6 +94,8 @@ public interface IDevicesWriteService
 /// </summary>
 public class DevicesWriteService : IDevicesWriteService
 {
+    private readonly ILogger<DevicesWriteService> _logger;
+
     private readonly IDeviceRepository _deviceRepository;
     private readonly INotesRepository _notesRepository;
     private readonly IFileTransferRepository _fileTransferRepository;
@@ -101,8 +104,10 @@ public class DevicesWriteService : IDevicesWriteService
     public DevicesWriteService(
         IDeviceRepository deviceRepository,
         INotesRepository notesRepository,
-        IFileTransferRepository fileTransferRepository)
+        IFileTransferRepository fileTransferRepository, ILogger<DevicesWriteService> logger)
     {
+        _logger = logger;
+
         _deviceRepository = deviceRepository;
         _notesRepository = notesRepository;
         _fileTransferRepository = fileTransferRepository;

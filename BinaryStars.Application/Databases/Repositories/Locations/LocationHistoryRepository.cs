@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Locations;
 using Microsoft.EntityFrameworkCore;
@@ -10,14 +11,18 @@ namespace BinaryStars.Application.Databases.Repositories.Locations;
 /// </summary>
 public class LocationHistoryRepository : ILocationHistoryRepository
 {
+    private readonly ILogger<LocationHistoryRepository> _logger;
+
     private readonly ApplicationDbContext _context;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LocationHistoryRepository"/> class.
     /// </summary>
     /// <param name="context">The application database context.</param>
-    public LocationHistoryRepository(ApplicationDbContext context)
+    public LocationHistoryRepository(ApplicationDbContext context, ILogger<LocationHistoryRepository> logger)
     {
+        _logger = logger;
+
         _context = context;
     }
 

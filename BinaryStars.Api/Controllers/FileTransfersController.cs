@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System.Text;
 using BinaryStars.Api.Models;
@@ -20,6 +21,8 @@ namespace BinaryStars.Api.Controllers;
 [Authorize]
 public class FileTransfersController : ControllerBase
 {
+    private readonly ILogger<FileTransfersController> _logger;
+
     private readonly IFileTransfersReadService _readService;
     private readonly IFileTransfersWriteService _writeService;
     private readonly IFileTransferRepository _repository;
@@ -45,8 +48,10 @@ public class FileTransfersController : ControllerBase
         IAccountRepository accountRepository,
         FileTransferKafkaService kafkaService,
         IOptions<FileTransferSettings> settings,
-        IOptions<KafkaSettings> kafkaSettings)
+        IOptions<KafkaSettings> kafkaSettings, ILogger<FileTransfersController> logger)
     {
+        _logger = logger;
+
         _readService = readService;
         _writeService = writeService;
         _repository = repository;
@@ -265,8 +270,8 @@ public class FileTransfersController : ControllerBase
             await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Downloaded, null, DateTimeOffset.UtcNow, cancellationToken);
             return new EmptyResult();
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
+            _logger.LogWarning("Exception caught.");
             await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Failed, ex.Message, null, cancellationToken);
             return StatusCode(500, new[] { "Failed to stream transfer." });
         }

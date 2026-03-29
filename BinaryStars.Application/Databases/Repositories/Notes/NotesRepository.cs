@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Notes;
 using Microsoft.EntityFrameworkCore;
@@ -9,14 +10,18 @@ namespace BinaryStars.Application.Databases.Repositories.Notes;
 /// </summary>
 public class NotesRepository : INotesRepository
 {
+    private readonly ILogger<NotesRepository> _logger;
+
     private readonly ApplicationDbContext _context;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NotesRepository"/> class.
     /// </summary>
     /// <param name="context">The application database context.</param>
-    public NotesRepository(ApplicationDbContext context)
+    public NotesRepository(ApplicationDbContext context, ILogger<NotesRepository> logger)
     {
+        _logger = logger;
+
         _context = context;
     }
 

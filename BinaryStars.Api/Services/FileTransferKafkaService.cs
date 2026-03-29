@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Text;
 using BinaryStars.Api.Models;
 using BinaryStars.Application.Databases.DatabaseModels.Transfers;
@@ -20,6 +21,8 @@ public record FileTransferKafkaPublishResult(int PacketCount, int? Partition, lo
 /// </summary>
 public class FileTransferKafkaService
 {
+    private readonly ILogger<FileTransferKafkaService> _logger;
+
     private readonly KafkaSettings _settings;
     private readonly KafkaClientFactory _clientFactory;
 
@@ -28,8 +31,10 @@ public class FileTransferKafkaService
     /// </summary>
     /// <param name="settings">Kafka settings.</param>
     /// <param name="clientFactory">Kafka client factory.</param>
-    public FileTransferKafkaService(IOptions<KafkaSettings> settings, KafkaClientFactory clientFactory)
+    public FileTransferKafkaService(IOptions<KafkaSettings> settings, KafkaClientFactory clientFactory, ILogger<FileTransferKafkaService> logger)
     {
+        _logger = logger;
+
         _settings = settings.Value;
         _clientFactory = clientFactory;
     }

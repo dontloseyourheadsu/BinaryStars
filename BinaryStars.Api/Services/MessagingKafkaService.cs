@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using BinaryStars.Api.Models;
 using Confluent.Kafka;
@@ -10,6 +11,8 @@ namespace BinaryStars.Api.Services;
 /// </summary>
 public class MessagingKafkaService
 {
+    private readonly ILogger<MessagingKafkaService> _logger;
+
     private readonly KafkaSettings _settings;
     private readonly KafkaClientFactory _clientFactory;
 
@@ -18,8 +21,10 @@ public class MessagingKafkaService
     /// </summary>
     /// <param name="settings">Kafka settings.</param>
     /// <param name="clientFactory">Kafka client factory.</param>
-    public MessagingKafkaService(IOptions<KafkaSettings> settings, KafkaClientFactory clientFactory)
+    public MessagingKafkaService(IOptions<KafkaSettings> settings, KafkaClientFactory clientFactory, ILogger<MessagingKafkaService> logger)
     {
+        _logger = logger;
+
         _settings = settings.Value;
         _clientFactory = clientFactory;
     }

@@ -20,6 +20,7 @@ public class ActionsController : ControllerBase
     private readonly IDeviceRepository _deviceRepository;
     private readonly IAccountRepository _accountRepository;
     private readonly MessagingKafkaService _kafkaService;
+    private readonly ILogger<ActionsController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ActionsController"/> class.
@@ -27,11 +28,13 @@ public class ActionsController : ControllerBase
     public ActionsController(
         IDeviceRepository deviceRepository,
         IAccountRepository accountRepository,
-        MessagingKafkaService kafkaService)
+        MessagingKafkaService kafkaService,
+        ILogger<ActionsController> logger)
     {
         _deviceRepository = deviceRepository;
         _accountRepository = accountRepository;
         _kafkaService = kafkaService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -42,23 +45,38 @@ public class ActionsController : ControllerBase
     [HttpPost("send")]
     public async Task<IActionResult> Send([FromBody] SendActionRequestDto request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Received action request {ActionType} from {Sender} to {Target}", request.ActionType, request.SenderDeviceId, request.TargetDeviceId);
+
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var normalizedActionType = NormalizeActionType(request.ActionType);
         if (normalizedActionType == null)
+        {
+            _logger.LogDebug("Unsupported action type requested: {ActionType}", request.ActionType);
             return BadRequest(new[] { "Unsupported action type." });
+        }
 
         var sender = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
         var target = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
         if (sender == null || target == null || sender.UserId != userId || target.UserId != userId)
+        {
+            _logger.LogWarning("Invalid device mapping for User {UserId}. Sender={Sender}, Target={Target}", userId, sender?.Id, target?.Id);
             return BadRequest(new[] { "Invalid device." });
+        }
 
         if (target.Type != DeviceType.Linux)
+        {
+            _logger.LogDebug("Target device {TargetId} is not Linux.", target.Id);
             return BadRequest(new[] { "Actions are supported only for Linux target devices." });
+        }
 
         if (!target.IsOnline)
+        {
+            _logger.LogDebug("Target device {TargetId} is offline.", target.Id);
             return BadRequest(new[] { "Target device must be online." });
+        }
 
+        _logger.LogTrace("Constructing DeviceActionCommand for {ActionType}", normalizedActionType);
         var command = new DeviceActionCommand(
             Guid.NewGuid().ToString("D"),
             userId,
@@ -71,6 +89,8 @@ public class ActionsController : ControllerBase
 
         var authMode = await ResolveKafkaAuthModeAsync(userId);
         var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+
+        _logger.LogInformation("Publishing command {CommandId} to Kafka", command.CommandId);
         await _kafkaService.PublishActionAsync(command, authMode, oauthToken, cancellationToken);
 
         return Ok(command);

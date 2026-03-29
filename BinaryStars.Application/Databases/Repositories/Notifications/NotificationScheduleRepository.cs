@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Notifications;
 using Microsoft.EntityFrameworkCore;
@@ -9,13 +10,17 @@ namespace BinaryStars.Application.Databases.Repositories.Notifications;
 /// </summary>
 public class NotificationScheduleRepository : INotificationScheduleRepository
 {
+    private readonly ILogger<NotificationScheduleRepository> _logger;
+
     private readonly ApplicationDbContext _context;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NotificationScheduleRepository"/> class.
     /// </summary>
-    public NotificationScheduleRepository(ApplicationDbContext context)
+    public NotificationScheduleRepository(ApplicationDbContext context, ILogger<NotificationScheduleRepository> logger)
     {
+        _logger = logger;
+
         _context = context;
     }
 

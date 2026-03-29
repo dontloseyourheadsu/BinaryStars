@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseModels.Accounts;
 using Microsoft.AspNetCore.Identity;
 
@@ -8,6 +9,8 @@ namespace BinaryStars.Application.Databases.Repositories.Accounts;
 /// </summary>
 public class AccountRepository : IAccountRepository
 {
+    private readonly ILogger<AccountRepository> _logger;
+
     private readonly UserManager<UserDbModel> _userManager;
     private readonly SignInManager<UserDbModel> _signInManager;
 
@@ -16,8 +19,10 @@ public class AccountRepository : IAccountRepository
     /// </summary>
     /// <param name="userManager">The user manager.</param>
     /// <param name="signInManager">The sign-in manager.</param>
-    public AccountRepository(UserManager<UserDbModel> userManager, SignInManager<UserDbModel> signInManager)
+    public AccountRepository(UserManager<UserDbModel> userManager, SignInManager<UserDbModel> signInManager, ILogger<AccountRepository> logger)
     {
+        _logger = logger;
+
         _userManager = userManager;
         _signInManager = signInManager;
     }

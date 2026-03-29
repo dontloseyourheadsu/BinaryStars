@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Mappers.Devices;
 using BinaryStars.Domain;
@@ -24,14 +25,18 @@ public interface IDevicesReadService
 /// </summary>
 public class DevicesReadService : IDevicesReadService
 {
+    private readonly ILogger<DevicesReadService> _logger;
+
     private readonly IDeviceRepository _deviceRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DevicesReadService"/> class.
     /// </summary>
     /// <param name="deviceRepository">Repository for device data.</param>
-    public DevicesReadService(IDeviceRepository deviceRepository)
+    public DevicesReadService(IDeviceRepository deviceRepository, ILogger<DevicesReadService> logger)
     {
+        _logger = logger;
+
         _deviceRepository = deviceRepository;
     }
 

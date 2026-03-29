@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseModels.Notifications;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Notifications;
@@ -97,14 +98,18 @@ public interface INotificationsWriteService
 /// </summary>
 public class NotificationsService : INotificationsReadService, INotificationsWriteService
 {
+    private readonly ILogger<NotificationsService> _logger;
+
     private readonly INotificationScheduleRepository _notificationScheduleRepository;
     private readonly IDeviceRepository _deviceRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NotificationsService"/> class.
     /// </summary>
-    public NotificationsService(INotificationScheduleRepository notificationScheduleRepository, IDeviceRepository deviceRepository)
+    public NotificationsService(INotificationScheduleRepository notificationScheduleRepository, IDeviceRepository deviceRepository, ILogger<NotificationsService> logger)
     {
+        _logger = logger;
+
         _notificationScheduleRepository = notificationScheduleRepository;
         _deviceRepository = deviceRepository;
     }

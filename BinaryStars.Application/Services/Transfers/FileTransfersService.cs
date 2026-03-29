@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseModels.Transfers;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Transfers;
@@ -181,12 +182,16 @@ public interface IFileTransfersWriteService
 /// </summary>
 public class FileTransfersService : IFileTransfersReadService, IFileTransfersWriteService
 {
+    private readonly ILogger<FileTransfersService> _logger;
+
     private readonly IFileTransferRepository _repository;
     private readonly IDeviceRepository _deviceRepository;
     public FileTransfersService(
         IFileTransferRepository repository,
-        IDeviceRepository deviceRepository)
+        IDeviceRepository deviceRepository, ILogger<FileTransfersService> logger)
     {
+        _logger = logger;
+
         _repository = repository;
         _deviceRepository = deviceRepository;
     }

@@ -92,8 +92,8 @@ public class FileTransferJob
 
             await _writeService.UpdateStatusAsync(request.TransferId, FileTransferStatus.Available, null, null, CancellationToken.None);
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
+            _logger.LogWarning("Exception caught.");
             _logger.LogError(ex, "Failed to publish transfer {TransferId} to Kafka.", request.TransferId);
             await _writeService.UpdateStatusAsync(request.TransferId, FileTransferStatus.Failed, ex.Message, null, CancellationToken.None);
         }

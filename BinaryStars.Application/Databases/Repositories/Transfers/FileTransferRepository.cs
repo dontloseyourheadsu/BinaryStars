@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using BinaryStars.Application.Databases.DatabaseContexts;
 using BinaryStars.Application.Databases.DatabaseModels.Transfers;
 using BinaryStars.Domain.Transfers;
@@ -10,14 +11,18 @@ namespace BinaryStars.Application.Databases.Repositories.Transfers;
 /// </summary>
 public class FileTransferRepository : IFileTransferRepository
 {
+    private readonly ILogger<FileTransferRepository> _logger;
+
     private readonly ApplicationDbContext _context;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileTransferRepository"/> class.
     /// </summary>
     /// <param name="context">The application database context.</param>
-    public FileTransferRepository(ApplicationDbContext context)
+    public FileTransferRepository(ApplicationDbContext context, ILogger<FileTransferRepository> logger)
     {
+        _logger = logger;
+
         _context = context;
     }
 
