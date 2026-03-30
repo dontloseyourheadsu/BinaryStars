@@ -90,7 +90,7 @@ public class ActionsController : ControllerBase
         var authMode = await ResolveKafkaAuthModeAsync(userId);
         var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
 
-        _logger.LogInformation("Publishing command {CommandId} to Kafka", command.CommandId);
+        _logger.LogInformation("Publishing command {CommandId} to Kafka", command.Id);
         await _kafkaService.PublishActionAsync(command, authMode, oauthToken, cancellationToken);
 
         return Ok(command);
