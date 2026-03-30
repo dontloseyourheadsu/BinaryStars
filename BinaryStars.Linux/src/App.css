@@ -166,6 +166,58 @@ button.ghost,
   color: #fff;
 }
 
+.snackbar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 80;
+  max-width: min(92vw, 460px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+}
+
+.snackbar.error {
+  background: #f43f5e;
+  color: #fff;
+  border-color: transparent;
+}
+
+.snackbar.info {
+  background: #2563eb;
+  color: #fff;
+  border-color: transparent;
+}
+
+.snackbar.success {
+  background: #16a34a;
+  color: #fff;
+  border-color: transparent;
+}
+
+.snackbar.warning {
+  background: #d97706;
+  color: #fff;
+  border-color: transparent;
+}
+
+.snackbar-close {
+  margin-left: auto;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.15);
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
