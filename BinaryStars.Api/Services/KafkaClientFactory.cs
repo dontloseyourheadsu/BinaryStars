@@ -118,8 +118,8 @@ public class KafkaClientFactory
             }
 
             var (expiresAt, principal) = ParseJwtToken(token);
-            var expiresInSeconds = Math.Max(30, (int)(expiresAt - DateTimeOffset.UtcNow).TotalSeconds);
-            client.OAuthBearerSetToken(token, expiresInSeconds, principal, new Dictionary<string, string>());
+            var expiresAtMs = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 30_000, expiresAt.ToUnixTimeMilliseconds());
+            client.OAuthBearerSetToken(token, expiresAtMs, principal, new Dictionary<string, string>());
         });
     }
 
@@ -134,8 +134,8 @@ public class KafkaClientFactory
             }
 
             var (expiresAt, principal) = ParseJwtToken(token);
-            var expiresInSeconds = Math.Max(30, (int)(expiresAt - DateTimeOffset.UtcNow).TotalSeconds);
-            client.OAuthBearerSetToken(token, expiresInSeconds, principal, new Dictionary<string, string>());
+            var expiresAtMs = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 30_000, expiresAt.ToUnixTimeMilliseconds());
+            client.OAuthBearerSetToken(token, expiresAtMs, principal, new Dictionary<string, string>());
         });
     }
 
