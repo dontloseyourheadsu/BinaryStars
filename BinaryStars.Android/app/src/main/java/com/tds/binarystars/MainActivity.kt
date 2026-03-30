@@ -324,6 +324,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        Toast.makeText(this, "Unlinking device...", Toast.LENGTH_SHORT).show()
+
         lifecycleScope.launch {
             try {
                 val response = ApiClient.apiService.unlinkDevice(deviceId)
@@ -335,7 +337,7 @@ class MainActivity : AppCompatActivity() {
                         currentFragment.refreshDevices()
                     }
                 } else {
-                    Toast.makeText(this@MainActivity, "Failed to unlink device", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Failed to unlink device (${response.code()})", Toast.LENGTH_SHORT).show()
                 }
             } catch(e: Exception) {
                 Toast.makeText(this@MainActivity, "Error unlinking device", Toast.LENGTH_SHORT).show()

@@ -4,6 +4,7 @@ import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -17,7 +18,8 @@ import com.tds.binarystars.model.DeviceType
  */
 class DevicesAdapter(
     private val devices: List<Device>,
-    private val onDeviceClick: (Device) -> Unit
+    private val onDeviceClick: (Device) -> Unit,
+    private val onUnlinkClick: ((Device) -> Unit)? = null
 ) : RecyclerView.Adapter<DevicesAdapter.DeviceViewHolder>() {
 
     class DeviceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -25,6 +27,8 @@ class DevicesAdapter(
         val name: TextView = view.findViewById(R.id.tvName)
         val statusDot: View = view.findViewById(R.id.vStatusDot)
         val statusText: TextView = view.findViewById(R.id.tvStatus)
+        val arrow: ImageView = view.findViewById(R.id.ivArrow)
+        val unlinkButton: Button = view.findViewById(R.id.btnUnlinkDevice)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DeviceViewHolder {
@@ -61,6 +65,14 @@ class DevicesAdapter(
         when (device.type) {
             DeviceType.LINUX -> holder.icon.setImageResource(R.drawable.ic_computer)
             DeviceType.ANDROID -> holder.icon.setImageResource(R.drawable.ic_smartphone)
+        }
+
+        val showUnlink = (!device.isOnline || !device.isAvailable) && onUnlinkClick != null
+        holder.unlinkButton.visibility = if (showUnlink) View.VISIBLE else View.GONE
+        holder.arrow.visibility = if (showUnlink) View.GONE else View.VISIBLE
+
+        holder.unlinkButton.setOnClickListener {
+            onUnlinkClick?.invoke(device)
         }
 
         holder.itemView.setOnClickListener {
