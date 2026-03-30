@@ -45,6 +45,7 @@
     <Compile Include="Controllers/AuthController.cs" />
     <Compile Include="Controllers/DebugController.cs" />
     <Compile Include="Controllers/DevicesController.cs" />
+    <Compile Include="Controllers/ActionsController.cs" />
     <Compile Include="Controllers/FileTransfersController.cs" />
     <Compile Include="Controllers/LocationsController.cs" />
     <Compile Include="Controllers/MessagingController.cs" />
