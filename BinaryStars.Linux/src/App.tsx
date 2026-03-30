@@ -15,6 +15,7 @@ import {
   isTauriRuntime,
   isWifiConnected,
   performLocalAction,
+  sendFileViaBluetooth,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { LocalNotificationHistoryItem } from "./storage";
@@ -48,6 +49,43 @@ import { Tab, tabs } from "./components/tabs/types";
 import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
 
 type EffectiveTheme = "light" | "dark";
+type SnackbarLevel = "error" | "info" | "success" | "warning";
+
+type PendingActionEnvelope = {
+  id: string;
+  targetDeviceId: string;
+  actionType:
+    | "block_screen"
+    | "shutdown"
+    | "reboot"
+    | "list_launchable_apps"
+    | "list_running_apps"
+    | "open_app"
+    | "close_app"
+    | "get_clipboard_history";
+  payloadJson?: string | null;
+  correlationId?: string | null;
+};
+
+const PENDING_ACTIONS_KEY = "binarystars.actions.pending";
+
+function readPendingActions(): PendingActionEnvelope[] {
+  const raw = localStorage.getItem(PENDING_ACTIONS_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as PendingActionEnvelope[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingActions(value: PendingActionEnvelope[]): void {
+  localStorage.setItem(PENDING_ACTIONS_KEY, JSON.stringify(value));
+}
 
 function getSystemTheme(): EffectiveTheme {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -74,9 +112,9 @@ function App() {
     shadowUrl: markerShadow,
   });
 
-  const [isAuthed, setIsAuthed] = useState(Boolean(tokenStore.getToken()));
+  const [isAuthed, setIsAuthed] = useState(tokenStore.hasStoredSession());
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [snackbar, setSnackbar] = useState<{ id: string; level: SnackbarLevel; message: string } | null>(null);
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [activeTab, setActiveTab] = useState<Tab>("Devices");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -149,6 +187,73 @@ function App() {
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const clipboardAutoFetchKeyRef = useRef<string>("");
   const myDeviceId = getDeviceId();
+
+  const isConnectionIssueMessage = (message: string): boolean => {
+    const normalized = message.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    return (
+      normalized.includes("no connection available")
+      || normalized.includes("showing cached data")
+      || normalized.includes("network error")
+      || normalized.includes("failed to fetch")
+      || normalized.includes("timeout")
+      || normalized.includes("offline")
+    );
+  };
+
+  const showSnackbar = (level: SnackbarLevel, message: string): void => {
+    const normalized = message.trim();
+    if (!normalized) {
+      setSnackbar(null);
+      return;
+    }
+
+    setSnackbar({
+      id: crypto.randomUUID(),
+      level,
+      message: normalized,
+    });
+  };
+
+  const setError = (value: string): void => {
+    if (!value) {
+      setSnackbar(null);
+      return;
+    }
+
+    if (isConnectionIssueMessage(value)) {
+      // Connection state is already represented by the dedicated offline panel.
+      setSnackbar(null);
+      return;
+    }
+
+    showSnackbar("error", value);
+  };
+
+  const setInfo = (value: string): void => {
+    showSnackbar("info", value);
+  };
+
+  const setSuccess = (value: string): void => {
+    showSnackbar("success", value);
+  };
+
+  useEffect(() => {
+    if (!snackbar) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSnackbar(null);
+    }, 6500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [snackbar]);
 
   const resolvedTheme: EffectiveTheme = themeMode === "system" ? systemTheme : themeMode;
 
@@ -300,11 +405,14 @@ function App() {
   }, [devices, messages, myDeviceId]);
 
   useEffect(() => {
-    if (selectedFileTargetDeviceId && devices.some((entry) => entry.id === selectedFileTargetDeviceId && entry.id !== myDeviceId && entry.isOnline)) {
+    if (
+      selectedFileTargetDeviceId
+      && devices.some((entry) => entry.id === selectedFileTargetDeviceId && entry.id !== myDeviceId && (entry.isOnline || entry.isBluetoothOnline === true))
+    ) {
       return;
     }
 
-    const fallback = devices.find((entry) => entry.id !== myDeviceId && entry.isOnline)?.id ?? "";
+    const fallback = devices.find((entry) => entry.id !== myDeviceId && (entry.isOnline || entry.isBluetoothOnline === true))?.id ?? "";
     setSelectedFileTargetDeviceId(fallback);
   }, [devices, myDeviceId, selectedFileTargetDeviceId]);
 
@@ -753,6 +861,14 @@ function App() {
   }, [isAuthed, online, myDeviceId, pendingActionRequestId]);
 
   useEffect(() => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    void flushPendingActionQueue();
+  }, [isAuthed, online, myDeviceId]);
+
+  useEffect(() => {
     void refreshElevationStatus().catch((nextError) => {
       setError(nextError instanceof Error ? nextError.message : "Failed to check elevation status");
     });
@@ -1155,17 +1271,61 @@ function App() {
     await refreshDevices();
   };
 
-  const unlinkCurrentDevice = async (): Promise<void> => {
+  const unlinkDevice = async (deviceId: string): Promise<void> => {
     if (!requireOnline()) {
       return;
     }
 
-    await api.unlinkDevice(myDeviceId);
+    await api.unlinkDevice(deviceId);
     await refreshDevices();
   };
 
+  const unlinkCurrentDevice = async (): Promise<void> => {
+    await unlinkDevice(myDeviceId);
+  };
+
   const sendFile = async (file: File, targetDeviceId: string): Promise<void> => {
-    if (!requireOnline()) {
+    const targetDevice = devices.find((entry) => entry.id === targetDeviceId);
+    if (!targetDevice || targetDevice.id === myDeviceId) {
+      setError("No target device available");
+      return;
+    }
+
+    if (!online) {
+      if (!targetDevice.isBluetoothOnline) {
+        setError("Internet is unavailable and the target device is not connected over Bluetooth");
+        return;
+      }
+
+      const bluetoothPeers = await getBluetoothDevices();
+      const matchedPeer = bluetoothPeers.find((entry) => {
+        const left = entry.name.trim().toLowerCase();
+        const right = targetDevice.name.trim().toLowerCase();
+        return entry.connected && left.length > 0 && left === right;
+      });
+
+      if (!matchedPeer?.address) {
+        setError("Unable to resolve Bluetooth target address. Reconnect the device and retry");
+        return;
+      }
+
+      const contentBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = typeof reader.result === "string" ? reader.result : "";
+          const marker = "base64,";
+          const markerIndex = result.indexOf(marker);
+          if (markerIndex < 0) {
+            reject(new Error("Failed to encode file for Bluetooth transfer"));
+            return;
+          }
+          resolve(result.slice(markerIndex + marker.length));
+        };
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
+
+      await sendFileViaBluetooth(matchedPeer.address, file.name, contentBase64);
       return;
     }
 
@@ -1364,6 +1524,53 @@ function App() {
     });
   };
 
+  const flushPendingChatMessages = async (): Promise<void> => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    const pending = cacheStore.getPendingChatMessages();
+    if (pending.length === 0) {
+      return;
+    }
+
+    for (const queued of pending) {
+      try {
+        const sent = await api.sendMessage({
+          senderDeviceId: queued.senderDeviceId,
+          targetDeviceId: queued.targetDeviceId,
+          body: queued.body,
+          sentAt: queued.sentAt,
+        });
+
+        const sentAt = Date.parse(sent.sentAt);
+        setMessages((prev) => {
+          const withoutQueued = prev.filter((entry) => entry.id !== queued.localMessageId);
+          return upsertMessage(withoutQueued, {
+            id: sent.id,
+            deviceId: queued.targetDeviceId,
+            senderDeviceId: sent.senderDeviceId,
+            body: sent.body,
+            sentAt,
+            isOutgoing: true,
+          });
+        });
+
+        cacheStore.removePendingChatMessage(queued.localMessageId);
+      } catch {
+        // Keep queued message for next retry cycle.
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    void flushPendingChatMessages();
+  }, [isAuthed, online]);
+
   useEffect(() => {
     if (!selectedChatDeviceId) {
       return;
@@ -1389,12 +1596,44 @@ function App() {
     }
 
     const targetDevice = devices.find((entry) => entry.id === selectedChatDeviceId);
-    if (!targetDevice || !targetDevice.isOnline || targetDevice.id === myDeviceId) {
+    if (!targetDevice || targetDevice.id === myDeviceId) {
       setError("Target device must be online");
       return;
     }
 
     if (!requireOnline()) {
+      if (!targetDevice.isBluetoothOnline) {
+        setError("Target device must be online or connected over Bluetooth");
+        return;
+      }
+
+      const localMessageId = crypto.randomUUID();
+      const sentAtIso = new Date().toISOString();
+
+      cacheStore.addPendingChatMessage({
+        localMessageId,
+        senderDeviceId: myDeviceId,
+        targetDeviceId: selectedChatDeviceId,
+        body,
+        sentAt: sentAtIso,
+      });
+
+      setMessages((prev) => upsertMessage(prev, {
+        id: localMessageId,
+        deviceId: selectedChatDeviceId,
+        senderDeviceId: myDeviceId,
+        body,
+        sentAt: Date.parse(sentAtIso),
+        isOutgoing: true,
+      }));
+
+      setNewMessage("");
+      setInfo("Offline mode: message queued and will send automatically when internet returns");
+      return;
+    }
+
+    if (!targetDevice.isOnline) {
+      setError("Target device must be online");
       return;
     }
 
@@ -1417,7 +1656,7 @@ function App() {
       };
       setMessages((prev) => upsertMessage(prev, storedMessage));
       setNewMessage("");
-      setError("");
+      setSuccess("Message sent");
     } catch {
       setError("Failed to send message.");
     }
@@ -1560,6 +1799,34 @@ function App() {
     })();
   };
 
+  const flushPendingActionQueue = async (): Promise<void> => {
+    if (!isAuthed || !online) {
+      return;
+    }
+
+    const pending = readPendingActions();
+    if (pending.length === 0) {
+      return;
+    }
+
+    const remaining: PendingActionEnvelope[] = [];
+    for (const queued of pending) {
+      try {
+        await api.sendAction({
+          senderDeviceId: myDeviceId,
+          targetDeviceId: queued.targetDeviceId,
+          actionType: queued.actionType,
+          payloadJson: queued.payloadJson ?? null,
+          correlationId: queued.correlationId ?? null,
+        });
+      } catch {
+        remaining.push(queued);
+      }
+    }
+
+    writePendingActions(remaining);
+  };
+
   const sendActionCommand = async (
     actionType:
       | "block_screen"
@@ -1573,12 +1840,26 @@ function App() {
     payloadJson?: string | null,
     correlationId?: string | null,
   ): Promise<void> => {
-    if (!requireOnline()) {
+    if (!selectedActionDevice) {
+      setError("Select a Linux device first");
       return;
     }
 
-    if (!selectedActionDevice) {
-      setError("Select a Linux device first");
+    if (!requireOnline()) {
+      if (!selectedActionDevice.isBluetoothOnline) {
+        setError("Target device must be online or connected over Bluetooth");
+        return;
+      }
+
+      const queued: PendingActionEnvelope = {
+        id: crypto.randomUUID(),
+        targetDeviceId: selectedActionDevice.id,
+        actionType,
+        payloadJson: payloadJson ?? null,
+        correlationId: correlationId ?? null,
+      };
+      writePendingActions([...readPendingActions(), queued].slice(-500));
+      setInfo("Offline mode: action queued and will send when internet returns");
       return;
     }
 
@@ -1595,7 +1876,7 @@ function App() {
       correlationId: correlationId ?? null,
     });
 
-    setError("");
+    setSuccess("Action sent");
   };
 
   const executeActionLocally = async (actionType: string, payloadJson?: string | null): Promise<string | null> => {
@@ -1969,7 +2250,19 @@ function App() {
   if (!isAuthed) {
     return (
       <>
-        {error && <div className="banner error">{error}</div>}
+        {snackbar && (
+          <div className={`snackbar ${snackbar.level}`} role="status" aria-live="polite">
+            <span>{snackbar.message}</span>
+            <button
+              className="snackbar-close"
+              onClick={() => setSnackbar(null)}
+              type="button"
+              aria-label="Dismiss message"
+            >
+              x
+            </button>
+          </div>
+        )}
         <AuthView
           busy={busy}
           onLoggedIn={() => setIsAuthed(true)}
@@ -1980,8 +2273,8 @@ function App() {
     );
   }
 
-  const onlineDevices = devices.filter((entry) => entry.isOnline || entry.isBluetoothOnline === true);
-  const offlineDevices = devices.filter((entry) => !entry.isOnline && entry.isBluetoothOnline !== true);
+  const onlineDevices = devices.filter((entry) => entry.isOnline && entry.isAvailable);
+  const offlineDevices = devices.filter((entry) => !entry.isOnline || !entry.isAvailable);
 
   const formatBattery = (device: Device): string => {
     return device.batteryLevel >= 0 ? `${device.batteryLevel}%` : "Not available";
@@ -1997,7 +2290,19 @@ function App() {
 
   return (
     <div className="app-shell">
-        {error && <div className="banner error">{error}</div>}
+        {snackbar && (
+          <div className={`snackbar ${snackbar.level}`} role="status" aria-live="polite">
+            <span>{snackbar.message}</span>
+            <button
+              className="snackbar-close"
+              onClick={() => setSnackbar(null)}
+              type="button"
+              aria-label="Dismiss message"
+            >
+              x
+            </button>
+          </div>
+        )}
         <Sidebar
           tabs={tabs}
           activeTab={activeTab}
@@ -2061,6 +2366,7 @@ function App() {
             onOpenChat={openChat}
             onLinkCurrentDevice={() => void linkCurrentDevice()}
             onUnlinkCurrentDevice={() => void unlinkCurrentDevice()}
+            onUnlinkDevice={(deviceId) => void unlinkDevice(deviceId)}
             formatRam={formatRam}
             formatBattery={formatBattery}
             clipboardHistory={clipboardHistory}
@@ -2075,7 +2381,7 @@ function App() {
 
         {activeTab === "Files" && (
           <FilesTab
-            devices={devices.map((entry) => ({ id: entry.id, name: entry.name, isOnline: entry.isOnline }))}
+            devices={devices.map((entry) => ({ id: entry.id, name: entry.name, isOnline: entry.isOnline || entry.isBluetoothOnline === true }))}
             myDeviceId={myDeviceId}
             selectedTargetDeviceId={selectedFileTargetDeviceId}
             onSelectTargetDevice={setSelectedFileTargetDeviceId}

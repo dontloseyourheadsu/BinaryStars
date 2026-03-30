@@ -348,10 +348,13 @@ class ActionsFragment : Fragment() {
 
                 root.findViewById<TextView>(R.id.tvActionsSubtitle).text = "Linux devices — ${linuxDevices.size}"
 
-                list.adapter = DevicesAdapter(linuxDevices) { device ->
-                    selectedDevice = device
-                    renderDetail(device)
-                }
+                list.adapter = DevicesAdapter(
+                    devices = linuxDevices,
+                    onDeviceClick = { device ->
+                        selectedDevice = device
+                        renderDetail(device)
+                    }
+                )
 
                 if (selectedDevice != null) {
                     val refreshed = linuxDevices.firstOrNull { it.id == selectedDevice?.id }

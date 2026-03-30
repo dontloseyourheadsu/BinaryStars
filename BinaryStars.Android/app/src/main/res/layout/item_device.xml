@@ -65,10 +65,22 @@
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:src="@drawable/ic_chevron_right"
+        android:visibility="visible"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@color/carbon_text_muted" />
+
+    <Button
+        android:id="@+id/btnUnlinkDevice"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Unlink"
+        android:textAllCaps="false"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
     <View
         android:layout_width="match_parent"

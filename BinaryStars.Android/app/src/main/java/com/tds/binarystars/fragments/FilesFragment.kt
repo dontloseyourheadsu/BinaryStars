@@ -18,6 +18,8 @@ import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.asRequestBody
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -35,7 +37,6 @@ import com.tds.binarystars.api.FileTransferStatusDto
 import com.tds.binarystars.bluetooth.BluetoothTransferManager
 import com.tds.binarystars.bluetooth.BluetoothTransferState
 import com.tds.binarystars.bluetooth.BluetoothTransferStore
-import com.tds.binarystars.api.StreamingRequestBody
 import com.tds.binarystars.crypto.CryptoManager
 import com.tds.binarystars.storage.FileTransferLocalStore
 import com.tds.binarystars.storage.FileTransferStorage
@@ -672,7 +673,7 @@ class FilesFragment : Fragment() {
                 val transferId = createResponse.body()!!.id
                 FileTransferLocalStore.setLocalPath(requireContext(), transferId, originalCopy.absolutePath, "sent")
 
-                val uploadBody = StreamingRequestBody("application/octet-stream", FileInputStream(uploadFile), uploadFile.length())
+                val uploadBody = uploadFile.asRequestBody("application/octet-stream".toMediaType())
                 val uploadResponse = withContext(Dispatchers.IO) { ApiClient.apiService.uploadFileTransfer(transferId, uploadBody) }
 
                 if (!uploadResponse.isSuccessful) {

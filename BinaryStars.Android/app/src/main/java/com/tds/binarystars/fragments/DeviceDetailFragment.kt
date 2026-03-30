@@ -21,6 +21,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.tds.binarystars.MainActivity
 import com.tds.binarystars.R
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.DeviceTypeDto
@@ -83,12 +84,20 @@ class DeviceDetailFragment : Fragment() {
         val tvClipboardHistoryStatus = view.findViewById<TextView>(R.id.tvClipboardHistoryStatus)
         val btnRefreshClipboardHistory = view.findViewById<Button>(R.id.btnRefreshClipboardHistory)
         val clipboardHistoryList = view.findViewById<LinearLayout>(R.id.clipboardHistoryList)
+        val btnUnlinkDevice = view.findViewById<Button>(R.id.btnUnlinkDevice)
 
         view.findViewById<TextView>(R.id.tvTitle).text = name.ifBlank { "Device Detail" }
         tvSubtitle.text = listOf(type, ipAddress).filter { it.isNotBlank() }.joinToString(" • ")
         view.findViewById<ImageView>(R.id.btnBack).setOnClickListener {
             parentFragmentManager.popBackStack()
         }
+
+        btnUnlinkDevice.setOnClickListener {
+            (activity as? MainActivity)?.unlinkDevice(deviceId)
+            parentFragmentManager.popBackStack()
+        }
+
+        btnUnlinkDevice.visibility = if (!isOnline || !isAvailable) View.VISIBLE else View.GONE
 
         if (!isCurrentDevice) {
             toggleAvailability.isEnabled = false
@@ -221,6 +230,7 @@ class DeviceDetailFragment : Fragment() {
                                         DeviceTypeDto.Android -> "Android"
                                     }
                                     tvSubtitle.text = listOf(serverType, dto.ipAddress).joinToString(" • ")
+                                    btnUnlinkDevice.visibility = if (!isOnline || !isAvailable) View.VISIBLE else View.GONE
                                 }
                             }
                         } catch (_: Exception) {

@@ -267,8 +267,8 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         tvOfflineHeader: TextView?,
         fromCache: Boolean
     ) {
-        val onlineDevices = devices.filter { it.isOnline || it.isBluetoothOnline }
-        val offlineDevices = devices.filter { !it.isOnline && !it.isBluetoothOnline }
+        val onlineDevices = devices.filter { it.isOnline && it.isAvailable }
+        val offlineDevices = devices.filter { !it.isOnline || !it.isAvailable }
         val isRegistered = devices.any { it.id == currentDeviceId }
 
         tvHeaderSubtitle?.text = if (fromCache) {
@@ -278,12 +278,17 @@ class DevicesFragment : Fragment(), MessagingEventListener {
         }
         tvOfflineHeader?.text = "Offline — ${offlineDevices.size}"
 
-        rvOnline.adapter = DevicesAdapter(onlineDevices) { device ->
-            openDeviceDetail(device)
-        }
-        rvOffline.adapter = DevicesAdapter(offlineDevices) { device ->
-            openDeviceDetail(device)
-        }
+        rvOnline.adapter = DevicesAdapter(
+            devices = onlineDevices,
+            onDeviceClick = { device -> openDeviceDetail(device) }
+        )
+        rvOffline.adapter = DevicesAdapter(
+            devices = offlineDevices,
+            onDeviceClick = { device -> openDeviceDetail(device) },
+            onUnlinkClick = { device ->
+                (activity as? MainActivity)?.unlinkDevice(device.id)
+            }
+        )
 
         btnLinkDevice.text = if (isRegistered) "Unlink This Device" else "Link This Device"
         btnLinkDevice.visibility = View.VISIBLE
