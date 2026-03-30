@@ -12,6 +12,7 @@ type Props = {
   onOpenChat: (deviceId: string) => void;
   onLinkCurrentDevice: () => void;
   onUnlinkCurrentDevice: () => void;
+  onUnlinkDevice: (deviceId: string) => void;
   formatRam: (device: Device) => string;
   formatBattery: (device: Device) => string;
   clipboardHistory: string[];
@@ -33,6 +34,7 @@ export default function DevicesTab({
   onOpenChat,
   onLinkCurrentDevice,
   onUnlinkCurrentDevice,
+  onUnlinkDevice,
   formatRam,
   formatBattery,
   clipboardHistory,
@@ -42,6 +44,7 @@ export default function DevicesTab({
   onCopyClipboardHistoryEntry,
 }: Props) {
   if (selectedDevice) {
+    const canUnlinkSelectedDevice = !selectedDevice.isOnline || !selectedDevice.isAvailable;
     const baseConnectionState = selectedDevice.isAvailable
       ? (selectedDevice.isOnline ? "Online" : "Offline")
       : "Unavailable";
@@ -134,6 +137,12 @@ export default function DevicesTab({
           <button onClick={() => onOpenChat(selectedDevice.id)} type="button">
             Open Chat
           </button>
+
+          {canUnlinkSelectedDevice && (
+            <button className="ghost" onClick={() => onUnlinkDevice(selectedDevice.id)} type="button">
+              Unlink Device
+            </button>
+          )}
         </div>
       </section>
     );
@@ -166,7 +175,7 @@ export default function DevicesTab({
         {offlineDevices.length === 0 && <p className="muted">No offline devices.</p>}
         <div className="list">
           {offlineDevices.map((device) => (
-            <button className="row-card" key={device.id} onClick={() => onSelectDevice(device.id)} type="button">
+            <article className="row-card static" key={device.id}>
               <div className="item-head">
                 <span className={`status-dot ${device.isOnline ? "online" : "offline"}`} />
                 <strong>{device.name}</strong>
@@ -177,7 +186,15 @@ export default function DevicesTab({
                 CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
               </span>
               <span className="muted">RAM {formatRam(device)} · Battery {formatBattery(device)}</span>
-            </button>
+              <div className="split-row">
+                <button onClick={() => onSelectDevice(device.id)} type="button">
+                  View Details
+                </button>
+                <button className="ghost" onClick={() => onUnlinkDevice(device.id)} type="button">
+                  Unlink Device
+                </button>
+              </div>
+            </article>
           ))}
         </div>
         <div className="split-row">

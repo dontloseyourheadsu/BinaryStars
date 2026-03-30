@@ -35,11 +35,21 @@ export const tokenStore = {
     const expiryRaw = localStorage.getItem(ACCESS_TOKEN_EXPIRY_KEY);
     const expiry = Number(expiryRaw);
     if (!Number.isFinite(expiry) || expiry <= Date.now()) {
-      this.clear();
       return null;
     }
 
     return token;
+  },
+  getStoredToken(): string | null {
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token || token.trim().length === 0) {
+      return null;
+    }
+
+    return token;
+  },
+  hasStoredSession(): boolean {
+    return this.getStoredToken() != null;
   },
   setToken(token: string, expiresInSeconds: number): void {
     localStorage.setItem(ACCESS_TOKEN_KEY, token);
