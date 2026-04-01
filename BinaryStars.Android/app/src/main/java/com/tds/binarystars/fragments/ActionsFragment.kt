@@ -158,7 +158,7 @@ class ActionsFragment : Fragment() {
     private fun requestLaunchableApps() {
         actionMode = ActionMode.OpenApps
         renderActionMode()
-        sendAction("list_launchable_apps")
+        sendAction("list_installed_apps")
     }
 
     @SuppressLint("HardwareIds")
@@ -170,13 +170,13 @@ class ActionsFragment : Fragment() {
 
     @SuppressLint("HardwareIds")
     private fun openApp(app: LaunchableAppItemDto) {
-        val payload = gson.toJson(mapOf("appId" to app.appId))
-        sendAction("open_app", payload)
+        val payload = gson.toJson(mapOf("exec" to app.exec))
+        sendAction("launch_app", payload)
     }
 
     @SuppressLint("HardwareIds")
     private fun closeApp(app: RunningAppItemDto) {
-        val payload = gson.toJson(mapOf("pid" to app.pid, "name" to app.name))
+        val payload = gson.toJson(mapOf("pid" to app.pid, "force" to false))
         sendAction("close_app", payload)
     }
 
@@ -218,7 +218,7 @@ class ActionsFragment : Fragment() {
             return
         }
 
-        if (result.actionType == "list_launchable_apps") {
+        if (result.actionType == "list_installed_apps") {
             val payload = result.payloadJson ?: "[]"
             val listType = object : TypeToken<List<LaunchableAppItemDto>>() {}.type
             val apps: List<LaunchableAppItemDto> = try {
@@ -244,7 +244,7 @@ class ActionsFragment : Fragment() {
             return
         }
 
-        if (result.actionType == "open_app" || result.actionType == "close_app") {
+        if (result.actionType == "launch_app" || result.actionType == "close_app") {
             Toast.makeText(requireContext(), "Action completed", Toast.LENGTH_SHORT).show()
             pendingCorrelationId = null
         }
@@ -278,14 +278,14 @@ class ActionsFragment : Fragment() {
         val list = root.findViewById<RecyclerView>(R.id.listOpenApps)
         val rows = apps.map { app ->
             ActionAppRow(
-                id = app.appId,
+                id = app.exec,
                 title = app.name,
-                subtitle = app.appId
+                subtitle = app.exec
             )
         }
 
         list.adapter = ActionAppsAdapter(rows, "Open") { row ->
-            val app = launchableApps.firstOrNull { it.appId == row.id } ?: return@ActionAppsAdapter
+            val app = launchableApps.firstOrNull { it.exec == row.id } ?: return@ActionAppsAdapter
             openApp(app)
         }
     }

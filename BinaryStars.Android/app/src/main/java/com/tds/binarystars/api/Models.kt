@@ -285,14 +285,20 @@ data class DeviceActionResultDto(
 
 /** Launchable app entry returned by Linux target. */
 data class LaunchableAppItemDto(
-    val appId: String,
-    val name: String
+    val name: String,
+    val exec: String,
+    val icon: String? = null,
+    val categories: String? = null,
+    val noDisplay: Boolean = false
 )
 
 /** Running app entry returned by Linux target. */
 data class RunningAppItemDto(
     val pid: Int,
     val name: String,
+    val exe: String = "",
+    val cpuUsage: Float = 0f,
+    val memoryMb: Double = 0.0,
     val commandLine: String
 )
 
