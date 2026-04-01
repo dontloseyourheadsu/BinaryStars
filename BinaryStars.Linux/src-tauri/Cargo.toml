@@ -34,3 +34,5 @@ urlencoding = "2"
 webbrowser = "1"
 zbus = { version = "5", default-features = true }
 bluetooth-serial-port = "0.6.0"
+freedesktop-desktop-entry = "0.5"
+shlex = "1"
