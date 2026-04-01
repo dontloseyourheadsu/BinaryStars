@@ -16,6 +16,18 @@ public class KafkaSettings
     public string BootstrapServers { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the Kafka bootstrap servers used for SCRAM authentication.
+    /// If omitted, <see cref="BootstrapServers"/> is used.
+    /// </summary>
+    public string? ScramBootstrapServers { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Kafka bootstrap servers used for OAuth bearer authentication.
+    /// If omitted, <see cref="BootstrapServers"/> is used.
+    /// </summary>
+    public string? OauthBootstrapServers { get; set; }
+
+    /// <summary>
     /// Gets or sets the topic used for file transfers.
     /// </summary>
     public string Topic { get; set; } = "binarystars.transfers";
@@ -113,6 +125,12 @@ public class KafkaScramSettings
 /// </summary>
 public class KafkaOauthSettings
 {
+    /// <summary>
+    /// Gets or sets whether Kafka OAuth bearer authentication is enabled.
+    /// When false, SCRAM is used even for externally authenticated app users.
+    /// </summary>
+    public bool UseKafkaOauth { get; set; } = false;
+
     /// <summary>
     /// Gets or sets the token issuer.
     /// </summary>
