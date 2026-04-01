@@ -36,6 +36,9 @@ kafka/secrets/*.csr
 kafka/secrets/kafka_client.properties
 kafka/secrets/kafka_jaas.conf
 
+kafka/certs
+kafka/secrets
+
 # Google Services (e.g. APIs or Firebase)
 google-services.json
 
