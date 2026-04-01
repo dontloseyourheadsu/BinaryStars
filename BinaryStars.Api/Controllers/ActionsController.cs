@@ -183,14 +183,14 @@ public class ActionsController : ControllerBase
         if (string.Equals(actionType, "block_screen", StringComparison.OrdinalIgnoreCase))
             return "block_screen";
 
-        if (string.Equals(actionType, "list_launchable_apps", StringComparison.OrdinalIgnoreCase))
-            return "list_launchable_apps";
+        if (string.Equals(actionType, "list_installed_apps", StringComparison.OrdinalIgnoreCase))
+            return "list_installed_apps";
 
         if (string.Equals(actionType, "list_running_apps", StringComparison.OrdinalIgnoreCase))
             return "list_running_apps";
 
-        if (string.Equals(actionType, "open_app", StringComparison.OrdinalIgnoreCase))
-            return "open_app";
+        if (string.Equals(actionType, "launch_app", StringComparison.OrdinalIgnoreCase))
+            return "launch_app";
 
         if (string.Equals(actionType, "close_app", StringComparison.OrdinalIgnoreCase))
             return "close_app";

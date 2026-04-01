@@ -413,9 +413,9 @@ Common action types:
 - `block_screen`
 - `shutdown`
 - `reboot`
-- `list_launchable_apps`
+- `list_installed_apps`
 - `list_running_apps`
-- `open_app`
+- `launch_app`
 - `close_app`
 - `get_clipboard_history`
 
