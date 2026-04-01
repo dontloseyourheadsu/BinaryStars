@@ -16,8 +16,6 @@ type Props = {
   runningApps: RunningAppItem[];
   actionMode: "base" | "open-app" | "close-app";
   onBackToActions: () => void;
-  isElevated: boolean;
-  onRequestElevation: () => void;
   busy: boolean;
 };
 
@@ -37,8 +35,6 @@ export default function ActionsTab({
   runningApps,
   actionMode,
   onBackToActions,
-  isElevated,
-  onRequestElevation,
   busy,
 }: Props) {
   return (
@@ -68,14 +64,6 @@ export default function ActionsTab({
 
       <div className="panel">
         <h3>Actions</h3>
-        {!isElevated && (
-          <>
-            <p className="muted">Running as root is optional. Shutdown/reset will request system authorization on the target device when needed.</p>
-            <button className="ghost" onClick={onRequestElevation} type="button" disabled={busy}>
-              Refresh Elevation Status
-            </button>
-          </>
-        )}
         {!selectedDevice && <p className="empty-state">Select a Linux device to manage actions.</p>}
         {selectedDevice && (
           <>
@@ -115,14 +103,14 @@ export default function ActionsTab({
               type="button"
               disabled={!selectedDevice.isOnline || busy}
             >
-              Open Apps
+              List Installed Apps
             </button>
             <button
               onClick={onFetchRunningApps}
               type="button"
               disabled={!selectedDevice.isOnline || busy}
             >
-              Close Apps
+              List Running Apps
             </button>
             <p className="muted">
               Supports GNOME/KDE/GTK-oriented desktops with graceful fallback when lock APIs are unavailable.
@@ -138,9 +126,9 @@ export default function ActionsTab({
                   <div className="list compact">
                     {launchableApps.length === 0 && <p className="empty-state">No launchable apps available.</p>}
                     {launchableApps.map((app) => (
-                      <article className="row-card static" key={app.appId}>
+                      <article className="row-card static" key={`${app.name}-${app.exec}`}>
                         <strong>{app.name}</strong>
-                        <span className="muted">{app.appId}</span>
+                        <span className="muted">{app.exec}</span>
                         <button onClick={() => onOpenApp(app)} type="button" disabled={busy}>Open</button>
                       </article>
                     ))}
@@ -154,6 +142,7 @@ export default function ActionsTab({
                       <article className="row-card static" key={`${app.pid}-${app.name}`}>
                         <strong>{app.name}</strong>
                         <span className="muted">PID {app.pid}</span>
+                        {app.exe && <span className="muted">{app.exe}</span>}
                         <span className="muted">{app.commandLine}</span>
                         <button onClick={() => onCloseApp(app)} type="button" disabled={busy}>Close</button>
                       </article>

@@ -34,15 +34,16 @@ public class KafkaClientFactory
     /// <returns>The Kafka producer.</returns>
     public IProducer<string, byte[]> CreateProducer(KafkaAuthMode authMode, string? oauthBearerToken)
     {
+        var effectiveAuthMode = ResolveEffectiveAuthMode(authMode);
         var config = new ProducerConfig
         {
-            BootstrapServers = _settings.BootstrapServers
+            BootstrapServers = ResolveBootstrapServers(effectiveAuthMode)
         };
 
-        ApplySecurityConfig(config, authMode);
+        ApplySecurityConfig(config, effectiveAuthMode);
 
         var builder = new ProducerBuilder<string, byte[]>(config);
-        if (authMode == KafkaAuthMode.OauthBearer)
+        if (effectiveAuthMode == KafkaAuthMode.OauthBearer)
         {
             ConfigureOAuth(builder, oauthBearerToken);
         }
@@ -59,18 +60,19 @@ public class KafkaClientFactory
     /// <returns>The Kafka consumer.</returns>
     public IConsumer<string, byte[]> CreateConsumer(string groupId, KafkaAuthMode authMode, string? oauthBearerToken)
     {
+        var effectiveAuthMode = ResolveEffectiveAuthMode(authMode);
         var config = new ConsumerConfig
         {
-            BootstrapServers = _settings.BootstrapServers,
+            BootstrapServers = ResolveBootstrapServers(effectiveAuthMode),
             GroupId = groupId,
             EnableAutoCommit = false,
             AutoOffsetReset = AutoOffsetReset.Earliest
         };
 
-        ApplySecurityConfig(config, authMode);
+        ApplySecurityConfig(config, effectiveAuthMode);
 
         var builder = new ConsumerBuilder<string, byte[]>(config);
-        if (authMode == KafkaAuthMode.OauthBearer)
+        if (effectiveAuthMode == KafkaAuthMode.OauthBearer)
         {
             ConfigureOAuth(builder, oauthBearerToken);
         }
@@ -105,6 +107,31 @@ public class KafkaClientFactory
                 config.SaslMechanism = SaslMechanism.OAuthBearer;
             }
         }
+    }
+
+    private string ResolveBootstrapServers(KafkaAuthMode authMode)
+    {
+        var selected = authMode == KafkaAuthMode.OauthBearer
+            ? _settings.OauthBootstrapServers
+            : _settings.ScramBootstrapServers;
+
+        if (!string.IsNullOrWhiteSpace(selected))
+        {
+            return selected;
+        }
+
+        return _settings.BootstrapServers;
+    }
+
+    private KafkaAuthMode ResolveEffectiveAuthMode(KafkaAuthMode requestedMode)
+    {
+        if (requestedMode == KafkaAuthMode.OauthBearer && !_settings.Oauth.UseKafkaOauth)
+        {
+            _logger.LogDebug("Kafka OAuth requested but UseKafkaOauth=false; falling back to SCRAM.");
+            return KafkaAuthMode.Scram;
+        }
+
+        return requestedMode;
     }
 
     private static void ConfigureOAuth(ProducerBuilder<string, byte[]> builder, string? token)

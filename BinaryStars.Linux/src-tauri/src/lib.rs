@@ -8,25 +8,35 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 use base64::{engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD}, Engine as _};
+use freedesktop_desktop_entry::{default_paths, DesktopEntry, Iter};
 use rand::{distributions::Alphanumeric, Rng};
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use sysinfo::{Pid, Signal, System};
 use url::Url;
 use zbus::blocking::{fdo::PropertiesProxy, Connection, Proxy};
 use zbus::names::InterfaceName;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 #[derive(Serialize)]
-struct LaunchableAppItem {
-    app_id: String,
+#[serde(rename_all = "camelCase")]
+struct InstalledAppItem {
     name: String,
+    exec: String,
+    icon: Option<String>,
+    categories: Option<String>,
+    no_display: bool,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct RunningAppItem {
     pid: i32,
     name: String,
+    exe: String,
+    cpu_usage: f32,
+    memory_mb: f64,
     command_line: String,
 }
 
@@ -552,151 +562,152 @@ fn power_action_linux(action_type: &str) -> Result<(), String> {
         Err(error) => errors.push(error),
     }
 
-    match try_command("pkexec", &["systemctl", systemctl_arg]) {
-        Ok(_) => return Ok(()),
-        Err(error) => errors.push(error),
-    }
-
     Err(format!(
-        "Unable to execute {}. Permission denied or unsupported policy/session. Details: {}",
+        "Unable to execute {}. Permission denied or unsupported policy/session (no-root mode). Details: {}",
         action_type,
         errors.join(" | ")
     ))
 }
 
-fn list_launchable_apps_json() -> Result<String, String> {
-    let mut entries: Vec<LaunchableAppItem> = Vec::new();
-    let mut seen = std::collections::BTreeSet::new();
+fn list_installed_apps_json() -> Result<String, String> {
+    let mut entries: Vec<InstalledAppItem> = Iter::new(default_paths())
+        .filter_map(|path| {
+            let content = std::fs::read_to_string(&path).ok()?;
+            let entry = DesktopEntry::decode(&path, &content).ok()?;
 
-    let mut dirs: Vec<std::path::PathBuf> = vec![
-        std::path::PathBuf::from("/usr/share/applications"),
-        std::path::PathBuf::from("/usr/local/share/applications"),
-    ];
-
-    if let Ok(home) = std::env::var("HOME") {
-        dirs.push(std::path::PathBuf::from(home).join(".local/share/applications"));
-    }
-
-    for dir in dirs {
-        let read = std::fs::read_dir(&dir);
-        let read = match read {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-
-        for item in read.flatten() {
-            let path = item.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("desktop") {
-                continue;
+            if entry.type_() != Some("Application") {
+                return None;
             }
 
-            let app_id = match path.file_name().and_then(|value| value.to_str()) {
-                Some(value) => value.to_string(),
-                None => continue,
-            };
-
-            if !seen.insert(app_id.clone()) {
-                continue;
+            let name = entry.name(None)?.trim().to_string();
+            let exec = entry.exec()?.trim().to_string();
+            if name.is_empty() || exec.is_empty() {
+                return None;
             }
 
-            let content = match std::fs::read_to_string(&path) {
-                Ok(value) => value,
-                Err(_) => continue,
-            };
-
-            let mut name: Option<String> = None;
-            let mut no_display = false;
-            let mut hidden = false;
-
-            for line in content.lines() {
-                if let Some(value) = line.strip_prefix("Name=") {
-                    if !value.trim().is_empty() {
-                        name = Some(value.trim().to_string());
-                    }
-                }
-
-                if let Some(value) = line.strip_prefix("NoDisplay=") {
-                    no_display = value.trim().eq_ignore_ascii_case("true");
-                }
-
-                if let Some(value) = line.strip_prefix("Hidden=") {
-                    hidden = value.trim().eq_ignore_ascii_case("true");
-                }
-            }
-
-            if no_display || hidden {
-                continue;
-            }
-
-            entries.push(LaunchableAppItem {
-                app_id,
-                name: name.unwrap_or_else(|| "Unknown".to_string()),
-            });
-        }
-    }
+            Some(InstalledAppItem {
+                name,
+                exec,
+                icon: entry.icon().map(str::to_string),
+                categories: entry.categories().map(str::to_string),
+                no_display: entry.no_display(),
+            })
+        })
+        .collect();
 
     entries.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
-    serde_json::to_string(&entries).map_err(|e| format!("failed to serialize launchable apps: {}", e))
+    serde_json::to_string(&entries).map_err(|e| format!("failed to serialize installed apps: {}", e))
 }
 
 fn list_running_apps_json() -> Result<String, String> {
-    let output = Command::new("ps")
-        .args(["-eo", "pid=,comm=,args="])
-        .output()
-        .map_err(|e| format!("failed to run ps: {}", e))?;
+    let mut system = System::new_all();
+    system.refresh_processes();
+    let current_uid = read_current_uid();
 
-    if !output.status.success() {
-        return Err("failed to list running apps (ps returned non-zero)".to_string());
-    }
+    let mut items: Vec<RunningAppItem> = system
+        .processes()
+        .values()
+        .filter(|process| {
+            let Some(uid) = current_uid else {
+                return false;
+            };
 
-    let stdout = String::from_utf8(output.stdout).unwrap_or_default();
-    let mut items: Vec<RunningAppItem> = Vec::new();
-    for line in stdout.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
+            read_process_uid(process.pid().as_u32()) == Some(uid)
+        })
+        .map(|process| RunningAppItem {
+            pid: process.pid().as_u32() as i32,
+            name: process.name().to_string(),
+            exe: process
+                .exe()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            cpu_usage: process.cpu_usage(),
+            memory_mb: process.memory() as f64 / 1024.0 / 1024.0,
+            command_line: process
+                .cmd()
+                .iter()
+                .map(|part| part.to_string())
+                .collect::<Vec<String>>()
+                .join(" "),
+        })
+        .collect();
 
-        let mut pieces = trimmed.split_whitespace();
-        let pid_raw = match pieces.next() {
-            Some(value) => value,
-            None => continue,
-        };
-        let pid: i32 = match pid_raw.parse() {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        let name = pieces.next().unwrap_or_default().to_string();
-        let command_line = pieces.collect::<Vec<&str>>().join(" ");
-
-        if name.is_empty() {
-            continue;
-        }
-
-        items.push(RunningAppItem {
-            pid,
-            name,
-            command_line,
-        });
-    }
-
+    items.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
     serde_json::to_string(&items).map_err(|e| format!("failed to serialize running apps: {}", e))
 }
 
-fn open_app_linux(payload_json: Option<String>) -> Result<(), String> {
-    let payload = payload_json.ok_or_else(|| "open_app requires payload".to_string())?;
+fn clean_exec(exec: &str) -> String {
+    let mut out = String::new();
+    let mut chars = exec.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '%' {
+            let _ = chars.next();
+            continue;
+        }
+
+        out.push(ch);
+    }
+
+    out.trim().to_string()
+}
+
+fn launch_app_linux(payload_json: Option<String>) -> Result<(), String> {
+    let payload = payload_json.ok_or_else(|| "launch_app requires payload".to_string())?;
     let value: serde_json::Value = serde_json::from_str(&payload)
-        .map_err(|e| format!("invalid open_app payload: {}", e))?;
+        .map_err(|e| format!("invalid launch_app payload: {}", e))?;
 
-    let app_id = value
-        .get("appId")
+    let exec = value
+        .get("exec")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| "open_app payload missing appId".to_string())?;
+        .ok_or_else(|| "launch_app payload missing exec".to_string())?;
 
-    try_command("gtk-launch", &[app_id]).or_else(|_| {
-        let desktop_file = app_id.to_string();
-        try_command("gio", &["launch", desktop_file.as_str()])
-    })
+    let cleaned = clean_exec(exec);
+    if cleaned.is_empty() {
+        return Err("launch_app payload exec is empty after sanitization".to_string());
+    }
+
+    let parts = shlex::split(&cleaned).ok_or_else(|| "invalid launch_app exec format".to_string())?;
+    if parts.is_empty() {
+        return Err("launch_app payload exec is empty".to_string());
+    }
+
+    let program = &parts[0];
+    let args = &parts[1..];
+
+    Command::new(program)
+        .args(args)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("failed to launch '{}': {}", program, e))?;
+
+    Ok(())
+}
+
+fn read_current_uid() -> Option<u32> {
+    let raw = std::fs::read_to_string("/proc/self/status").ok()?;
+    for line in raw.lines() {
+        if let Some(rest) = line.strip_prefix("Uid:") {
+            let uid_text = rest.split_whitespace().next()?;
+            return uid_text.parse::<u32>().ok();
+        }
+    }
+
+    None
+}
+
+fn read_process_uid(pid: u32) -> Option<u32> {
+    let path = format!("/proc/{}/status", pid);
+    let raw = std::fs::read_to_string(path).ok()?;
+    for line in raw.lines() {
+        if let Some(rest) = line.strip_prefix("Uid:") {
+            let uid_text = rest.split_whitespace().next()?;
+            return uid_text.parse::<u32>().ok();
+        }
+    }
+
+    None
 }
 
 fn close_app_linux(payload_json: Option<String>) -> Result<(), String> {
@@ -704,16 +715,41 @@ fn close_app_linux(payload_json: Option<String>) -> Result<(), String> {
     let value: serde_json::Value = serde_json::from_str(&payload)
         .map_err(|e| format!("invalid close_app payload: {}", e))?;
 
-    if let Some(pid_value) = value.get("pid").and_then(|v| v.as_i64()) {
-        let pid_text = pid_value.to_string();
-        return try_command("kill", &["-TERM", pid_text.as_str()]);
+    let force = value
+        .get("force")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let pid = value
+        .get("pid")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "close_app payload missing pid".to_string())? as u32;
+
+    let current_uid = read_current_uid().ok_or_else(|| "failed to determine current uid".to_string())?;
+    let process_uid = read_process_uid(pid).ok_or_else(|| format!("no process found with PID {}", pid))?;
+
+    if process_uid != current_uid {
+        return Err("no-root mode allows closing only processes owned by the current user".to_string());
     }
 
-    if let Some(name_value) = value.get("name").and_then(|v| v.as_str()) {
-        return try_command("pkill", &["-f", name_value]);
+    let mut system = System::new_all();
+    system.refresh_process(Pid::from_u32(pid));
+
+    let process = system
+        .process(Pid::from_u32(pid))
+        .ok_or_else(|| format!("no process found with PID {}", pid))?;
+
+    let killed = if force {
+        process.kill()
+    } else {
+        process.kill_with(Signal::Term).unwrap_or(false)
+    };
+
+    if !killed {
+        return Err(format!("failed to close process with PID {}", pid));
     }
 
-    Err("close_app payload must include pid or name".to_string())
+    Ok(())
 }
 
 fn list_clipboard_history_json() -> Result<String, String> {
@@ -841,10 +877,10 @@ async fn perform_local_action(action_type: String, payload_json: Option<String>)
                 power_action_linux("reboot")?;
                 Ok("{}".to_string())
             }
-            "list_launchable_apps" => list_launchable_apps_json(),
+            "list_installed_apps" => list_installed_apps_json(),
             "list_running_apps" => list_running_apps_json(),
-            "open_app" => {
-                open_app_linux(payload_json)?;
+            "launch_app" => {
+                launch_app_linux(payload_json)?;
                 Ok("{}".to_string())
             }
             "close_app" => {

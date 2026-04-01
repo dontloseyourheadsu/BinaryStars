@@ -59,6 +59,7 @@ public static class ServicesExtensions
         services.AddScoped<MessagingKafkaService>();
         services.AddScoped<MessagingWebSocketHandler>();
         services.AddHostedService<DevicePresenceMonitorService>();
+        services.AddHostedService<KafkaTopicBootstrapService>();
 
         // Validators
         services.AddScoped<AuthValidator>();

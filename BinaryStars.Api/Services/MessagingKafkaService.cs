@@ -212,6 +212,7 @@ public class MessagingKafkaService
         while (!cancellationToken.IsCancellationRequested)
         {
             var result = consumer.Consume(TimeSpan.FromSeconds(1));
+
             if (result == null)
             {
                 emptyReads++;
@@ -287,6 +288,7 @@ public class MessagingKafkaService
         while (!cancellationToken.IsCancellationRequested)
         {
             var result = consumer.Consume(TimeSpan.FromSeconds(1));
+
             if (result == null)
             {
                 emptyReads++;
@@ -355,7 +357,17 @@ public class MessagingKafkaService
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var result = consumer.Consume(TimeSpan.FromSeconds(1));
+            ConsumeResult<string, byte[]>? result;
+            try
+            {
+                result = consumer.Consume(TimeSpan.FromSeconds(1));
+            }
+            catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
+            {
+                _logger.LogWarning("Action results topic '{Topic}' is not available yet; returning empty result set.", _settings.ActionResultsTopic);
+                return messages;
+            }
+
             if (result == null)
             {
                 emptyReads++;

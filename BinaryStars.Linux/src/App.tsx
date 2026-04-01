@@ -58,9 +58,9 @@ type PendingActionEnvelope = {
     | "block_screen"
     | "shutdown"
     | "reboot"
-    | "list_launchable_apps"
+    | "list_installed_apps"
     | "list_running_apps"
-    | "open_app"
+    | "launch_app"
     | "close_app"
     | "get_clipboard_history";
   payloadJson?: string | null;
@@ -1832,9 +1832,9 @@ function App() {
       | "block_screen"
       | "shutdown"
       | "reboot"
-      | "list_launchable_apps"
+      | "list_installed_apps"
       | "list_running_apps"
-      | "open_app"
+      | "launch_app"
       | "close_app"
       | "get_clipboard_history",
     payloadJson?: string | null,
@@ -1895,16 +1895,16 @@ function App() {
       return null;
     }
 
-    if (actionType === "list_launchable_apps") {
-      return performLocalAction("list_launchable_apps");
+    if (actionType === "list_installed_apps") {
+      return performLocalAction("list_installed_apps");
     }
 
     if (actionType === "list_running_apps") {
       return performLocalAction("list_running_apps");
     }
 
-    if (actionType === "open_app") {
-      await performLocalAction("open_app", payloadJson);
+    if (actionType === "launch_app") {
+      await performLocalAction("launch_app", payloadJson);
       return null;
     }
 
@@ -1970,7 +1970,7 @@ function App() {
     setPendingActionRequestId(requestId);
     setActionMode("open-app");
     setLaunchableApps([]);
-    await sendActionCommand("list_launchable_apps", null, requestId);
+    await sendActionCommand("list_installed_apps", null, requestId);
   };
 
   const fetchRunningApps = async (): Promise<void> => {
@@ -1982,11 +1982,11 @@ function App() {
   };
 
   const openRemoteApp = async (app: LaunchableAppItem): Promise<void> => {
-    await sendActionCommand("open_app", JSON.stringify({ appId: app.appId }), crypto.randomUUID());
+    await sendActionCommand("launch_app", JSON.stringify({ exec: app.exec }), crypto.randomUUID());
   };
 
   const closeRemoteApp = async (app: RunningAppItem): Promise<void> => {
-    await sendActionCommand("close_app", JSON.stringify({ pid: app.pid, name: app.name }), crypto.randomUUID());
+    await sendActionCommand("close_app", JSON.stringify({ pid: app.pid, force: false }), crypto.randomUUID());
   };
 
   const refreshClipboardHistory = async (): Promise<void> => {
@@ -2107,13 +2107,13 @@ function App() {
         continue;
       }
 
-      if (result.actionType === "list_launchable_apps") {
+      if (result.actionType === "list_installed_apps") {
         try {
           const parsed = JSON.parse(result.payloadJson ?? "[]") as LaunchableAppItem[];
           setLaunchableApps(parsed);
           setPendingActionRequestId(null);
         } catch {
-          setError("Failed to parse launchable apps payload");
+          setError("Failed to parse installed apps payload");
         }
       }
 
@@ -2137,10 +2137,6 @@ function App() {
 
     const status = await getElevationStatus();
     setIsElevated(status.is_root);
-  };
-
-  const ensureElevatedMode = async (): Promise<void> => {
-    await refreshElevationStatus();
   };
 
   const signOut = (): void => {
@@ -2521,8 +2517,6 @@ function App() {
             runningApps={runningApps}
             actionMode={actionMode}
             onBackToActions={() => setActionMode("base")}
-            isElevated={isElevated}
-            onRequestElevation={() => void ensureElevatedMode()}
             busy={busy}
           />
         )}
