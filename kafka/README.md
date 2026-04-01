@@ -47,9 +47,15 @@ openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 \
   -subj "/CN=binarystars-ca" -out ca.pem
 
 openssl genrsa -out broker.key 4096
-openssl req -new -key broker.key -subj "/CN=binarystars.kafka" -out broker.csr
+openssl req -new -key broker.key -subj "/CN=binarystars.kafka" \
+  -addext "subjectAltName=DNS:binarystars.kafka,DNS:binarystars-kafka,DNS:localhost" \
+  -out broker.csr
+cat > broker.ext <<'EOF'
+subjectAltName=DNS:binarystars.kafka,DNS:binarystars-kafka,DNS:localhost
+extendedKeyUsage=serverAuth
+EOF
 openssl x509 -req -in broker.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
-  -out broker.pem -days 3650 -sha256
+  -out broker.pem -days 3650 -sha256 -extfile broker.ext
 openssl pkcs8 -topk8 -nocrypt -in broker.key -out broker.pkcs8.key
 openssl pkcs12 -export -in broker.pem -inkey broker.pkcs8.key -certfile ca.pem \
   -out broker.p12 -password pass:brokerpass
@@ -60,7 +66,7 @@ openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
   -out client.pem -days 3650 -sha256
 
 mv ca.pem ca.key broker.pem broker.p12 client.pem client.key ../secrets/
-rm -f *.csr *.srl
+rm -f *.csr *.srl broker.ext
 ```
 
 ## Create Auth Config Files
@@ -94,7 +100,7 @@ ssl.keystore.key=/etc/kafka/secrets/client.key
 ## Start Kafka (Docker Compose)
 
 ```bash
-docker compose up -d binarystars.kafka
+docker compose up -d binarystars-kafka
 ```
 
 Kafka is running in KRaft mode (no ZooKeeper). The cluster ID is defined in
@@ -105,7 +111,7 @@ Kafka is running in KRaft mode (no ZooKeeper). The cluster ID is defined in
 After the broker starts, create the app user:
 
 ```bash
-docker exec -it binarystars.kafka kafka-configs --bootstrap-server binarystars.kafka:9093 \
+docker exec -it binarystars-kafka kafka-configs --bootstrap-server binarystars.kafka:9093 \
   --command-config /etc/kafka/secrets/kafka_client.properties \
   --alter --add-config 'SCRAM-SHA-512=[password=binarystars]' \
   --entity-type users --entity-name binarystars
@@ -140,7 +146,7 @@ If you are using local Testcontainers for integration tests, set `Kafka:Security
 Use delete + compact with a 1-hour retention window for packet cleanup:
 
 ```bash
-docker exec -it binarystars.kafka kafka-configs --bootstrap-server binarystars.kafka:9093 \
+docker exec -it binarystars-kafka kafka-configs --bootstrap-server binarystars.kafka:9093 \
   --command-config /etc/kafka/secrets/kafka_client.properties \
   --alter --entity-type topics --entity-name binarystars.transfers \
   --add-config cleanup.policy=compact,delete,retention.ms=3600000
@@ -155,3 +161,29 @@ The API uses the BinaryStars JWT as the OAuth bearer token when Kafka auth mode 
 - These certificates are for local development only.
 - For production, replace with managed CA-signed certs and a proper OAuth provider.
 - Store broker credentials and client keys in a secure secret manager for cloud deployments.
+
+## Troubleshooting Recurring Auth Failures
+
+If you repeatedly see `SSL handshake failed` with `certificate verify failed`, verify:
+
+1. The API bootstrap host matches the broker cert identity (`binarystars.kafka`).
+2. The broker cert includes SAN entries for the DNS names you actually use.
+3. The API and broker containers mount the same `kafka/secrets/ca.pem`.
+
+Quick checks:
+
+```bash
+openssl x509 -in kafka/secrets/broker.pem -noout -subject -ext subjectAltName
+openssl x509 -in kafka/secrets/ca.pem -noout -subject -issuer
+```
+
+If `subjectAltName` is missing or wrong, regenerate certs and restart:
+
+```bash
+docker compose down
+# regenerate certs using the SAN-enabled commands above
+docker compose up -d binarystars-kafka
+```
+
+Also keep Kafka data persistent so SCRAM users/topics survive container recreation.
+This compose setup mounts `/var/lib/kafka/data` to the `kafka-data` volume.

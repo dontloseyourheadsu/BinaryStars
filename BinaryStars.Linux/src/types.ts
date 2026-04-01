@@ -96,13 +96,19 @@ export interface DeviceActionResultMessage {
 }
 
 export interface LaunchableAppItem {
-  appId: string;
   name: string;
+  exec: string;
+  icon?: string | null;
+  categories?: string | null;
+  noDisplay: boolean;
 }
 
 export interface RunningAppItem {
   pid: number;
   name: string;
+  exe: string;
+  cpuUsage: number;
+  memoryMb: number;
   commandLine: string;
 }
 
