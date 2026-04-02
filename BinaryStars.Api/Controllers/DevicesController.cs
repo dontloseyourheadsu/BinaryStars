@@ -5,7 +5,6 @@ using BinaryStars.Application.Services.Devices;
 using System.Security.Claims;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
-using BinaryStars.Application.Databases.Repositories.Accounts;
 using System.Net.WebSockets;
 using System.Text;
 
@@ -25,7 +24,6 @@ public class DevicesController : ControllerBase
     private readonly IDevicesWriteService _devicesWriteService;
     private readonly MessagingKafkaService _messagingKafkaService;
     private readonly MessagingConnectionManager _connectionManager;
-    private readonly IAccountRepository _accountRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DevicesController"/> class.
@@ -40,7 +38,7 @@ public class DevicesController : ControllerBase
         IDevicesWriteService devicesWriteService,
         MessagingKafkaService messagingKafkaService,
         MessagingConnectionManager connectionManager,
-        IAccountRepository accountRepository, ILogger<DevicesController> logger)
+        ILogger<DevicesController> logger)
     {
         _logger = logger;
 
@@ -48,7 +46,6 @@ public class DevicesController : ControllerBase
         _devicesWriteService = devicesWriteService;
         _messagingKafkaService = messagingKafkaService;
         _connectionManager = connectionManager;
-        _accountRepository = accountRepository;
     }
 
     /// <summary>
@@ -113,9 +110,8 @@ public class DevicesController : ControllerBase
                 deviceId,
                 DateTimeOffset.UtcNow);
 
-            var authMode = await ResolveKafkaAuthModeAsync(userId);
-            var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-            await _messagingKafkaService.PublishDeviceRemovedAsync(removalEvent, authMode, oauthToken, cancellationToken);
+            const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+            await _messagingKafkaService.PublishDeviceRemovedAsync(removalEvent, authMode, null, cancellationToken);
 
             await NotifyConnectedDevicesAsync(userId, removalEvent, cancellationToken);
             return Ok();
@@ -165,25 +161,6 @@ public class DevicesController : ControllerBase
         }
 
         return BadRequest(result.Errors);
-    }
-
-    private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
-    {
-        var user = await _accountRepository.FindByIdAsync(userId);
-        if (user == null)
-            return KafkaAuthMode.Scram;
-
-        var logins = await _accountRepository.GetLoginsAsync(user);
-        return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
-    }
-
-    private string? ExtractBearerToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            return header["Bearer ".Length..].Trim();
-
-        return null;
     }
 
     private async Task NotifyConnectedDevicesAsync(Guid userId, DeviceRemovedEvent removalEvent, CancellationToken cancellationToken)

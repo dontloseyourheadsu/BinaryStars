@@ -4,7 +4,6 @@ using System.Net.WebSockets;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
 using BinaryStars.Application.Databases.DatabaseModels.Messaging;
-using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Databases.Repositories.Messaging;
 using Microsoft.AspNetCore.Authorization;
@@ -26,7 +25,6 @@ public class MessagingController : ControllerBase
     private readonly MessagingConnectionManager _connectionManager;
     private readonly MessagingKafkaService _kafkaService;
     private readonly IDeviceRepository _deviceRepository;
-    private readonly IAccountRepository _accountRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
 
     /// <summary>
@@ -41,7 +39,6 @@ public class MessagingController : ControllerBase
         MessagingConnectionManager connectionManager,
         MessagingKafkaService kafkaService,
         IDeviceRepository deviceRepository,
-        IAccountRepository accountRepository,
         IMessageHistoryRepository messageHistoryRepository, ILogger<MessagingController> logger)
     {
         _logger = logger;
@@ -49,7 +46,6 @@ public class MessagingController : ControllerBase
         _connectionManager = connectionManager;
         _kafkaService = kafkaService;
         _deviceRepository = deviceRepository;
-        _accountRepository = accountRepository;
         _messageHistoryRepository = messageHistoryRepository;
     }
 
@@ -193,9 +189,8 @@ public class MessagingController : ControllerBase
         {
             try
             {
-                var authMode = await ResolveKafkaAuthModeAsync(userId, cancellationToken);
-                var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-                await _kafkaService.PublishMessageAsync(message, authMode, oauthToken, cancellationToken);
+                const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+                await _kafkaService.PublishMessageAsync(message, authMode, null, cancellationToken);
             }
             catch
             {
@@ -225,22 +220,4 @@ public class MessagingController : ControllerBase
         await _messageHistoryRepository.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var user = await _accountRepository.FindByIdAsync(userId);
-        if (user == null)
-            return KafkaAuthMode.Scram;
-
-        var logins = await _accountRepository.GetLoginsAsync(user);
-        return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
-    }
-
-    private string? ExtractBearerToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            return header["Bearer ".Length..].Trim();
-
-        return null;
-    }
 }

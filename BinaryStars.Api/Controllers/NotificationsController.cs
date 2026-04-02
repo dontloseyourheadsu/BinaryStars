@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
-using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Application.Services.Notifications;
 using Microsoft.AspNetCore.Authorization;
@@ -23,7 +22,6 @@ public class NotificationsController : ControllerBase
     private readonly INotificationsReadService _notificationsReadService;
     private readonly INotificationsWriteService _notificationsWriteService;
     private readonly IDeviceRepository _deviceRepository;
-    private readonly IAccountRepository _accountRepository;
     private readonly MessagingKafkaService _kafkaService;
 
     /// <summary>
@@ -33,7 +31,6 @@ public class NotificationsController : ControllerBase
         INotificationsReadService notificationsReadService,
         INotificationsWriteService notificationsWriteService,
         IDeviceRepository deviceRepository,
-        IAccountRepository accountRepository,
         MessagingKafkaService kafkaService, ILogger<NotificationsController> logger)
     {
         _logger = logger;
@@ -41,7 +38,6 @@ public class NotificationsController : ControllerBase
         _notificationsReadService = notificationsReadService;
         _notificationsWriteService = notificationsWriteService;
         _deviceRepository = deviceRepository;
-        _accountRepository = accountRepository;
         _kafkaService = kafkaService;
     }
 
@@ -72,9 +68,8 @@ public class NotificationsController : ControllerBase
             request.Body.Trim(),
             DateTimeOffset.UtcNow);
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        await _kafkaService.PublishNotificationAsync(message, authMode, oauthToken, cancellationToken);
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+        await _kafkaService.PublishNotificationAsync(message, authMode, null, cancellationToken);
 
         var pendingResult = await _notificationsWriteService.SetPendingSyncFlagAsync(userId, request.TargetDeviceId, true, cancellationToken);
         if (!pendingResult.IsSuccess)
@@ -190,12 +185,11 @@ public class NotificationsController : ControllerBase
         if (!schedulesResult.IsSuccess)
             return BadRequest(schedulesResult.Errors);
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        var notifications = await _kafkaService.ConsumePendingNotificationsAsync(deviceId, userId, authMode, oauthToken, cancellationToken);
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+        var notifications = await _kafkaService.ConsumePendingNotificationsAsync(deviceId, userId, authMode, null, cancellationToken);
         foreach (var notification in notifications)
         {
-            await _kafkaService.DeleteNotificationAsync(notification.Id, authMode, oauthToken, cancellationToken);
+            await _kafkaService.DeleteNotificationAsync(notification.Id, authMode, null, cancellationToken);
         }
 
         var response = new PullNotificationsResponseDto(
@@ -223,24 +217,6 @@ public class NotificationsController : ControllerBase
         return BadRequest(result.Errors);
     }
 
-    private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
-    {
-        var user = await _accountRepository.FindByIdAsync(userId);
-        if (user == null)
-            return KafkaAuthMode.Scram;
-
-        var logins = await _accountRepository.GetLoginsAsync(user);
-        return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
-    }
-
-    private string? ExtractBearerToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            return header["Bearer ".Length..].Trim();
-
-        return null;
-    }
 }
 
 /// <summary>

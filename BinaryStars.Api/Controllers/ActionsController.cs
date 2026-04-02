@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
-using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Domain.Devices;
 using Microsoft.AspNetCore.Authorization;
@@ -18,7 +17,6 @@ namespace BinaryStars.Api.Controllers;
 public class ActionsController : ControllerBase
 {
     private readonly IDeviceRepository _deviceRepository;
-    private readonly IAccountRepository _accountRepository;
     private readonly MessagingKafkaService _kafkaService;
     private readonly ILogger<ActionsController> _logger;
 
@@ -27,12 +25,10 @@ public class ActionsController : ControllerBase
     /// </summary>
     public ActionsController(
         IDeviceRepository deviceRepository,
-        IAccountRepository accountRepository,
         MessagingKafkaService kafkaService,
         ILogger<ActionsController> logger)
     {
         _deviceRepository = deviceRepository;
-        _accountRepository = accountRepository;
         _kafkaService = kafkaService;
         _logger = logger;
     }
@@ -87,11 +83,10 @@ public class ActionsController : ControllerBase
             request.CorrelationId,
             DateTimeOffset.UtcNow);
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
 
         _logger.LogInformation("Publishing command {CommandId} to Kafka", command.Id);
-        await _kafkaService.PublishActionAsync(command, authMode, oauthToken, cancellationToken);
+        await _kafkaService.PublishActionAsync(command, authMode, null, cancellationToken);
 
         return Ok(command);
     }
@@ -110,12 +105,11 @@ public class ActionsController : ControllerBase
         if (target == null || target.UserId != userId)
             return BadRequest(new[] { "Invalid device." });
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        var actions = await _kafkaService.ConsumePendingActionsAsync(deviceId, userId, authMode, oauthToken, cancellationToken);
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+        var actions = await _kafkaService.ConsumePendingActionsAsync(deviceId, userId, authMode, null, cancellationToken);
         foreach (var action in actions)
         {
-            await _kafkaService.DeleteActionAsync(action.Id, authMode, oauthToken, cancellationToken);
+            await _kafkaService.DeleteActionAsync(action.Id, authMode, null, cancellationToken);
         }
 
         return Ok(actions);
@@ -148,9 +142,8 @@ public class ActionsController : ControllerBase
             request.CorrelationId,
             DateTimeOffset.UtcNow);
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        await _kafkaService.PublishActionResultAsync(result, authMode, oauthToken, cancellationToken);
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+        await _kafkaService.PublishActionResultAsync(result, authMode, null, cancellationToken);
 
         return Ok(result);
     }
@@ -167,12 +160,11 @@ public class ActionsController : ControllerBase
         if (target == null || target.UserId != userId)
             return BadRequest(new[] { "Invalid device." });
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        var results = await _kafkaService.ConsumePendingActionResultsAsync(deviceId, userId, authMode, oauthToken, cancellationToken);
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+        var results = await _kafkaService.ConsumePendingActionResultsAsync(deviceId, userId, authMode, null, cancellationToken);
         foreach (var result in results)
         {
-            await _kafkaService.DeleteActionResultAsync(result.Id, authMode, oauthToken, cancellationToken);
+            await _kafkaService.DeleteActionResultAsync(result.Id, authMode, null, cancellationToken);
         }
 
         return Ok(results);
@@ -208,24 +200,6 @@ public class ActionsController : ControllerBase
         return null;
     }
 
-    private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
-    {
-        var user = await _accountRepository.FindByIdAsync(userId);
-        if (user == null)
-            return KafkaAuthMode.Scram;
-
-        var logins = await _accountRepository.GetLoginsAsync(user);
-        return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
-    }
-
-    private string? ExtractBearerToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            return header["Bearer ".Length..].Trim();
-
-        return null;
-    }
 }
 
 /// <summary>
