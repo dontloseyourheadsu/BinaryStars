@@ -12,8 +12,6 @@ services:
         - ASPNETCORE_ENVIRONMENT=Development
         - Kafka__BootstrapServers=binarystars.kafka:9093
         - Kafka__ScramBootstrapServers=binarystars.kafka:9093
-        - Kafka__OauthBootstrapServers=binarystars.kafka:9095
-        - Kafka__Oauth__UseKafkaOauth=false
         - ConnectionStrings__DefaultConnection=Host=binarystars-db;Database=binarystars;Username=admin;Password=abc123=0
         - Hangfire__ConnectionString=Host=binarystars-hangfire;Database=binarystars_hangfire;Username=admin;Password=abc123=0
         depends_on:
