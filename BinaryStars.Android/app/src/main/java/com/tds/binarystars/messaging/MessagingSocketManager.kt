@@ -8,10 +8,12 @@ import com.tds.binarystars.BuildConfig
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.DeviceRemovedEventDto
 import com.tds.binarystars.api.DevicePresenceEventDto
+import com.tds.binarystars.api.DeviceActionResultDto
 import com.tds.binarystars.api.MessagingEnvelopeDto
 import com.tds.binarystars.api.MessagingMessageDto
 import com.tds.binarystars.api.LocationUpdateEventDto
 import com.tds.binarystars.api.SendMessageRequestDto
+import com.tds.binarystars.api.SendActionRequestDto
 import com.tds.binarystars.model.ChatMessage
 import com.tds.binarystars.storage.ChatStorage
 import com.tds.binarystars.storage.FileTransferLocalStore
@@ -111,6 +113,18 @@ object MessagingSocketManager {
     }
 
     /**
+     * Sends an action command over the realtime websocket channel.
+     */
+    fun sendAction(request: SendActionRequestDto): Boolean {
+        val socket = webSocket ?: return false
+        val envelope = MessagingEnvelopeDto(
+            type = "action_command",
+            payload = gson.toJsonTree(request)
+        )
+        return socket.send(gson.toJson(envelope))
+    }
+
+    /**
      * Registers a listener for messaging events.
      */
     fun addListener(listener: MessagingEventListener) {
@@ -142,6 +156,10 @@ object MessagingSocketManager {
             "location_update" -> {
                 val payload = gson.fromJson(envelope.payload, LocationUpdateEventDto::class.java)
                 notifyLocationUpdated(payload)
+            }
+            "action_result" -> {
+                val payload = gson.fromJson(envelope.payload, DeviceActionResultDto::class.java)
+                notifyActionResult(payload)
             }
         }
     }
@@ -219,6 +237,12 @@ object MessagingSocketManager {
             listeners.forEach { it.onLocationUpdated(event) }
         }
     }
+
+    private fun notifyActionResult(result: DeviceActionResultDto) {
+        mainHandler.post {
+            listeners.forEach { it.onActionResult(result) }
+        }
+    }
 }
 
 /**
@@ -230,4 +254,5 @@ interface MessagingEventListener {
     fun onConnectionStateChanged(isConnected: Boolean)
     fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String)
     fun onLocationUpdated(event: LocationUpdateEventDto) {}
+    fun onActionResult(result: DeviceActionResultDto) {}
 }

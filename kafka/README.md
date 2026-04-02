@@ -152,9 +152,9 @@ docker exec -it binarystars-kafka kafka-configs --bootstrap-server binarystars.k
   --add-config cleanup.policy=compact,delete,retention.ms=3600000
 ```
 
-## OAuth Bearer
+## Authentication Model
 
-The API uses the BinaryStars JWT as the OAuth bearer token when Kafka auth mode is `OauthBearer`.
+Kafka authentication is backend-managed and uses a shared SCRAM principal from the API service configuration.
 
 ## Notes
 

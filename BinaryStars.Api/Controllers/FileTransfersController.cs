@@ -3,7 +3,6 @@ using System.Security.Claims;
 using System.Text;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
-using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Services.Transfers;
 using BinaryStars.Application.Databases.Repositories.Transfers;
 using BinaryStars.Domain.Transfers;
@@ -26,7 +25,6 @@ public class FileTransfersController : ControllerBase
     private readonly IFileTransfersReadService _readService;
     private readonly IFileTransfersWriteService _writeService;
     private readonly IFileTransferRepository _repository;
-    private readonly IAccountRepository _accountRepository;
     private readonly FileTransferKafkaService _kafkaService;
     private readonly FileTransferSettings _settings;
     private readonly KafkaSettings _kafkaSettings;
@@ -45,7 +43,6 @@ public class FileTransfersController : ControllerBase
         IFileTransfersReadService readService,
         IFileTransfersWriteService writeService,
         IFileTransferRepository repository,
-        IAccountRepository accountRepository,
         FileTransferKafkaService kafkaService,
         IOptions<FileTransferSettings> settings,
         IOptions<KafkaSettings> kafkaSettings, ILogger<FileTransfersController> logger)
@@ -55,7 +52,6 @@ public class FileTransfersController : ControllerBase
         _readService = readService;
         _writeService = writeService;
         _repository = repository;
-        _accountRepository = accountRepository;
         _kafkaService = kafkaService;
         _settings = settings.Value;
         _kafkaSettings = kafkaSettings.Value;
@@ -134,7 +130,7 @@ public class FileTransfersController : ControllerBase
         if (request.SizeBytes <= 0)
             return BadRequest(new[] { "File size must be greater than zero." });
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
         var createRequest = new CreateFileTransferRequest(
             request.FileName,
             request.ContentType,
@@ -260,17 +256,17 @@ public class FileTransfersController : ControllerBase
             }
             else
             {
-                var authMode = ParseAuthMode(transfer.KafkaAuthMode);
-                var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-                await _kafkaService.StreamToAsync(transfer, Response.Body, authMode, oauthToken, cancellationToken);
-                await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, oauthToken, cancellationToken);
+                const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+                await _kafkaService.StreamToAsync(transfer, Response.Body, authMode, null, cancellationToken);
+                await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, null, cancellationToken);
             }
 
             TryDeleteStoredFile(storedFilePath);
             await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Downloaded, null, DateTimeOffset.UtcNow, cancellationToken);
             return new EmptyResult();
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             _logger.LogWarning("Exception caught.");
             await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Failed, ex.Message, null, cancellationToken);
             return StatusCode(500, new[] { "Failed to stream transfer." });
@@ -303,9 +299,8 @@ public class FileTransfersController : ControllerBase
         TryDeleteStoredFile(GetStoredFilePath(transferId));
         if (transfer.PacketCount > 0)
         {
-            var authMode = ParseAuthMode(transfer.KafkaAuthMode);
-            var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-            await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, oauthToken, cancellationToken);
+            const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+            await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, null, cancellationToken);
         }
         await _writeService.UpdateStatusAsync(transferId, FileTransferStatus.Rejected, "Rejected", DateTimeOffset.UtcNow, cancellationToken);
 
@@ -351,9 +346,8 @@ public class FileTransfersController : ControllerBase
             TryDeleteStoredFile(GetStoredFilePath(transferId));
             if (transfer.PacketCount > 0)
             {
-                var authMode = ParseAuthMode(transfer.KafkaAuthMode);
-                var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-                await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, oauthToken, cancellationToken);
+                const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+                await _kafkaService.DeleteTransferPacketsAsync(transfer, authMode, null, cancellationToken);
             }
 
             await _repository.DeleteAsync(transfer, cancellationToken);
@@ -369,30 +363,6 @@ public class FileTransfersController : ControllerBase
     private Guid GetUserId()
     {
         return Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    }
-
-    private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
-    {
-        var user = await _accountRepository.FindByIdAsync(userId);
-        if (user == null)
-            return KafkaAuthMode.Scram;
-
-        var logins = await _accountRepository.GetLoginsAsync(user);
-        return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
-    }
-
-    private KafkaAuthMode ParseAuthMode(string mode)
-    {
-        return Enum.TryParse<KafkaAuthMode>(mode, true, out var parsed) ? parsed : KafkaAuthMode.Scram;
-    }
-
-    private string? ExtractBearerToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            return header.Substring("Bearer ".Length).Trim();
-
-        return null;
     }
 
     private string GetStoredFilePath(Guid transferId)

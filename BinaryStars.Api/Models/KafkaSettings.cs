@@ -22,12 +22,6 @@ public class KafkaSettings
     public string? ScramBootstrapServers { get; set; }
 
     /// <summary>
-    /// Gets or sets the Kafka bootstrap servers used for OAuth bearer authentication.
-    /// If omitted, <see cref="BootstrapServers"/> is used.
-    /// </summary>
-    public string? OauthBootstrapServers { get; set; }
-
-    /// <summary>
     /// Gets or sets the topic used for file transfers.
     /// </summary>
     public string Topic { get; set; } = "binarystars.transfers";
@@ -67,10 +61,6 @@ public class KafkaSettings
     /// </summary>
     public KafkaScramSettings Scram { get; set; } = new();
 
-    /// <summary>
-    /// Gets or sets OAuth bearer settings.
-    /// </summary>
-    public KafkaOauthSettings Oauth { get; set; } = new();
 }
 
 /// <summary>
@@ -120,29 +110,3 @@ public class KafkaScramSettings
     public string Password { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Kafka OAuth bearer settings.
-/// </summary>
-public class KafkaOauthSettings
-{
-    /// <summary>
-    /// Gets or sets whether Kafka OAuth bearer authentication is enabled.
-    /// When false, SCRAM is used even for externally authenticated app users.
-    /// </summary>
-    public bool UseKafkaOauth { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the token issuer.
-    /// </summary>
-    public string Issuer { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the expected token audience.
-    /// </summary>
-    public string Audience { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the token lifetime in seconds.
-    /// </summary>
-    public int TokenLifetimeSeconds { get; set; } = 3600;
-}

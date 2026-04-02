@@ -23,6 +23,8 @@ import type { ThemeMode } from "./storage";
 import type {
   AccountProfile,
   ChatMessage,
+  DeviceActionCommand,
+  DeviceActionResultMessage,
   DevicePresenceEvent,
   Device,
   LaunchableAppItem,
@@ -47,45 +49,10 @@ import ActionsTab from "./components/tabs/ActionsTab";
 import SettingsTab from "./components/tabs/SettingsTab";
 import { Tab, tabs } from "./components/tabs/types";
 import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
+import { getNativeLogFilePath, installInteractionLogging, logEvent } from "./logging";
 
 type EffectiveTheme = "light" | "dark";
 type SnackbarLevel = "error" | "info" | "success" | "warning";
-
-type PendingActionEnvelope = {
-  id: string;
-  targetDeviceId: string;
-  actionType:
-    | "block_screen"
-    | "shutdown"
-    | "reboot"
-    | "list_installed_apps"
-    | "list_running_apps"
-    | "launch_app"
-    | "close_app"
-    | "get_clipboard_history";
-  payloadJson?: string | null;
-  correlationId?: string | null;
-};
-
-const PENDING_ACTIONS_KEY = "binarystars.actions.pending";
-
-function readPendingActions(): PendingActionEnvelope[] {
-  const raw = localStorage.getItem(PENDING_ACTIONS_KEY);
-  if (!raw) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as PendingActionEnvelope[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writePendingActions(value: PendingActionEnvelope[]): void {
-  localStorage.setItem(PENDING_ACTIONS_KEY, JSON.stringify(value));
-}
 
 function getSystemTheme(): EffectiveTheme {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -168,6 +135,7 @@ function App() {
   const [lastGeoError, setLastGeoError] = useState("");
   const [lastLocationSampleAt, setLastLocationSampleAt] = useState<string | null>(null);
   const [lastLocationSource, setLastLocationSource] = useState<"native" | "geolocation" | null>(null);
+  const [nativeLogFilePath, setNativeLogFilePath] = useState<string | null>(null);
   const isElevatedRuntime = isTauriRuntime() && isElevated;
 
   const normalizeNoteType = (value: unknown): "Plaintext" | "Markdown" => {
@@ -187,6 +155,24 @@ function App() {
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const clipboardAutoFetchKeyRef = useRef<string>("");
   const myDeviceId = getDeviceId();
+
+  const handleTabSelect = (tab: Tab): void => {
+    logEvent("info", "ui.navigation", "tab-selected", { tab });
+    setActiveTab(tab);
+  };
+
+  useEffect(() => {
+    installInteractionLogging();
+    logEvent("info", "ui.lifecycle", "app-mounted", { runtime: isTauriRuntime() ? "tauri" : "browser" });
+
+    void (async () => {
+      const nativeLogPath = await getNativeLogFilePath();
+      if (nativeLogPath) {
+        setNativeLogFilePath(nativeLogPath);
+        logEvent("info", "ui.logging", "native-log-path-resolved", { path: nativeLogPath });
+      }
+    })();
+  }, []);
 
   const isConnectionIssueMessage = (message: string): boolean => {
     const normalized = message.trim().toLowerCase();
@@ -377,8 +363,8 @@ function App() {
   );
 
   const linuxActionDevices = useMemo(
-    () => devices.filter((entry) => entry.type === "Linux"),
-    [devices],
+    () => devices.filter((entry) => entry.type === "Linux" && entry.isOnline && entry.id !== myDeviceId),
+    [devices, myDeviceId],
   );
 
   const selectedActionDevice = useMemo(
@@ -858,14 +844,6 @@ function App() {
     }
 
     void flushPendingLocationUploads(myDeviceId);
-  }, [isAuthed, online, myDeviceId, pendingActionRequestId]);
-
-  useEffect(() => {
-    if (!isAuthed || !online) {
-      return;
-    }
-
-    void flushPendingActionQueue();
   }, [isAuthed, online, myDeviceId]);
 
   useEffect(() => {
@@ -886,30 +864,6 @@ function App() {
 
     setLastLocationSource(null);
   }, [isElevatedRuntime, locationEnabled]);
-
-  useEffect(() => {
-    if (!isAuthed || !online) {
-      return;
-    }
-
-    void syncActionCommands().catch(() => {
-      // ignore transient action polling errors
-    });
-    void pullActionResults().catch(() => {
-      // ignore transient action result polling errors
-    });
-
-    const timer = window.setInterval(() => {
-      void syncActionCommands().catch(() => {
-        // ignore transient action polling errors
-      });
-      void pullActionResults().catch(() => {
-        // ignore transient action result polling errors
-      });
-    }, 8_000);
-
-    return () => window.clearInterval(timer);
-  }, [isAuthed, online, myDeviceId]);
 
   useEffect(() => {
     if (!isAuthed || !online || activeTab !== "Map" || !selectedMapDeviceId) {
@@ -976,6 +930,29 @@ function App() {
           if (payload.deviceId === selectedMapDeviceId) {
             applyLiveLocationUpdate(payload);
           }
+          return;
+        }
+
+        if (messageType === "action_command") {
+          const payload = envelope.payload as DeviceActionCommand;
+          logEvent("debug", "ws.actions", "action-command-received", {
+            actionType: payload.actionType,
+            senderDeviceId: payload.senderDeviceId,
+            correlationId: payload.correlationId,
+          });
+          void handleRealtimeActionCommand(payload);
+          return;
+        }
+
+        if (messageType === "action_result") {
+          const payload = envelope.payload as DeviceActionResultMessage;
+          logEvent("debug", "ws.actions", "action-result-received", {
+            actionType: payload.actionType,
+            status: payload.status,
+            senderDeviceId: payload.senderDeviceId,
+            correlationId: payload.correlationId,
+          });
+          handleRealtimeActionResult(payload);
           return;
         }
 
@@ -1192,13 +1169,7 @@ function App() {
       setClipboardTargetDeviceId(selectedDeviceDetail.id);
 
       try {
-        await api.sendAction({
-          senderDeviceId: myDeviceId,
-          targetDeviceId: selectedDeviceDetail.id,
-          actionType: "get_clipboard_history",
-          payloadJson: null,
-          correlationId: requestId,
-        });
+        await sendActionCommand("get_clipboard_history", null, requestId, selectedDeviceDetail.id);
       } catch {
         setClipboardHistoryLoading(false);
         setPendingClipboardRequestId(null);
@@ -1490,7 +1461,7 @@ function App() {
 
   const openChat = (deviceId: string): void => {
     setSelectedChatDeviceId(deviceId);
-    setActiveTab("Messaging");
+    handleTabSelect("Messaging");
   };
 
   const refreshConversationHistory = async (targetDeviceId: string): Promise<void> => {
@@ -1799,84 +1770,104 @@ function App() {
     })();
   };
 
-  const flushPendingActionQueue = async (): Promise<void> => {
-    if (!isAuthed || !online) {
-      return;
+  const sendSocketEnvelope = (type: string, payload: unknown): boolean => {
+    const socket = wsRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      logEvent("warn", "ws", "send-skipped-socket-not-open", { type });
+      return false;
     }
 
-    const pending = readPendingActions();
-    if (pending.length === 0) {
-      return;
-    }
-
-    const remaining: PendingActionEnvelope[] = [];
-    for (const queued of pending) {
-      try {
-        await api.sendAction({
-          senderDeviceId: myDeviceId,
-          targetDeviceId: queued.targetDeviceId,
-          actionType: queued.actionType,
-          payloadJson: queued.payloadJson ?? null,
-          correlationId: queued.correlationId ?? null,
-        });
-      } catch {
-        remaining.push(queued);
-      }
-    }
-
-    writePendingActions(remaining);
+    logEvent("debug", "ws", "send-envelope", { type });
+    socket.send(JSON.stringify({ type, payload }));
+    return true;
   };
 
-  const sendActionCommand = async (
-    actionType:
-      | "block_screen"
-      | "shutdown"
-      | "reboot"
-      | "list_installed_apps"
-      | "list_running_apps"
-      | "launch_app"
-      | "close_app"
-      | "get_clipboard_history",
-    payloadJson?: string | null,
-    correlationId?: string | null,
-  ): Promise<void> => {
-    if (!selectedActionDevice) {
-      setError("Select a Linux device first");
+  const handleRealtimeActionResult = (result: DeviceActionResultMessage): void => {
+    if (result.targetDeviceId !== myDeviceId) {
       return;
     }
 
-    if (!requireOnline()) {
-      if (!selectedActionDevice.isBluetoothOnline) {
-        setError("Target device must be online or connected over Bluetooth");
+    if (result.actionType === "get_clipboard_history") {
+      if (pendingClipboardRequestId && result.correlationId !== pendingClipboardRequestId) {
         return;
       }
 
-      const queued: PendingActionEnvelope = {
-        id: crypto.randomUUID(),
-        targetDeviceId: selectedActionDevice.id,
-        actionType,
-        payloadJson: payloadJson ?? null,
-        correlationId: correlationId ?? null,
-      };
-      writePendingActions([...readPendingActions(), queued].slice(-500));
-      setInfo("Offline mode: action queued and will send when internet returns");
+      if (clipboardTargetDeviceId && result.senderDeviceId !== clipboardTargetDeviceId) {
+        return;
+      }
+
+      if (result.status.toLowerCase() !== "success") {
+        setClipboardHistory([]);
+        setClipboardHistoryMessage(result.error ?? "Failed to fetch clipboard history from target device.");
+        setClipboardHistoryLoading(false);
+        setPendingClipboardRequestId(null);
+        setClipboardTargetDeviceId(null);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(result.payloadJson ?? "[]") as unknown[];
+        const values = parsed
+          .map((entry) => {
+            if (typeof entry === "string") {
+              return entry;
+            }
+
+            if (entry && typeof entry === "object" && "content" in entry) {
+              const content = (entry as { content?: unknown }).content;
+              return typeof content === "string" ? content : "";
+            }
+
+            return "";
+          })
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0);
+
+        setClipboardHistory(values);
+        setClipboardHistoryMessage(values.length === 0 ? "No clipboard history available." : "");
+      } catch {
+        setClipboardHistory([]);
+        setClipboardHistoryMessage("Failed to parse clipboard history payload.");
+      }
+
+      setClipboardHistoryLoading(false);
+      setPendingClipboardRequestId(null);
+      setClipboardTargetDeviceId(null);
       return;
     }
 
-    if (!selectedActionDevice.isOnline) {
-      setError("Target device must be online");
+    if (result.status.toLowerCase() !== "success") {
+      setError(result.error ?? `Action ${result.actionType} failed`);
+      if (pendingActionRequestId && result.correlationId === pendingActionRequestId) {
+        setPendingActionRequestId(null);
+      }
       return;
     }
 
-    await api.sendAction({
-      senderDeviceId: myDeviceId,
-      targetDeviceId: selectedActionDevice.id,
-      actionType,
-      payloadJson: payloadJson ?? null,
-      correlationId: correlationId ?? null,
-    });
+    if (pendingActionRequestId && result.correlationId !== pendingActionRequestId) {
+      return;
+    }
 
-    setSuccess("Action sent");
+    if (result.actionType === "list_installed_apps") {
+      try {
+        const parsed = JSON.parse(result.payloadJson ?? "[]") as LaunchableAppItem[];
+        setLaunchableApps(parsed);
+        setPendingActionRequestId(null);
+      } catch {
+        setError("Failed to parse installed apps payload");
+      }
+      return;
+    }
+
+    if (result.actionType === "list_running_apps") {
+      try {
+        const parsed = JSON.parse(result.payloadJson ?? "[]") as RunningAppItem[];
+        setRunningApps(parsed);
+        setPendingActionRequestId(null);
+      } catch {
+        setError("Failed to parse running apps payload");
+      }
+    }
   };
 
   const executeActionLocally = async (actionType: string, payloadJson?: string | null): Promise<string | null> => {
@@ -1920,37 +1911,101 @@ function App() {
     return null;
   };
 
-  const syncActionCommands = async (): Promise<void> => {
-    if (!isAuthed || !online) {
+  const handleRealtimeActionCommand = async (command: DeviceActionCommand): Promise<void> => {
+    if (command.targetDeviceId !== myDeviceId) {
       return;
     }
 
-    const commands = await api.pullActions(myDeviceId);
-    for (const command of commands) {
-      try {
-        const payload = await executeActionLocally(command.actionType, command.payloadJson ?? null);
-        await api.publishActionResult({
-          senderDeviceId: myDeviceId,
-          targetDeviceId: command.senderDeviceId,
-          actionType: command.actionType,
-          status: "success",
-          payloadJson: payload,
-          error: null,
-          correlationId: command.correlationId ?? command.id,
-        });
-      } catch (nextError) {
-        const message = nextError instanceof Error ? nextError.message : "Failed to execute remote action";
-        await api.publishActionResult({
-          senderDeviceId: myDeviceId,
-          targetDeviceId: command.senderDeviceId,
-          actionType: command.actionType,
-          status: "failed",
-          payloadJson: null,
-          error: message,
-          correlationId: command.correlationId ?? command.id,
-        });
-      }
+    try {
+      logEvent("info", "actions", "execute-action-command", {
+        actionType: command.actionType,
+        correlationId: command.correlationId,
+      });
+      const payload = await executeActionLocally(command.actionType, command.payloadJson ?? null);
+      sendSocketEnvelope("action_result", {
+        senderDeviceId: myDeviceId,
+        targetDeviceId: command.senderDeviceId,
+        actionType: command.actionType,
+        status: "success",
+        payloadJson: payload,
+        error: null,
+        correlationId: command.correlationId ?? command.id,
+      });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Failed to execute remote action";
+      logEvent("error", "actions", "execute-action-command-failed", {
+        actionType: command.actionType,
+        correlationId: command.correlationId,
+        error: message,
+      });
+      sendSocketEnvelope("action_result", {
+        senderDeviceId: myDeviceId,
+        targetDeviceId: command.senderDeviceId,
+        actionType: command.actionType,
+        status: "failed",
+        payloadJson: null,
+        error: message,
+        correlationId: command.correlationId ?? command.id,
+      });
     }
+  };
+
+  const sendActionCommand = async (
+    actionType:
+      | "block_screen"
+      | "shutdown"
+      | "reboot"
+      | "list_installed_apps"
+      | "list_running_apps"
+      | "launch_app"
+      | "close_app"
+      | "get_clipboard_history",
+    payloadJson?: string | null,
+    correlationId?: string | null,
+    targetDeviceId?: string,
+  ): Promise<void> => {
+    const requestedTargetId = targetDeviceId ?? selectedActionDevice?.id;
+    if (!requestedTargetId) {
+      setError("Select a Linux device first");
+      return;
+    }
+
+    const targetDevice = devices.find((entry) => entry.id === requestedTargetId) ?? null;
+    if (!targetDevice || targetDevice.type !== "Linux") {
+      setError("Target must be a Linux device");
+      return;
+    }
+
+    if (!requireOnline()) {
+      setError("No connection available");
+      return;
+    }
+
+    if (!targetDevice.isOnline) {
+      setError("Target device must be online");
+      return;
+    }
+
+    const sent = sendSocketEnvelope("action_command", {
+      senderDeviceId: myDeviceId,
+      targetDeviceId: targetDevice.id,
+      actionType,
+      payloadJson: payloadJson ?? null,
+      correlationId: correlationId ?? null,
+    });
+
+    if (!sent) {
+      setError("Realtime channel is not connected");
+      return;
+    }
+
+    logEvent("info", "actions", "action-command-sent", {
+      actionType,
+      targetDeviceId: targetDevice.id,
+      correlationId,
+    });
+
+    setSuccess("Action sent");
   };
 
   const sendBlockScreenAction = async (): Promise<void> => {
@@ -1970,6 +2025,7 @@ function App() {
     setPendingActionRequestId(requestId);
     setActionMode("open-app");
     setLaunchableApps([]);
+    logEvent("info", "actions", "request-launchable-apps", { requestId });
     await sendActionCommand("list_installed_apps", null, requestId);
   };
 
@@ -1978,6 +2034,7 @@ function App() {
     setPendingActionRequestId(requestId);
     setActionMode("close-app");
     setRunningApps([]);
+    logEvent("info", "actions", "request-running-apps", { requestId });
     await sendActionCommand("list_running_apps", null, requestId);
   };
 
@@ -2019,13 +2076,7 @@ function App() {
     setClipboardTargetDeviceId(selectedDeviceDetail.id);
 
     try {
-      await api.sendAction({
-        senderDeviceId: myDeviceId,
-        targetDeviceId: selectedDeviceDetail.id,
-        actionType: "get_clipboard_history",
-        payloadJson: null,
-        correlationId: requestId,
-      });
+      await sendActionCommand("get_clipboard_history", null, requestId, selectedDeviceDetail.id);
     } catch {
       setClipboardHistoryLoading(false);
       setPendingClipboardRequestId(null);
@@ -2039,93 +2090,6 @@ function App() {
       await navigator.clipboard.writeText(value);
     } catch {
       setError("Failed to copy clipboard entry");
-    }
-  };
-
-  const pullActionResults = async (): Promise<void> => {
-    if (!isAuthed || !online) {
-      return;
-    }
-
-    const results = await api.pullActionResults(myDeviceId);
-    for (const result of results) {
-      if (result.actionType === "get_clipboard_history") {
-        if (pendingClipboardRequestId && result.correlationId !== pendingClipboardRequestId) {
-          continue;
-        }
-
-        if (clipboardTargetDeviceId && result.senderDeviceId !== clipboardTargetDeviceId) {
-          continue;
-        }
-
-        if (result.status.toLowerCase() !== "success") {
-          setClipboardHistory([]);
-          setClipboardHistoryMessage(result.error ?? "Failed to fetch clipboard history from target device.");
-          setClipboardHistoryLoading(false);
-          setPendingClipboardRequestId(null);
-          setClipboardTargetDeviceId(null);
-          continue;
-        }
-
-        try {
-          const parsed = JSON.parse(result.payloadJson ?? "[]") as unknown[];
-          const values = parsed
-            .map((entry) => {
-              if (typeof entry === "string") {
-                return entry;
-              }
-
-              if (entry && typeof entry === "object" && "content" in entry) {
-                const content = (entry as { content?: unknown }).content;
-                return typeof content === "string" ? content : "";
-              }
-
-              return "";
-            })
-            .map((entry) => entry.trim())
-            .filter((entry) => entry.length > 0);
-
-          setClipboardHistory(values);
-          setClipboardHistoryMessage(values.length === 0 ? "No clipboard history available." : "");
-        } catch {
-          setClipboardHistory([]);
-          setClipboardHistoryMessage("Failed to parse clipboard history payload.");
-        }
-
-        setClipboardHistoryLoading(false);
-        setPendingClipboardRequestId(null);
-        setClipboardTargetDeviceId(null);
-        continue;
-      }
-
-      if (result.status.toLowerCase() !== "success") {
-        setError(result.error ?? `Action ${result.actionType} failed`);
-        continue;
-      }
-
-      if (pendingActionRequestId && result.correlationId !== pendingActionRequestId) {
-        continue;
-      }
-
-      if (result.actionType === "list_installed_apps") {
-        try {
-          const parsed = JSON.parse(result.payloadJson ?? "[]") as LaunchableAppItem[];
-          setLaunchableApps(parsed);
-          setPendingActionRequestId(null);
-        } catch {
-          setError("Failed to parse installed apps payload");
-        }
-      }
-
-      if (result.actionType === "list_running_apps") {
-        try {
-          const parsed = JSON.parse(result.payloadJson ?? "[]") as RunningAppItem[];
-          setRunningApps(parsed);
-          setPendingActionRequestId(null);
-        } catch {
-          setError("Failed to parse running apps payload");
-        }
-      }
     }
   };
 
@@ -2238,7 +2202,7 @@ function App() {
     if (hasPendingIncoming) {
       const openFiles = window.confirm("You have files ready to download. Open Files tab now?");
       if (openFiles) {
-        setActiveTab("Files");
+        handleTabSelect("Files");
       }
     }
   }, [isAuthed, transfers]);
@@ -2303,7 +2267,7 @@ function App() {
           tabs={tabs}
           activeTab={activeTab}
           onSelect={(t) => {
-            setActiveTab(t as Tab);
+            handleTabSelect(t as Tab);
             setDrawerOpen(false);
           }}
           drawerOpen={drawerOpen}
@@ -2526,6 +2490,7 @@ function App() {
             profile={profile}
             devices={devices}
             themeMode={themeMode}
+            logFilePath={nativeLogFilePath}
             onSetThemeMode={setThemeMode}
             onSignOut={signOut}
           />

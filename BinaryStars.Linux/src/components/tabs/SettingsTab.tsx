@@ -5,11 +5,24 @@ type Props = {
   profile: AccountProfile | null;
   devices: Device[];
   themeMode: ThemeMode;
+  logFilePath?: string | null;
   onSetThemeMode: (value: ThemeMode) => void;
   onSignOut: () => void;
 };
 
-export default function SettingsTab({ profile, devices, themeMode, onSetThemeMode, onSignOut }: Props) {
+export default function SettingsTab({ profile, devices, themeMode, logFilePath, onSetThemeMode, onSignOut }: Props) {
+  const copyLogPath = async (): Promise<void> => {
+    if (!logFilePath) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(logFilePath);
+    } catch {
+      // no-op
+    }
+  };
+
   return (
     <section className="panel-grid">
       <div className="panel">
@@ -34,6 +47,9 @@ export default function SettingsTab({ profile, devices, themeMode, onSetThemeMod
             <option value="dark">Dark</option>
           </select>
         </label>
+        <p className="section-label">Debug Logs</p>
+        <p className="muted">{logFilePath ?? "Log path unavailable in this runtime."}</p>
+        <button type="button" onClick={() => void copyLogPath()} disabled={!logFilePath}>Copy Log Path</button>
         <h3>Connected devices ({devices.length})</h3>
         <div className="list compact">
           {devices.map((device) => (

@@ -1,7 +1,8 @@
 using System.Security.Claims;
+using System.Net.WebSockets;
+using System.Text;
 using BinaryStars.Api.Models;
 using BinaryStars.Api.Services;
-using BinaryStars.Application.Databases.Repositories.Accounts;
 using BinaryStars.Application.Databases.Repositories.Devices;
 using BinaryStars.Domain.Devices;
 using Microsoft.AspNetCore.Authorization;
@@ -18,8 +19,7 @@ namespace BinaryStars.Api.Controllers;
 public class ActionsController : ControllerBase
 {
     private readonly IDeviceRepository _deviceRepository;
-    private readonly IAccountRepository _accountRepository;
-    private readonly MessagingKafkaService _kafkaService;
+    private readonly MessagingConnectionManager _connectionManager;
     private readonly ILogger<ActionsController> _logger;
 
     /// <summary>
@@ -27,13 +27,11 @@ public class ActionsController : ControllerBase
     /// </summary>
     public ActionsController(
         IDeviceRepository deviceRepository,
-        IAccountRepository accountRepository,
-        MessagingKafkaService kafkaService,
+        MessagingConnectionManager connectionManager,
         ILogger<ActionsController> logger)
     {
         _deviceRepository = deviceRepository;
-        _accountRepository = accountRepository;
-        _kafkaService = kafkaService;
+        _connectionManager = connectionManager;
         _logger = logger;
     }
 
@@ -87,11 +85,14 @@ public class ActionsController : ControllerBase
             request.CorrelationId,
             DateTimeOffset.UtcNow);
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
+        if (!_connectionManager.TryGet(target.Id, out var targetConnection)
+            || targetConnection?.Socket.State != WebSocketState.Open)
+        {
+            return BadRequest(new[] { "Target device is not connected to realtime channel." });
+        }
 
-        _logger.LogInformation("Publishing command {CommandId} to Kafka", command.Id);
-        await _kafkaService.PublishActionAsync(command, authMode, oauthToken, cancellationToken);
+        _logger.LogInformation("Dispatching realtime action command {CommandId} to target websocket", command.Id);
+        await SendEnvelopeAsync(targetConnection.Socket, "action_command", command, cancellationToken);
 
         return Ok(command);
     }
@@ -110,15 +111,7 @@ public class ActionsController : ControllerBase
         if (target == null || target.UserId != userId)
             return BadRequest(new[] { "Invalid device." });
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        var actions = await _kafkaService.ConsumePendingActionsAsync(deviceId, userId, authMode, oauthToken, cancellationToken);
-        foreach (var action in actions)
-        {
-            await _kafkaService.DeleteActionAsync(action.Id, authMode, oauthToken, cancellationToken);
-        }
-
-        return Ok(actions);
+        return Ok(Array.Empty<DeviceActionCommand>());
     }
 
     /// <summary>
@@ -148,9 +141,13 @@ public class ActionsController : ControllerBase
             request.CorrelationId,
             DateTimeOffset.UtcNow);
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        await _kafkaService.PublishActionResultAsync(result, authMode, oauthToken, cancellationToken);
+        if (!_connectionManager.TryGet(result.TargetDeviceId, out var requesterConnection)
+            || requesterConnection?.Socket.State != WebSocketState.Open)
+        {
+            return BadRequest(new[] { "Requester device is not connected to realtime channel." });
+        }
+
+        await SendEnvelopeAsync(requesterConnection.Socket, "action_result", result, cancellationToken);
 
         return Ok(result);
     }
@@ -167,15 +164,14 @@ public class ActionsController : ControllerBase
         if (target == null || target.UserId != userId)
             return BadRequest(new[] { "Invalid device." });
 
-        var authMode = await ResolveKafkaAuthModeAsync(userId);
-        var oauthToken = authMode == KafkaAuthMode.OauthBearer ? ExtractBearerToken() : null;
-        var results = await _kafkaService.ConsumePendingActionResultsAsync(deviceId, userId, authMode, oauthToken, cancellationToken);
-        foreach (var result in results)
-        {
-            await _kafkaService.DeleteActionResultAsync(result.Id, authMode, oauthToken, cancellationToken);
-        }
+        return Ok(Array.Empty<DeviceActionResultMessage>());
+    }
 
-        return Ok(results);
+    private static async Task SendEnvelopeAsync<T>(WebSocket socket, string type, T payload, CancellationToken cancellationToken)
+    {
+        var json = MessagingJson.SerializeEnvelope(type, payload);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
     }
 
     private static string? NormalizeActionType(string actionType)
@@ -208,24 +204,6 @@ public class ActionsController : ControllerBase
         return null;
     }
 
-    private async Task<KafkaAuthMode> ResolveKafkaAuthModeAsync(Guid userId)
-    {
-        var user = await _accountRepository.FindByIdAsync(userId);
-        if (user == null)
-            return KafkaAuthMode.Scram;
-
-        var logins = await _accountRepository.GetLoginsAsync(user);
-        return logins.Any() ? KafkaAuthMode.OauthBearer : KafkaAuthMode.Scram;
-    }
-
-    private string? ExtractBearerToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            return header["Bearer ".Length..].Trim();
-
-        return null;
-    }
 }
 
 /// <summary>

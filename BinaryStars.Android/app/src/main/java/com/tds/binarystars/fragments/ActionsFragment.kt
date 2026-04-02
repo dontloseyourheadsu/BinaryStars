@@ -29,6 +29,8 @@ import com.tds.binarystars.api.RunningAppItemDto
 import com.tds.binarystars.api.SendActionRequestDto
 import com.tds.binarystars.model.Device
 import com.tds.binarystars.model.DeviceType
+import com.tds.binarystars.messaging.MessagingEventListener
+import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.util.NetworkUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -37,7 +39,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-class ActionsFragment : Fragment() {
+class ActionsFragment : Fragment(), MessagingEventListener {
 
     private companion object {
         private const val POLL_INTERVAL_MS = 10_000L
@@ -103,10 +105,19 @@ class ActionsFragment : Fragment() {
                 while (isActive) {
                     delay(POLL_INTERVAL_MS)
                     refreshLinuxDevices()
-                    pullActionResults()
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        MessagingSocketManager.addListener(this)
+    }
+
+    override fun onStop() {
+        MessagingSocketManager.removeListener(this)
+        super.onStop()
     }
 
     @SuppressLint("HardwareIds")
@@ -133,7 +144,7 @@ class ActionsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val response = ApiClient.apiService.sendAction(
+                val sent = MessagingSocketManager.sendAction(
                     SendActionRequestDto(
                         senderDeviceId = senderId,
                         targetDeviceId = target.id,
@@ -143,12 +154,14 @@ class ActionsFragment : Fragment() {
                     )
                 )
 
-                if (response.isSuccessful) {
+                if (sent) {
                     Toast.makeText(requireContext(), "Action sent", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(requireContext(), "Failed to send action", Toast.LENGTH_SHORT).show()
+                    pendingCorrelationId = null
+                    Toast.makeText(requireContext(), "Realtime channel is not connected", Toast.LENGTH_SHORT).show()
                 }
             } catch (_: Exception) {
+                pendingCorrelationId = null
                 Toast.makeText(requireContext(), "Failed to send action", Toast.LENGTH_SHORT).show()
             }
         }
@@ -180,28 +193,21 @@ class ActionsFragment : Fragment() {
         sendAction("close_app", payload)
     }
 
-    @SuppressLint("HardwareIds")
-    private fun pullActionResults() {
-        if (!NetworkUtils.isOnline(requireContext())) {
+    override fun onActionResult(result: DeviceActionResultDto) {
+        if (!isAdded || view == null) {
             return
         }
 
-        val senderId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val response = ApiClient.apiService.pullActionResults(senderId)
-                if (!response.isSuccessful || response.body() == null) {
-                    return@launch
-                }
-
-                response.body()!!.forEach { result ->
-                    handleActionResult(result)
-                }
-            } catch (_: Exception) {
-            }
-        }
+        handleActionResult(result)
     }
+
+    override fun onChatUpdated(deviceId: String) {}
+
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {}
+
+    override fun onConnectionStateChanged(isConnected: Boolean) {}
+
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {}
 
     private fun handleActionResult(result: DeviceActionResultDto) {
         if (pendingCorrelationId != null && result.correlationId != pendingCorrelationId) {
@@ -326,7 +332,7 @@ class ActionsFragment : Fragment() {
                 }
 
                 val linuxDevices = response.body()!!
-                    .filter { it.type == DeviceTypeDto.Linux }
+                    .filter { it.type == DeviceTypeDto.Linux && it.isOnline }
                     .map { dto ->
                         Device(
                             id = dto.id,
@@ -346,7 +352,7 @@ class ActionsFragment : Fragment() {
                         )
                     }
 
-                root.findViewById<TextView>(R.id.tvActionsSubtitle).text = "Linux devices — ${linuxDevices.size}"
+                root.findViewById<TextView>(R.id.tvActionsSubtitle).text = "Online Linux devices — ${linuxDevices.size}"
 
                 list.adapter = DevicesAdapter(
                     devices = linuxDevices,
