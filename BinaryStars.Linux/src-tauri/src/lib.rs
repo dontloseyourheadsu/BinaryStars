@@ -484,43 +484,52 @@ fn read_command_output(program: &str, args: &[&str]) -> Result<String, String> {
 }
 
 fn block_screen_linux() -> Result<(), String> {
-    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_ascii_lowercase();
-    let session = std::env::var("DESKTOP_SESSION").unwrap_or_default().to_ascii_lowercase();
+    let desktop = current_desktop();
 
     let mut errors: Vec<String> = Vec::new();
 
-    let mut candidates: Vec<(&str, Vec<&str>)> = Vec::new();
-
-    if desktop.contains("kde") || session.contains("kde") || session.contains("plasma") {
-        candidates.push(("qdbus6", vec!["org.freedesktop.ScreenSaver", "/ScreenSaver", "Lock"]));
-        candidates.push(("qdbus", vec!["org.freedesktop.ScreenSaver", "/ScreenSaver", "Lock"]));
+    // Best first attempt on modern Linux desktops (Wayland and X11).
+    if try_command("loginctl", &["lock-session"]).is_ok() {
+        return Ok(());
     }
 
-    if desktop.contains("gnome") || desktop.contains("unity") || desktop.contains("xfce") || desktop.contains("cinnamon") || session.contains("gnome") {
+    let mut candidates: Vec<(&str, Vec<&str>)> = Vec::new();
+    if desktop.contains("gnome") {
         candidates.push((
-            "dbus-send",
+            "gdbus",
             vec![
+                "call",
                 "--session",
-                "--dest=org.gnome.ScreenSaver",
-                "--type=method_call",
+                "--dest",
+                "org.gnome.ScreenSaver",
+                "--object-path",
                 "/org/gnome/ScreenSaver",
+                "--method",
                 "org.gnome.ScreenSaver.Lock",
             ],
         ));
     }
 
-    candidates.push((
-        "dbus-send",
-        vec![
-            "--session",
-            "--dest=org.freedesktop.ScreenSaver",
-            "--type=method_call",
-            "/ScreenSaver",
-            "org.freedesktop.ScreenSaver.Lock",
-        ],
-    ));
+    if desktop.contains("kde") || desktop.contains("plasma") {
+        candidates.push((
+            "qdbus",
+            vec![
+                "org.kde.screensaver",
+                "/ScreenSaver",
+                "org.kde.screensaver.Lock",
+            ],
+        ));
+        candidates.push((
+            "qdbus6",
+            vec![
+                "org.kde.screensaver",
+                "/ScreenSaver",
+                "org.kde.screensaver.Lock",
+            ],
+        ));
+    }
+
     candidates.push(("xdg-screensaver", vec!["lock"]));
-    candidates.push(("loginctl", vec!["lock-session"]));
 
     for (program, args) in candidates {
         match try_command(program, &args) {
@@ -530,43 +539,33 @@ fn block_screen_linux() -> Result<(), String> {
     }
 
     Err(format!(
-        "Unable to lock screen on this Linux desktop/session. The window manager/session API may be unavailable or denied this request. Tried GNOME/KDE/freedesktop/loginctl methods. Details: {}",
+        "Unable to lock screen on this Linux desktop/session. The session API may be unavailable or denied this request. Tried loginctl + desktop fallbacks. Details: {}",
         errors.join(" | ")
     ))
 }
 
-fn power_action_linux(action_type: &str) -> Result<(), String> {
-    let mut errors: Vec<String> = Vec::new();
+fn current_desktop() -> String {
+    std::env::var("XDG_CURRENT_DESKTOP")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+}
 
-    let dbus_member = if action_type == "shutdown" { "PowerOff" } else { "Reboot" };
-    let systemctl_arg = if action_type == "shutdown" { "poweroff" } else { "reboot" };
+fn shutdown_linux() -> Result<(), String> {
+    try_command("systemctl", &["poweroff"]).map_err(|error| {
+        format!(
+            "Unable to execute shutdown in no-root mode. Requires an active desktop session and logind/polkit policy. Details: {}",
+            error
+        )
+    })
+}
 
-    let dbus_method = format!("org.freedesktop.login1.Manager.{}", dbus_member);
-    match try_command(
-        "dbus-send",
-        &[
-            "--system",
-            "--dest=org.freedesktop.login1",
-            "--type=method_call",
-            "/org/freedesktop/login1",
-            dbus_method.as_str(),
-            "boolean:true",
-        ],
-    ) {
-        Ok(_) => return Ok(()),
-        Err(error) => errors.push(error),
-    }
-
-    match try_command("systemctl", &[systemctl_arg]) {
-        Ok(_) => return Ok(()),
-        Err(error) => errors.push(error),
-    }
-
-    Err(format!(
-        "Unable to execute {}. Permission denied or unsupported policy/session (no-root mode). Details: {}",
-        action_type,
-        errors.join(" | ")
-    ))
+fn reboot_linux() -> Result<(), String> {
+    try_command("systemctl", &["reboot"]).map_err(|error| {
+        format!(
+            "Unable to execute reboot in no-root mode. Requires an active desktop session and logind/polkit policy. Details: {}",
+            error
+        )
+    })
 }
 
 fn list_installed_apps_json() -> Result<String, String> {
@@ -870,11 +869,11 @@ async fn perform_local_action(action_type: String, payload_json: Option<String>)
                 Ok("{}".to_string())
             }
             "shutdown" => {
-                power_action_linux("shutdown")?;
+                shutdown_linux()?;
                 Ok("{}".to_string())
             }
             "reboot" | "reset" => {
-                power_action_linux("reboot")?;
+                reboot_linux()?;
                 Ok("{}".to_string())
             }
             "list_installed_apps" => list_installed_apps_json(),
