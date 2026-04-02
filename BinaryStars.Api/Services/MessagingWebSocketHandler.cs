@@ -147,8 +147,161 @@ public class MessagingWebSocketHandler
             if (envelope.Type.Equals("message", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleIncomingMessageAsync(envelope, deviceId, userId, cancellationToken);
+                continue;
+            }
+
+            if (envelope.Type.Equals("action_command", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleIncomingActionCommandAsync(envelope, deviceId, userId, cancellationToken);
+                continue;
+            }
+
+            if (envelope.Type.Equals("action_result", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleIncomingActionResultAsync(envelope, deviceId, userId, cancellationToken);
             }
         }
+    }
+
+    private async Task HandleIncomingActionCommandAsync(MessagingEnvelope envelope, string deviceId, Guid userId, CancellationToken cancellationToken)
+    {
+        if (!MessagingJson.TryReadPayload<RealtimeActionCommandRequest>(envelope, out var request) || request == null)
+            return;
+
+        if (!deviceId.Equals(request.SenderDeviceId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var normalizedActionType = NormalizeActionType(request.ActionType);
+        if (normalizedActionType == null)
+            return;
+
+        var sender = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
+        var target = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
+        if (sender == null || target == null || sender.UserId != userId || target.UserId != userId)
+            return;
+
+        if (target.Type != Domain.Devices.DeviceType.Linux || !target.IsOnline)
+            return;
+
+        if (!_connectionManager.TryGet(target.Id, out var targetConnection) || targetConnection?.Socket.State != WebSocketState.Open)
+        {
+            await SendActionFailureAsync(
+                request.SenderDeviceId,
+                request.TargetDeviceId,
+                normalizedActionType,
+                request.CorrelationId,
+                "Target device is not connected to realtime channel.",
+                userId,
+                cancellationToken);
+            return;
+        }
+
+        var command = new DeviceActionCommand(
+            Guid.NewGuid().ToString("D"),
+            userId,
+            request.SenderDeviceId,
+            request.TargetDeviceId,
+            normalizedActionType,
+            request.PayloadJson,
+            request.CorrelationId,
+            DateTimeOffset.UtcNow);
+
+        await SendEnvelopeAsync(targetConnection.Socket, "action_command", command, cancellationToken);
+    }
+
+    private async Task HandleIncomingActionResultAsync(MessagingEnvelope envelope, string deviceId, Guid userId, CancellationToken cancellationToken)
+    {
+        if (!MessagingJson.TryReadPayload<RealtimeActionResultRequest>(envelope, out var request) || request == null)
+            return;
+
+        if (!deviceId.Equals(request.SenderDeviceId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var sender = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
+        var target = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
+        if (sender == null || target == null || sender.UserId != userId || target.UserId != userId)
+            return;
+
+        if (!_connectionManager.TryGet(request.TargetDeviceId, out var requesterConnection)
+            || requesterConnection?.Socket.State != WebSocketState.Open)
+        {
+            return;
+        }
+
+        var normalizedActionType = NormalizeActionType(request.ActionType) ?? request.ActionType.Trim().ToLowerInvariant();
+        var result = new DeviceActionResultMessage(
+            Guid.NewGuid().ToString("D"),
+            userId,
+            request.SenderDeviceId,
+            request.TargetDeviceId,
+            normalizedActionType,
+            request.Status,
+            request.PayloadJson,
+            request.Error,
+            request.CorrelationId,
+            DateTimeOffset.UtcNow);
+
+        await SendEnvelopeAsync(requesterConnection.Socket, "action_result", result, cancellationToken);
+    }
+
+    private async Task SendActionFailureAsync(
+        string requesterDeviceId,
+        string targetDeviceId,
+        string actionType,
+        string? correlationId,
+        string error,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        if (!_connectionManager.TryGet(requesterDeviceId, out var requesterConnection)
+            || requesterConnection?.Socket.State != WebSocketState.Open)
+        {
+            return;
+        }
+
+        var result = new DeviceActionResultMessage(
+            Guid.NewGuid().ToString("D"),
+            userId,
+            targetDeviceId,
+            requesterDeviceId,
+            actionType,
+            "failed",
+            null,
+            error,
+            correlationId,
+            DateTimeOffset.UtcNow);
+
+        await SendEnvelopeAsync(requesterConnection.Socket, "action_result", result, cancellationToken);
+    }
+
+    private static string? NormalizeActionType(string actionType)
+    {
+        if (string.Equals(actionType, "block_screen", StringComparison.OrdinalIgnoreCase))
+            return "block_screen";
+
+        if (string.Equals(actionType, "list_installed_apps", StringComparison.OrdinalIgnoreCase))
+            return "list_installed_apps";
+
+        if (string.Equals(actionType, "list_running_apps", StringComparison.OrdinalIgnoreCase))
+            return "list_running_apps";
+
+        if (string.Equals(actionType, "launch_app", StringComparison.OrdinalIgnoreCase))
+            return "launch_app";
+
+        if (string.Equals(actionType, "close_app", StringComparison.OrdinalIgnoreCase))
+            return "close_app";
+
+        if (string.Equals(actionType, "get_clipboard_history", StringComparison.OrdinalIgnoreCase))
+            return "get_clipboard_history";
+
+        if (string.Equals(actionType, "shutdown", StringComparison.OrdinalIgnoreCase))
+            return "shutdown";
+
+        if (string.Equals(actionType, "reboot", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(actionType, "reset", StringComparison.OrdinalIgnoreCase))
+            return "reboot";
+
+        return null;
     }
 
     private async Task HandleIncomingMessageAsync(MessagingEnvelope envelope, string deviceId, Guid userId, CancellationToken cancellationToken)
@@ -238,4 +391,20 @@ public class MessagingWebSocketHandler
 
         await _messageHistoryRepository.SaveChangesAsync(cancellationToken);
     }
+
+    private sealed record RealtimeActionCommandRequest(
+        string SenderDeviceId,
+        string TargetDeviceId,
+        string ActionType,
+        string? PayloadJson,
+        string? CorrelationId);
+
+    private sealed record RealtimeActionResultRequest(
+        string SenderDeviceId,
+        string TargetDeviceId,
+        string ActionType,
+        string Status,
+        string? PayloadJson,
+        string? Error,
+        string? CorrelationId);
 }
