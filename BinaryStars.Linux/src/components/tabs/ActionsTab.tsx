@@ -41,7 +41,7 @@ export default function ActionsTab({
     <section className="panel-grid">
       <div className="panel">
         <h3>Linux Devices</h3>
-        {linuxDevices.length === 0 && <p className="empty-state">No Linux devices linked.</p>}
+        {linuxDevices.length === 0 && <p className="empty-state">No online Linux devices available for actions.</p>}
         <div className="list compact">
           {linuxDevices.map((device) => (
             <button
