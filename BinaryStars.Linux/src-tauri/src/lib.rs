@@ -1,9 +1,11 @@
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
+use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::net::IpAddr;
 use std::net::TcpListener;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
@@ -18,6 +20,110 @@ use url::Url;
 use zbus::blocking::{fdo::PropertiesProxy, Connection, Proxy};
 use zbus::names::InterfaceName;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+
+const LOG_ROOT_DIR: &str = "/tmp/binarystarslinux/logs";
+const LOG_FILE_NAME: &str = "binarystarslinux.log";
+const LOG_MAX_READ_LINES: usize = 1500;
+
+fn log_file_path() -> Result<PathBuf, String> {
+    let dir = PathBuf::from(LOG_ROOT_DIR);
+    if !dir.exists() {
+        fs::create_dir_all(&dir).map_err(|e| format!("failed to create log directory: {}", e))?;
+    }
+
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+        .map_err(|e| format!("failed to secure log directory permissions: {}", e))?;
+
+    let file_path = dir.join(LOG_FILE_NAME);
+    if !file_path.exists() {
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&file_path)
+            .map_err(|e| format!("failed to create log file: {}", e))?;
+    }
+
+    fs::set_permissions(&file_path, fs::Permissions::from_mode(0o600))
+        .map_err(|e| format!("failed to secure log file permissions: {}", e))?;
+
+    Ok(file_path)
+}
+
+fn current_epoch_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
+
+fn append_log_line(level: &str, source: &str, message: &str, details: Option<&str>) -> Result<(), String> {
+    let path = log_file_path()?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| format!("failed to open log file: {}", e))?;
+
+    let mut line = format!(
+        "ts={} level={} source={} msg={}",
+        current_epoch_ms(),
+        level,
+        source,
+        message.replace('\n', " ")
+    );
+
+    if let Some(extra) = details {
+        if !extra.trim().is_empty() {
+            line.push_str(" details=");
+            line.push_str(&extra.replace('\n', " "));
+        }
+    }
+
+    line.push('\n');
+    file.write_all(line.as_bytes())
+        .map_err(|e| format!("failed to append log line: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn append_ui_log(
+    level: String,
+    category: String,
+    message: String,
+    metadata_json: Option<String>,
+) -> Result<(), String> {
+    append_log_line(
+        level.trim(),
+        &format!("ui:{}", category.trim()),
+        message.trim(),
+        metadata_json.as_deref(),
+    )
+}
+
+#[tauri::command]
+fn get_log_file_path() -> Result<String, String> {
+    Ok(log_file_path()?.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn read_recent_logs(max_lines: Option<usize>) -> Result<Vec<String>, String> {
+    let path = log_file_path()?;
+    let content = fs::read_to_string(path).map_err(|e| format!("failed to read log file: {}", e))?;
+    let limit = max_lines.unwrap_or(300).min(LOG_MAX_READ_LINES);
+
+    let lines = content
+        .lines()
+        .rev()
+        .take(limit)
+        .collect::<Vec<&str>>()
+        .into_iter()
+        .rev()
+        .map(|line| line.to_string())
+        .collect::<Vec<String>>();
+
+    Ok(lines)
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +148,7 @@ struct RunningAppItem {
 
 #[tauri::command]
 fn show_notification(title: String, body: String) -> Result<(), String> {
+    let _ = append_log_line("info", "rust:notification", "show_notification called", Some(&format!("title={}", title)));
     std::process::Command::new("notify-send")
         .arg(&title)
         .arg(&body)
@@ -52,9 +159,14 @@ fn show_notification(title: String, body: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = append_log_line("info", "rust:startup", "launching tauri runtime", None);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            append_ui_log,
+            get_log_file_path,
+            read_recent_logs,
             show_notification,
             get_device_info,
             oauth_get_provider_token,
@@ -182,6 +294,13 @@ async fn send_file_via_bluetooth(
     file_name: String,
     content_base64: String,
 ) -> Result<(), String> {
+    let _ = append_log_line(
+        "info",
+        "rust:bluetooth",
+        "send_file_via_bluetooth called",
+        Some(&format!("device_address={} file_name={}", device_address, file_name)),
+    );
+
     tauri::async_runtime::spawn_blocking(move || {
         let payload = STANDARD
             .decode(content_base64.as_bytes())
@@ -862,8 +981,15 @@ async fn request_elevated_mode() -> Result<(), String> {
 
 #[tauri::command]
 async fn perform_local_action(action_type: String, payload_json: Option<String>) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        match action_type.as_str() {
+    let _ = append_log_line(
+        "info",
+        "rust:actions",
+        "perform_local_action requested",
+        Some(&format!("action_type={}", action_type)),
+    );
+
+    let action_result = tauri::async_runtime::spawn_blocking(move || {
+        let action_result = match action_type.as_str() {
             "block_screen" => {
                 block_screen_linux()?;
                 Ok("{}".to_string())
@@ -888,10 +1014,30 @@ async fn perform_local_action(action_type: String, payload_json: Option<String>)
             }
             "get_clipboard_history" => list_clipboard_history_json(),
             _ => Err("Unsupported local action".to_string()),
-        }
+        };
+
+        action_result
     })
     .await
-    .map_err(|e| format!("spawn error: {}", e))?
+    .map_err(|e| format!("spawn error: {}", e))?;
+
+    if let Err(error) = &action_result {
+        let _ = append_log_line(
+            "error",
+            "rust:actions",
+            "perform_local_action failed",
+            Some(&format!("error={}", error)),
+        );
+    } else {
+        let _ = append_log_line(
+            "info",
+            "rust:actions",
+            "perform_local_action completed",
+            None,
+        );
+    }
+
+    action_result
 }
 
 #[derive(Deserialize)]
@@ -1073,7 +1219,6 @@ async fn get_device_info() -> Result<DeviceInfo, String> {
                 tx_bytes_per_sec: tx,
             });
         }
-
         Ok(DeviceInfo {
             hostname,
             ip_address: ipv4_address.unwrap_or_else(|| "127.0.0.1".to_string()),

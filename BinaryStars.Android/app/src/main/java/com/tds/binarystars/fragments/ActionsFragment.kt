@@ -201,6 +201,14 @@ class ActionsFragment : Fragment(), MessagingEventListener {
         handleActionResult(result)
     }
 
+    override fun onChatUpdated(deviceId: String) {}
+
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {}
+
+    override fun onConnectionStateChanged(isConnected: Boolean) {}
+
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {}
+
     private fun handleActionResult(result: DeviceActionResultDto) {
         if (pendingCorrelationId != null && result.correlationId != pendingCorrelationId) {
             return

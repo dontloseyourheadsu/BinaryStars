@@ -344,6 +344,14 @@ class DeviceDetailFragment : Fragment(), MessagingEventListener {
         }
     }
 
+    override fun onChatUpdated(deviceId: String) {}
+
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {}
+
+    override fun onConnectionStateChanged(isConnected: Boolean) {}
+
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {}
+
     private fun renderClipboardSupport(
         isAndroidTarget: Boolean,
         isTargetOnline: Boolean,

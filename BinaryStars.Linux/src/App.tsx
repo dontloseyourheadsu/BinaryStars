@@ -49,6 +49,7 @@ import ActionsTab from "./components/tabs/ActionsTab";
 import SettingsTab from "./components/tabs/SettingsTab";
 import { Tab, tabs } from "./components/tabs/types";
 import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
+import { getNativeLogFilePath, installInteractionLogging, logEvent } from "./logging";
 
 type EffectiveTheme = "light" | "dark";
 type SnackbarLevel = "error" | "info" | "success" | "warning";
@@ -134,6 +135,7 @@ function App() {
   const [lastGeoError, setLastGeoError] = useState("");
   const [lastLocationSampleAt, setLastLocationSampleAt] = useState<string | null>(null);
   const [lastLocationSource, setLastLocationSource] = useState<"native" | "geolocation" | null>(null);
+  const [nativeLogFilePath, setNativeLogFilePath] = useState<string | null>(null);
   const isElevatedRuntime = isTauriRuntime() && isElevated;
 
   const normalizeNoteType = (value: unknown): "Plaintext" | "Markdown" => {
@@ -153,6 +155,24 @@ function App() {
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const clipboardAutoFetchKeyRef = useRef<string>("");
   const myDeviceId = getDeviceId();
+
+  const handleTabSelect = (tab: Tab): void => {
+    logEvent("info", "ui.navigation", "tab-selected", { tab });
+    setActiveTab(tab);
+  };
+
+  useEffect(() => {
+    installInteractionLogging();
+    logEvent("info", "ui.lifecycle", "app-mounted", { runtime: isTauriRuntime() ? "tauri" : "browser" });
+
+    void (async () => {
+      const nativeLogPath = await getNativeLogFilePath();
+      if (nativeLogPath) {
+        setNativeLogFilePath(nativeLogPath);
+        logEvent("info", "ui.logging", "native-log-path-resolved", { path: nativeLogPath });
+      }
+    })();
+  }, []);
 
   const isConnectionIssueMessage = (message: string): boolean => {
     const normalized = message.trim().toLowerCase();
@@ -915,12 +935,23 @@ function App() {
 
         if (messageType === "action_command") {
           const payload = envelope.payload as DeviceActionCommand;
+          logEvent("debug", "ws.actions", "action-command-received", {
+            actionType: payload.actionType,
+            senderDeviceId: payload.senderDeviceId,
+            correlationId: payload.correlationId,
+          });
           void handleRealtimeActionCommand(payload);
           return;
         }
 
         if (messageType === "action_result") {
           const payload = envelope.payload as DeviceActionResultMessage;
+          logEvent("debug", "ws.actions", "action-result-received", {
+            actionType: payload.actionType,
+            status: payload.status,
+            senderDeviceId: payload.senderDeviceId,
+            correlationId: payload.correlationId,
+          });
           handleRealtimeActionResult(payload);
           return;
         }
@@ -1430,7 +1461,7 @@ function App() {
 
   const openChat = (deviceId: string): void => {
     setSelectedChatDeviceId(deviceId);
-    setActiveTab("Messaging");
+    handleTabSelect("Messaging");
   };
 
   const refreshConversationHistory = async (targetDeviceId: string): Promise<void> => {
@@ -1742,9 +1773,11 @@ function App() {
   const sendSocketEnvelope = (type: string, payload: unknown): boolean => {
     const socket = wsRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
+      logEvent("warn", "ws", "send-skipped-socket-not-open", { type });
       return false;
     }
 
+    logEvent("debug", "ws", "send-envelope", { type });
     socket.send(JSON.stringify({ type, payload }));
     return true;
   };
@@ -1884,6 +1917,10 @@ function App() {
     }
 
     try {
+      logEvent("info", "actions", "execute-action-command", {
+        actionType: command.actionType,
+        correlationId: command.correlationId,
+      });
       const payload = await executeActionLocally(command.actionType, command.payloadJson ?? null);
       sendSocketEnvelope("action_result", {
         senderDeviceId: myDeviceId,
@@ -1896,6 +1933,11 @@ function App() {
       });
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Failed to execute remote action";
+      logEvent("error", "actions", "execute-action-command-failed", {
+        actionType: command.actionType,
+        correlationId: command.correlationId,
+        error: message,
+      });
       sendSocketEnvelope("action_result", {
         senderDeviceId: myDeviceId,
         targetDeviceId: command.senderDeviceId,
@@ -1957,6 +1999,12 @@ function App() {
       return;
     }
 
+    logEvent("info", "actions", "action-command-sent", {
+      actionType,
+      targetDeviceId: targetDevice.id,
+      correlationId,
+    });
+
     setSuccess("Action sent");
   };
 
@@ -1977,6 +2025,7 @@ function App() {
     setPendingActionRequestId(requestId);
     setActionMode("open-app");
     setLaunchableApps([]);
+    logEvent("info", "actions", "request-launchable-apps", { requestId });
     await sendActionCommand("list_installed_apps", null, requestId);
   };
 
@@ -1985,6 +2034,7 @@ function App() {
     setPendingActionRequestId(requestId);
     setActionMode("close-app");
     setRunningApps([]);
+    logEvent("info", "actions", "request-running-apps", { requestId });
     await sendActionCommand("list_running_apps", null, requestId);
   };
 
@@ -2152,7 +2202,7 @@ function App() {
     if (hasPendingIncoming) {
       const openFiles = window.confirm("You have files ready to download. Open Files tab now?");
       if (openFiles) {
-        setActiveTab("Files");
+        handleTabSelect("Files");
       }
     }
   }, [isAuthed, transfers]);
@@ -2217,7 +2267,7 @@ function App() {
           tabs={tabs}
           activeTab={activeTab}
           onSelect={(t) => {
-            setActiveTab(t as Tab);
+            handleTabSelect(t as Tab);
             setDrawerOpen(false);
           }}
           drawerOpen={drawerOpen}
@@ -2440,6 +2490,7 @@ function App() {
             profile={profile}
             devices={devices}
             themeMode={themeMode}
+            logFilePath={nativeLogFilePath}
             onSetThemeMode={setThemeMode}
             onSignOut={signOut}
           />
