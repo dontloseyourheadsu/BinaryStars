@@ -20,6 +20,7 @@ public class ActionsController : ControllerBase
 {
     private readonly IDeviceRepository _deviceRepository;
     private readonly MessagingConnectionManager _connectionManager;
+    private readonly MessagingKafkaService _kafkaService;
     private readonly ILogger<ActionsController> _logger;
 
     /// <summary>
@@ -28,10 +29,12 @@ public class ActionsController : ControllerBase
     public ActionsController(
         IDeviceRepository deviceRepository,
         MessagingConnectionManager connectionManager,
+        MessagingKafkaService kafkaService,
         ILogger<ActionsController> logger)
     {
         _deviceRepository = deviceRepository;
         _connectionManager = connectionManager;
+        _kafkaService = kafkaService;
         _logger = logger;
     }
 
@@ -88,6 +91,15 @@ public class ActionsController : ControllerBase
         if (!_connectionManager.TryGet(target.Id, out var targetConnection)
             || targetConnection?.Socket.State != WebSocketState.Open)
         {
+            var userConnections = _connectionManager.GetByUser(userId);
+            _logger.LogWarning(
+                "Target realtime connection missing for action dispatch. User={UserId}, Target={TargetId}, HasConnection={HasConnection}, SocketState={SocketState}, ActiveUserConnections={ActiveConnections}, UserConnectionDeviceIds={DeviceIds}",
+                userId,
+                target.Id,
+                targetConnection != null,
+                targetConnection?.Socket.State,
+                userConnections.Count,
+                string.Join(",", userConnections.Select(connection => connection.DeviceId)));
             return BadRequest(new[] { "Target device is not connected to realtime channel." });
         }
 
@@ -144,7 +156,13 @@ public class ActionsController : ControllerBase
         if (!_connectionManager.TryGet(result.TargetDeviceId, out var requesterConnection)
             || requesterConnection?.Socket.State != WebSocketState.Open)
         {
-            return BadRequest(new[] { "Requester device is not connected to realtime channel." });
+            const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+            await _kafkaService.PublishActionResultAsync(result, authMode, null, cancellationToken);
+            _logger.LogInformation(
+                "Requester websocket unavailable; queued action result for pull. targetDeviceId={TargetDeviceId} correlationId={CorrelationId}",
+                result.TargetDeviceId,
+                result.CorrelationId);
+            return Ok(result);
         }
 
         await SendEnvelopeAsync(requesterConnection.Socket, "action_result", result, cancellationToken);
@@ -164,7 +182,14 @@ public class ActionsController : ControllerBase
         if (target == null || target.UserId != userId)
             return BadRequest(new[] { "Invalid device." });
 
-        return Ok(Array.Empty<DeviceActionResultMessage>());
+        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+        var pending = await _kafkaService.ConsumePendingActionResultsAsync(deviceId, userId, authMode, null, cancellationToken);
+        foreach (var message in pending)
+        {
+            await _kafkaService.DeleteActionResultAsync(message.Id, authMode, null, cancellationToken);
+        }
+
+        return Ok(pending);
     }
 
     private static async Task SendEnvelopeAsync<T>(WebSocket socket, string type, T payload, CancellationToken cancellationToken)
