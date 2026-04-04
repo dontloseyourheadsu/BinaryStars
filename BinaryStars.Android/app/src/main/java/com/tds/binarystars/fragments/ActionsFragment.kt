@@ -1,6 +1,7 @@
 package com.tds.binarystars.fragments
 
 import android.annotation.SuppressLint
+import android.util.Log
 import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
@@ -37,12 +38,16 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import java.util.UUID
 
 class ActionsFragment : Fragment(), MessagingEventListener {
 
     private companion object {
         private const val POLL_INTERVAL_MS = 10_000L
+        private const val LOG_TAG = "BinaryStarsActions"
+        private const val RESULT_POLL_INTERVAL_MS = 1_000L
+        private const val RESULT_POLL_TIMEOUT_MS = 45_000L
     }
 
     private enum class ActionMode {
@@ -57,6 +62,8 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     private val gson = Gson()
     private var launchableApps: List<LaunchableAppItemDto> = emptyList()
     private var runningApps: List<RunningAppItemDto> = emptyList()
+    private var actionResultPollJob: Job? = null
+    private var actionResultPollInFlight: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -116,6 +123,9 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     }
 
     override fun onStop() {
+        actionResultPollJob?.cancel()
+        actionResultPollJob = null
+        actionResultPollInFlight = false
         MessagingSocketManager.removeListener(this)
         super.onStop()
     }
@@ -144,25 +154,71 @@ class ActionsFragment : Fragment(), MessagingEventListener {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val sent = MessagingSocketManager.sendAction(
-                    SendActionRequestDto(
-                        senderDeviceId = senderId,
-                        targetDeviceId = target.id,
-                        actionType = actionType,
-                        payloadJson = payloadJson,
-                        correlationId = correlationId
-                    )
+                val request = SendActionRequestDto(
+                    senderDeviceId = senderId,
+                    targetDeviceId = target.id,
+                    actionType = actionType,
+                    payloadJson = payloadJson,
+                    correlationId = correlationId
                 )
-
-                if (sent) {
+                val response = ApiClient.apiService.sendAction(request)
+                if (response.isSuccessful) {
+                    Log.i(LOG_TAG, "Action API send accepted: actionType=$actionType correlationId=$correlationId target=${target.id}")
+                    startActionResultPolling(senderId, correlationId)
                     Toast.makeText(requireContext(), "Action sent", Toast.LENGTH_SHORT).show()
                 } else {
                     pendingCorrelationId = null
-                    Toast.makeText(requireContext(), "Realtime channel is not connected", Toast.LENGTH_SHORT).show()
+                    val body = response.errorBody()?.string()
+                    Log.w(LOG_TAG, "Action API send rejected: status=${response.code()} actionType=$actionType correlationId=$correlationId body=$body")
+                    Toast.makeText(requireContext(), "Action rejected (${response.code()})", Toast.LENGTH_SHORT).show()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 pendingCorrelationId = null
+                Log.e(LOG_TAG, "Action API send failed: actionType=$actionType correlationId=$correlationId", e)
                 Toast.makeText(requireContext(), "Failed to send action", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun startActionResultPolling(deviceId: String, correlationId: String) {
+        actionResultPollJob?.cancel()
+        actionResultPollJob = null
+        actionResultPollJob = viewLifecycleOwner.lifecycleScope.launch {
+            if (actionResultPollInFlight) {
+                Log.i(LOG_TAG, "Action result poll already running, replacing: correlationId=$correlationId")
+            }
+            actionResultPollInFlight = true
+            val startedAt = System.currentTimeMillis()
+            try {
+                while (isActive && System.currentTimeMillis() - startedAt < RESULT_POLL_TIMEOUT_MS) {
+                    if (pendingCorrelationId != correlationId) {
+                        return@launch
+                    }
+
+                    try {
+                        val response = ApiClient.apiService.pullActionResults(deviceId)
+                        if (response.isSuccessful) {
+                            val match = response.body()
+                                ?.firstOrNull { it.correlationId == correlationId }
+                            if (match != null) {
+                                Log.i(LOG_TAG, "Action result pulled via API: actionType=${match.actionType} status=${match.status} correlationId=$correlationId")
+                                handleActionResult(match)
+                                return@launch
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(LOG_TAG, "Action result polling failed: correlationId=$correlationId", e)
+                    }
+
+                    delay(RESULT_POLL_INTERVAL_MS)
+                }
+
+                if (pendingCorrelationId == correlationId) {
+                    pendingCorrelationId = null
+                    Toast.makeText(requireContext(), "Action response timed out", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                actionResultPollInFlight = false
             }
         }
     }
@@ -196,6 +252,12 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     override fun onActionResult(result: DeviceActionResultDto) {
         if (!isAdded || view == null) {
             return
+        }
+
+        if (pendingCorrelationId != null && result.correlationId == pendingCorrelationId) {
+            actionResultPollJob?.cancel()
+            actionResultPollJob = null
+            actionResultPollInFlight = false
         }
 
         handleActionResult(result)

@@ -51,7 +51,7 @@ object MessagingSocketManager {
     fun connect(context: Context, deviceId: String) {
         if (webSocket != null && currentDeviceId == deviceId) return
 
-        val token = AuthTokenStore.getToken() ?: return
+        val token = AuthTokenStore.getStoredToken() ?: return
         currentDeviceId = deviceId
 
         webSocket?.close(1000, "Reconnecting")
