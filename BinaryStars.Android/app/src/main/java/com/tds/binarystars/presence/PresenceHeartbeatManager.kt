@@ -2,6 +2,7 @@ package com.tds.binarystars.presence
 
 import android.content.Context
 import com.tds.binarystars.api.ApiClient
+import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.NotificationSyncAckRequestDto
 import com.tds.binarystars.util.NotificationUtils
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +34,10 @@ object PresenceHeartbeatManager {
         heartbeatScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         heartbeatJob = heartbeatScope?.launch {
             while (isActive) {
+                if (!AuthTokenStore.hasStoredSession()) {
+                    break
+                }
+
                 try {
                     val response = ApiClient.apiService.sendDeviceHeartbeat(deviceId)
                     if (response.isSuccessful) {

@@ -284,6 +284,62 @@ WebSocket envelope types currently used by the API include:
 - `device_removed`
 - `device_presence`
 - `location_update`
+- `action_command`
+- `action_result`
+
+## Actions (Realtime)
+
+Action delivery is realtime over `/ws/messaging` when both devices are online and connected.
+
+### Send Action Command (HTTP bridge)
+
+POST /api/actions/send
+
+```json
+{
+  "senderDeviceId": "android-ssa-id-123",
+  "targetDeviceId": "linux-desktop-001",
+  "actionType": "list_installed_apps",
+  "payloadJson": null,
+  "correlationId": "req-123"
+}
+```
+
+Behavior:
+
+- Validates device ownership and Linux target constraints.
+- Dispatches `action_command` to the target device websocket.
+- Returns 400 when the target websocket is not connected.
+
+### Publish Action Result (HTTP bridge)
+
+POST /api/actions/results
+
+```json
+{
+  "senderDeviceId": "linux-desktop-001",
+  "targetDeviceId": "android-ssa-id-123",
+  "actionType": "list_installed_apps",
+  "status": "success",
+  "payloadJson": "[{\"name\":\"Firefox\",\"exec\":\"firefox\"}]",
+  "error": null,
+  "correlationId": "req-123"
+}
+```
+
+Behavior:
+
+- Dispatches `action_result` to the requester websocket.
+- Returns 400 when the requester websocket is not connected.
+
+### Pull Endpoints (Deprecated Compatibility)
+
+The following routes are retained for compatibility but no longer drive action delivery:
+
+- GET /api/actions/pull?deviceId={deviceId}
+- GET /api/actions/results/pull?deviceId={deviceId}
+
+Both return empty arrays in the realtime model.
 
 ## Notifications
 

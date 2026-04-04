@@ -269,7 +269,12 @@ Content-Type: application/json
   "correlationId": "clipboard-request-1"
 }
 
-### Pull Pending Actions
+### Notes: Realtime Actions
+# Action commands/results are delivered over websocket channel:
+# GET {{host}}/ws/messaging?deviceId={{deviceId}}
+# Pull endpoints below are deprecated compatibility endpoints and return empty arrays.
+
+### Pull Pending Actions (Deprecated Compatibility)
 GET {{host}}/api/actions/pull?deviceId={{linuxDeviceId}}
 Authorization: Bearer {{token}}
 

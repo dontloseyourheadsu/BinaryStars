@@ -39,16 +39,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var drawerLayout: DrawerLayout
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
+    private fun ensureAuthenticatedSession(): Boolean {
+        if (AuthTokenStore.hasStoredSession()) {
+            return true
+        }
+
+        PresenceHeartbeatManager.stop()
+        MessagingSocketManager.disconnect()
+        startActivity(android.content.Intent(this, LoginActivity::class.java))
+        finish()
+        return false
+    }
+
     /**
      * Sets up the navigation drawer, device registration checks, and messaging socket.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (AuthTokenStore.getToken() == null) {
-            AuthTokenStore.clear()
-            startActivity(android.content.Intent(this, LoginActivity::class.java))
-            finish()
+        if (!ensureAuthenticatedSession()) {
             return
         }
 
@@ -146,6 +155,11 @@ class MainActivity : AppCompatActivity() {
         PresenceHeartbeatManager.stop()
     }
 
+    override fun onResume() {
+        super.onResume()
+        ensureAuthenticatedSession()
+    }
+
     private fun registerReconnectListener() {
         val connectivityManager = getSystemService(ConnectivityManager::class.java) ?: return
         val callback = object : ConnectivityManager.NetworkCallback() {
@@ -213,7 +227,7 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("HardwareIds")
     private fun reconnectRealtimeTransports() {
-        if (AuthTokenStore.getToken() == null) {
+        if (!AuthTokenStore.hasStoredSession()) {
             return
         }
 

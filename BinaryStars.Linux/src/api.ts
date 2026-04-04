@@ -25,6 +25,14 @@ const http = axios.create({
   timeout: 30_000,
 });
 
+type RetryableRequestConfig = {
+  _authRetried?: boolean;
+};
+
+function isAuthExchangePath(path: string): boolean {
+  return path.includes("/auth/login") || path.includes("/auth/register");
+}
+
 export const tokenStore = {
   getToken(): string | null {
     const token = localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -82,11 +90,45 @@ http.interceptors.response.use(
     }
     return response;
   },
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      tokenStore.clear();
+  async (error: AxiosError) => {
+    if (error.response?.status !== 401) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    const request = error.config;
+    if (!request) {
+      tokenStore.clear();
+      return Promise.reject(error);
+    }
+
+    const requestUrl = request.url ?? "";
+    if (isAuthExchangePath(requestUrl)) {
+      tokenStore.clear();
+      return Promise.reject(error);
+    }
+
+    const retryConfig = request as typeof request & RetryableRequestConfig;
+    if (retryConfig._authRetried) {
+      tokenStore.clear();
+      return Promise.reject(error);
+    }
+
+    const latestToken = tokenStore.getStoredToken();
+    if (!latestToken) {
+      tokenStore.clear();
+      return Promise.reject(error);
+    }
+
+    retryConfig._authRetried = true;
+    retryConfig.headers = retryConfig.headers ?? {};
+    retryConfig.headers.Authorization = `Bearer ${latestToken}`;
+
+    try {
+      return await http.request(retryConfig);
+    } catch (retryError) {
+      tokenStore.clear();
+      return Promise.reject(retryError);
+    }
   },
 );
 

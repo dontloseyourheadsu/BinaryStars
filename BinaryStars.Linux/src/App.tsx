@@ -151,10 +151,15 @@ function App() {
   };
 
   const wsRef = useRef<WebSocket | null>(null);
+  const selectedMapDeviceIdRef = useRef(selectedMapDeviceId);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const clipboardAutoFetchKeyRef = useRef<string>("");
   const myDeviceId = getDeviceId();
+
+  useEffect(() => {
+    selectedMapDeviceIdRef.current = selectedMapDeviceId;
+  }, [selectedMapDeviceId]);
 
   const handleTabSelect = (tab: Tab): void => {
     logEvent("info", "ui.navigation", "tab-selected", { tab });
@@ -898,14 +903,32 @@ function App() {
     if (!isAuthed) {
       return;
     }
-    const token = tokenStore.getToken();
-    if (!token) {
-      return;
-    }
-    const socket = new WebSocket(toWsUrl(myDeviceId, token));
-    wsRef.current = socket;
+    let cancelled = false;
+    let reconnectTimer: number | null = null;
+    let activeSocket: WebSocket | null = null;
 
-    socket.onmessage = (event) => {
+    const connectSocket = (): void => {
+      if (activeSocket && activeSocket.readyState !== WebSocket.CLOSED) {
+        return;
+      }
+
+      const token = tokenStore.getStoredToken();
+      if (!token) {
+        logEvent("warn", "ws", "connect-skipped-no-token", { deviceId: myDeviceId });
+        return;
+      }
+
+      const socketUrl = toWsUrl(myDeviceId, token);
+      logEvent("info", "ws", "connect-attempt", { deviceId: myDeviceId });
+      const socket = new WebSocket(socketUrl);
+      activeSocket = socket;
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        logEvent("info", "ws", "connected", { deviceId: myDeviceId });
+      };
+
+      socket.onmessage = (event) => {
       try {
         const envelope = JSON.parse(event.data as string) as { type: string; payload: unknown };
         const messageType = envelope.type.toLowerCase();
@@ -927,7 +950,7 @@ function App() {
 
         if (messageType === "location_update") {
           const payload = envelope.payload as LocationUpdateEvent;
-          if (payload.deviceId === selectedMapDeviceId) {
+          if (payload.deviceId === selectedMapDeviceIdRef.current) {
             applyLiveLocationUpdate(payload);
           }
           return;
@@ -973,13 +996,65 @@ function App() {
       } catch {
         // ignore malformed socket payloads
       }
+      };
+
+      socket.onerror = () => {
+        logEvent("warn", "ws", "error", { deviceId: myDeviceId });
+      };
+
+      socket.onclose = (event) => {
+        logEvent("warn", "ws", "closed", {
+          deviceId: myDeviceId,
+          code: event.code,
+          reason: event.reason,
+        });
+
+        if (activeSocket === socket) {
+          activeSocket = null;
+        }
+
+        if (wsRef.current === socket) {
+          wsRef.current = null;
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        if (reconnectTimer != null) {
+          window.clearTimeout(reconnectTimer);
+        }
+
+        reconnectTimer = window.setTimeout(() => {
+          if (cancelled || !isAuthed) {
+            return;
+          }
+
+          connectSocket();
+        }, 2000);
+      };
     };
 
+    connectSocket();
+
     return () => {
-      socket.close();
-      wsRef.current = null;
+      cancelled = true;
+      if (reconnectTimer != null) {
+        window.clearTimeout(reconnectTimer);
+      }
+
+      const socketToClose = activeSocket;
+      activeSocket = null;
+
+      if (socketToClose && socketToClose.readyState !== WebSocket.CLOSED) {
+        socketToClose.close();
+      }
+
+      if (wsRef.current === socketToClose) {
+        wsRef.current = null;
+      }
     };
-  }, [isAuthed, myDeviceId, selectedMapDeviceId]);
+  }, [isAuthed, myDeviceId]);
 
   usePresenceHeartbeat(isAuthed, myDeviceId, (device) => {
     if (!device.hasPendingNotificationSync) {
@@ -1782,6 +1857,61 @@ function App() {
     return true;
   };
 
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> => {
+    let timer: number | null = null;
+
+    try {
+      return await Promise.race<T>([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = window.setTimeout(() => {
+            reject(new Error(errorMessage));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
+    }
+  };
+
+  const deliverActionResult = async (result: {
+    senderDeviceId: string;
+    targetDeviceId: string;
+    actionType: string;
+    status: string;
+    payloadJson: string | null;
+    error: string | null;
+    correlationId: string;
+  }): Promise<void> => {
+    const deliveredBySocket = sendSocketEnvelope("action_result", result);
+    if (deliveredBySocket) {
+      logEvent("debug", "actions", "action-result-delivered-via-ws", {
+        actionType: result.actionType,
+        correlationId: result.correlationId,
+        status: result.status,
+      });
+      return;
+    }
+
+    logEvent("warn", "actions", "action-result-ws-delivery-failed-fallback-http", {
+      actionType: result.actionType,
+      correlationId: result.correlationId,
+      status: result.status,
+    });
+
+    await api.publishActionResult({
+      senderDeviceId: result.senderDeviceId,
+      targetDeviceId: result.targetDeviceId,
+      actionType: result.actionType,
+      status: result.status,
+      payloadJson: result.payloadJson,
+      error: result.error,
+      correlationId: result.correlationId,
+    });
+  };
+
   const handleRealtimeActionResult = (result: DeviceActionResultMessage): void => {
     if (result.targetDeviceId !== myDeviceId) {
       return;
@@ -1921,8 +2051,13 @@ function App() {
         actionType: command.actionType,
         correlationId: command.correlationId,
       });
-      const payload = await executeActionLocally(command.actionType, command.payloadJson ?? null);
-      sendSocketEnvelope("action_result", {
+      const actionTimeoutMs = command.actionType === "list_installed_apps" ? 45_000 : 30_000;
+      const payload = await withTimeout(
+        executeActionLocally(command.actionType, command.payloadJson ?? null),
+        actionTimeoutMs,
+        "Local action execution timed out",
+      );
+      await deliverActionResult({
         senderDeviceId: myDeviceId,
         targetDeviceId: command.senderDeviceId,
         actionType: command.actionType,
@@ -1938,15 +2073,25 @@ function App() {
         correlationId: command.correlationId,
         error: message,
       });
-      sendSocketEnvelope("action_result", {
-        senderDeviceId: myDeviceId,
-        targetDeviceId: command.senderDeviceId,
-        actionType: command.actionType,
-        status: "failed",
-        payloadJson: null,
-        error: message,
-        correlationId: command.correlationId ?? command.id,
-      });
+      try {
+        await deliverActionResult({
+          senderDeviceId: myDeviceId,
+          targetDeviceId: command.senderDeviceId,
+          actionType: command.actionType,
+          status: "failed",
+          payloadJson: null,
+          error: message,
+          correlationId: command.correlationId ?? command.id,
+        });
+      } catch (resultError) {
+        const resultErrorMessage = resultError instanceof Error ? resultError.message : "unknown";
+        logEvent("error", "actions", "action-result-delivery-failed", {
+          actionType: command.actionType,
+          correlationId: command.correlationId,
+          error: resultErrorMessage,
+        });
+      }
+      return;
     }
   };
 
