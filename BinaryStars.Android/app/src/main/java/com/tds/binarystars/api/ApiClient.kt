@@ -11,11 +11,15 @@ object ApiClient {
     private const val BASE_URL = BuildConfig.API_BASE_URL
     private const val HEADER_ACCESS_TOKEN = "X-Access-Token"
     private const val HEADER_ACCESS_TOKEN_EXPIRES = "X-Access-Token-ExpiresIn"
+
+    private fun isAuthExchangePath(path: String): Boolean {
+        return path.contains("/auth/login") || path.contains("/auth/register")
+    }
     
     private val client = OkHttpClient.Builder()
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
         .addInterceptor { chain ->
-            val token = AuthTokenStore.getToken()
+            val token = AuthTokenStore.getStoredToken()
             val request = if (!token.isNullOrBlank()) {
                 chain.request().newBuilder()
                     .addHeader("Authorization", "Bearer $token")
@@ -24,6 +28,9 @@ object ApiClient {
                 chain.request()
             }
             val response = chain.proceed(request)
+            if (response.code == 401 && !isAuthExchangePath(request.url.encodedPath)) {
+                AuthTokenStore.clear()
+            }
             val refreshedToken = response.header(HEADER_ACCESS_TOKEN)
             val refreshedExpires = response.header(HEADER_ACCESS_TOKEN_EXPIRES)?.toIntOrNull()
             if (!refreshedToken.isNullOrBlank() && refreshedExpires != null && refreshedExpires > 0) {
