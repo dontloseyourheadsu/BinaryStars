@@ -72,6 +72,8 @@ public class MessagingWebSocketHandler
             return;
         }
 
+        _logger.LogInformation("WebSocket connect request received: deviceId={DeviceId}, userId={UserId}", deviceId, userId);
+
         var device = await _deviceRepository.GetByIdAsync(deviceId, context.RequestAborted);
         if (device == null || device.UserId != userId)
         {
@@ -84,11 +86,36 @@ public class MessagingWebSocketHandler
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         _connectionManager.TryAdd(deviceId, userId, socket);
 
-        await SendPendingAsync(socket, deviceId, userId, context.RequestAborted);
+        try
+        {
+            try
+            {
+                await SendPendingAsync(socket, deviceId, userId, context.RequestAborted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send pending websocket events for deviceId={DeviceId}, userId={UserId}. Continuing with realtime receive loop.", deviceId, userId);
+            }
 
-        await ReceiveLoopAsync(socket, deviceId, userId, context.RequestAborted);
-
-        _connectionManager.TryRemove(deviceId);
+            await ReceiveLoopAsync(socket, deviceId, userId, context.RequestAborted);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("WebSocket receive loop canceled: deviceId={DeviceId}, userId={UserId}", deviceId, userId);
+        }
+        catch (WebSocketException ex)
+        {
+            _logger.LogWarning(ex, "WebSocket error in receive loop: deviceId={DeviceId}, userId={UserId}", deviceId, userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled websocket error: deviceId={DeviceId}, userId={UserId}", deviceId, userId);
+        }
+        finally
+        {
+            _connectionManager.TryRemove(deviceId);
+            _logger.LogInformation("WebSocket disconnected: deviceId={DeviceId}, userId={UserId}", deviceId, userId);
+        }
     }
 
     private async Task SendPendingAsync(WebSocket socket, string deviceId, Guid userId, CancellationToken cancellationToken)
@@ -168,23 +195,54 @@ public class MessagingWebSocketHandler
         if (!MessagingJson.TryReadPayload<RealtimeActionCommandRequest>(envelope, out var request) || request == null)
             return;
 
+        _logger.LogInformation("Realtime action request received: actionType={ActionType} sender={SenderDeviceId} target={TargetDeviceId} correlationId={CorrelationId}",
+            request.ActionType,
+            request.SenderDeviceId,
+            request.TargetDeviceId,
+            request.CorrelationId);
+
         if (!deviceId.Equals(request.SenderDeviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Realtime action rejected due to sender mismatch: socketDevice={SocketDeviceId} payloadSender={PayloadSenderDeviceId}",
+                deviceId,
+                request.SenderDeviceId);
             return;
+        }
 
         var normalizedActionType = NormalizeActionType(request.ActionType);
         if (normalizedActionType == null)
+        {
+            _logger.LogWarning("Realtime action rejected due to unsupported action type: actionType={ActionType}", request.ActionType);
             return;
+        }
 
         var sender = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
         var target = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
         if (sender == null || target == null || sender.UserId != userId || target.UserId != userId)
+        {
+            _logger.LogWarning("Realtime action rejected due to invalid sender/target mapping: sender={SenderDeviceId} target={TargetDeviceId} user={UserId}",
+                request.SenderDeviceId,
+                request.TargetDeviceId,
+                userId);
             return;
+        }
 
         if (target.Type != Domain.Devices.DeviceType.Linux || !target.IsOnline)
+        {
+            _logger.LogWarning("Realtime action rejected due to target availability/type: target={TargetDeviceId} type={TargetType} isOnline={IsOnline}",
+                target.Id,
+                target.Type,
+                target.IsOnline);
             return;
+        }
 
         if (!_connectionManager.TryGet(target.Id, out var targetConnection) || targetConnection?.Socket.State != WebSocketState.Open)
         {
+            _logger.LogWarning("Realtime action failed: target websocket not connected. sender={SenderDeviceId} target={TargetDeviceId} actionType={ActionType} correlationId={CorrelationId}",
+                request.SenderDeviceId,
+                request.TargetDeviceId,
+                normalizedActionType,
+                request.CorrelationId);
             await SendActionFailureAsync(
                 request.SenderDeviceId,
                 request.TargetDeviceId,
@@ -207,6 +265,12 @@ public class MessagingWebSocketHandler
             DateTimeOffset.UtcNow);
 
         await SendEnvelopeAsync(targetConnection.Socket, "action_command", command, cancellationToken);
+        _logger.LogInformation("Realtime action dispatched to target websocket: commandId={CommandId} actionType={ActionType} sender={SenderDeviceId} target={TargetDeviceId} correlationId={CorrelationId}",
+            command.Id,
+            command.ActionType,
+            command.SenderDeviceId,
+            command.TargetDeviceId,
+            command.CorrelationId);
     }
 
     private async Task HandleIncomingActionResultAsync(MessagingEnvelope envelope, string deviceId, Guid userId, CancellationToken cancellationToken)
@@ -214,17 +278,57 @@ public class MessagingWebSocketHandler
         if (!MessagingJson.TryReadPayload<RealtimeActionResultRequest>(envelope, out var request) || request == null)
             return;
 
+        _logger.LogInformation("Realtime action result received: actionType={ActionType} status={Status} sender={SenderDeviceId} target={TargetDeviceId} correlationId={CorrelationId}",
+            request.ActionType,
+            request.Status,
+            request.SenderDeviceId,
+            request.TargetDeviceId,
+            request.CorrelationId);
+
         if (!deviceId.Equals(request.SenderDeviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Realtime action result rejected due to sender mismatch: socketDevice={SocketDeviceId} payloadSender={PayloadSenderDeviceId}",
+                deviceId,
+                request.SenderDeviceId);
             return;
+        }
 
         var sender = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
         var target = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
         if (sender == null || target == null || sender.UserId != userId || target.UserId != userId)
+        {
+            _logger.LogWarning("Realtime action result rejected due to invalid sender/target mapping: sender={SenderDeviceId} target={TargetDeviceId} user={UserId}",
+                request.SenderDeviceId,
+                request.TargetDeviceId,
+                userId);
             return;
+        }
 
         if (!_connectionManager.TryGet(request.TargetDeviceId, out var requesterConnection)
             || requesterConnection?.Socket.State != WebSocketState.Open)
         {
+            _logger.LogWarning("Realtime action result dropped because requester websocket is not connected: targetDeviceId={TargetDeviceId} correlationId={CorrelationId}",
+                request.TargetDeviceId,
+                request.CorrelationId);
+
+            var normalizedActionTypeForQueue = NormalizeActionType(request.ActionType) ?? request.ActionType.Trim().ToLowerInvariant();
+            var queuedResult = new DeviceActionResultMessage(
+                Guid.NewGuid().ToString("D"),
+                userId,
+                request.SenderDeviceId,
+                request.TargetDeviceId,
+                normalizedActionTypeForQueue,
+                request.Status,
+                request.PayloadJson,
+                request.Error,
+                request.CorrelationId,
+                DateTimeOffset.UtcNow);
+
+            const KafkaAuthMode authMode = KafkaAuthMode.Scram;
+            await _kafkaService.PublishActionResultAsync(queuedResult, authMode, null, cancellationToken);
+            _logger.LogInformation("Queued realtime action result for requester pull: targetDeviceId={TargetDeviceId} correlationId={CorrelationId}",
+                request.TargetDeviceId,
+                request.CorrelationId);
             return;
         }
 
@@ -242,6 +346,11 @@ public class MessagingWebSocketHandler
             DateTimeOffset.UtcNow);
 
         await SendEnvelopeAsync(requesterConnection.Socket, "action_result", result, cancellationToken);
+        _logger.LogInformation("Realtime action result forwarded to requester websocket: resultId={ResultId} actionType={ActionType} status={Status} correlationId={CorrelationId}",
+            result.Id,
+            result.ActionType,
+            result.Status,
+            result.CorrelationId);
     }
 
     private async Task SendActionFailureAsync(

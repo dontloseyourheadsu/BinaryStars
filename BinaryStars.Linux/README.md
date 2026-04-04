@@ -95,6 +95,41 @@ npm run tauri:build:local
 
 3. Use Actions tab normally. Shutdown/reboot will prompt for authorization only when needed.
 
+## Logs (Dev + Release)
+
+BinaryStars Linux writes app logs to a fixed path on Linux in both modes:
+
+- `/tmp/binarystarslinux/logs/binarystarslinux.log`
+
+This includes:
+
+- UI events (tab switches, interactions, websocket send/receive, action lifecycle)
+- Rust backend events (startup, local action execution, notification calls)
+
+Security and stability notes:
+
+- Log directory is created with owner-only permissions.
+- Log file is created with owner-only permissions.
+- The same path is used for both `npm run tauri dev` and release run script.
+
+### View logs live
+
+```bash
+tail -f /tmp/binarystarslinux/logs/binarystarslinux.log
+```
+
+### View recent lines
+
+```bash
+tail -n 300 /tmp/binarystarslinux/logs/binarystarslinux.log
+```
+
+### Search by category/level
+
+```bash
+rg "level=error|source=ui:actions|source=rust:actions|source=ui:ws|source=ui:ws.actions" /tmp/binarystarslinux/logs/binarystarslinux.log
+```
+
 ## API Configuration
 
 By default, the Linux app calls:

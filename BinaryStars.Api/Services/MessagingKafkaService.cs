@@ -360,7 +360,7 @@ public class MessagingKafkaService
             ConsumeResult<string, byte[]>? result;
             try
             {
-                result = consumer.Consume(TimeSpan.FromSeconds(1));
+                result = consumer.Consume(TimeSpan.FromMilliseconds(250));
             }
             catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
             {
@@ -371,7 +371,7 @@ public class MessagingKafkaService
             if (result == null)
             {
                 emptyReads++;
-                if (emptyReads >= 3)
+                if (emptyReads >= 1)
                     break;
 
                 continue;
