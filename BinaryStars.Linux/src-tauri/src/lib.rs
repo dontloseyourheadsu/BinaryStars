@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -8,7 +8,7 @@ use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use base64::{engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD}, Engine as _};
 use freedesktop_desktop_entry::{default_paths, DesktopEntry, Iter};
 use rand::{distributions::Alphanumeric, Rng};
@@ -688,32 +688,120 @@ fn reboot_linux() -> Result<(), String> {
 }
 
 fn list_installed_apps_json() -> Result<String, String> {
-    let mut entries: Vec<InstalledAppItem> = Iter::new(default_paths())
-        .filter_map(|path| {
-            let content = std::fs::read_to_string(&path).ok()?;
-            let entry = DesktopEntry::decode(&path, &content).ok()?;
+    const MAX_ENUM_DURATION: Duration = Duration::from_secs(10);
+    const MAX_ITEMS: usize = 1500;
+    const MAX_DESKTOP_FILES: usize = 2500;
 
-            if entry.type_() != Some("Application") {
-                return None;
+    let started_at = Instant::now();
+    let mut entries: Vec<InstalledAppItem> = Vec::new();
+    let mut desktop_files: Vec<PathBuf> = Vec::new();
+    let mut visited_dirs: HashSet<PathBuf> = HashSet::new();
+
+    let mut candidate_dirs: Vec<PathBuf> = Vec::new();
+    if let Ok(home) = std::env::var("HOME") {
+        candidate_dirs.push(PathBuf::from(home).join(".local/share/applications"));
+    }
+
+    candidate_dirs.push(PathBuf::from("/usr/local/share/applications"));
+    candidate_dirs.push(PathBuf::from("/usr/share/applications"));
+    candidate_dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
+    candidate_dirs.push(PathBuf::from("/var/lib/snapd/desktop/applications"));
+
+    for dir in candidate_dirs {
+        if started_at.elapsed() >= MAX_ENUM_DURATION || desktop_files.len() >= MAX_DESKTOP_FILES {
+            break;
+        }
+
+        if !dir.exists() || !visited_dirs.insert(dir.clone()) {
+            continue;
+        }
+
+        let Ok(read_dir) = fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for file in read_dir.flatten() {
+            if started_at.elapsed() >= MAX_ENUM_DURATION || desktop_files.len() >= MAX_DESKTOP_FILES {
+                break;
             }
 
-            let name = entry.name(None)?.trim().to_string();
-            let exec = entry.exec()?.trim().to_string();
-            if name.is_empty() || exec.is_empty() {
-                return None;
+            let path = file.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("desktop") {
+                continue;
             }
 
-            Some(InstalledAppItem {
-                name,
-                exec,
-                icon: entry.icon().map(str::to_string),
-                categories: entry.categories().map(str::to_string),
-                no_display: entry.no_display(),
-            })
-        })
-        .collect();
+            desktop_files.push(path);
+        }
+    }
+
+    if desktop_files.is_empty() {
+        for path in Iter::new(default_paths()) {
+            if started_at.elapsed() >= MAX_ENUM_DURATION || desktop_files.len() >= MAX_DESKTOP_FILES {
+                break;
+            }
+
+            if path.extension().and_then(|ext| ext.to_str()) != Some("desktop") {
+                continue;
+            }
+
+            desktop_files.push(path);
+        }
+    }
+
+    let mut seen_execs: HashSet<String> = HashSet::new();
+
+    for path in desktop_files {
+        if started_at.elapsed() >= MAX_ENUM_DURATION || entries.len() >= MAX_ITEMS {
+            break;
+        }
+
+        let Some(content) = std::fs::read_to_string(&path).ok() else {
+            continue;
+        };
+
+        let Ok(entry) = DesktopEntry::decode(&path, &content) else {
+            continue;
+        };
+
+        if entry.type_() != Some("Application") {
+            continue;
+        }
+
+        let Some(raw_name) = entry.name(None) else {
+            continue;
+        };
+
+        let Some(raw_exec) = entry.exec() else {
+            continue;
+        };
+
+        let name = raw_name.trim().to_string();
+        let exec = raw_exec.trim().to_string();
+        if name.is_empty() || exec.is_empty() {
+            continue;
+        }
+
+        if !seen_execs.insert(exec.clone()) {
+            continue;
+        }
+
+        entries.push(InstalledAppItem {
+            name,
+            exec,
+            icon: entry.icon().map(str::to_string),
+            categories: entry.categories().map(str::to_string),
+            no_display: entry.no_display(),
+        });
+    }
 
     entries.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    let elapsed_ms = started_at.elapsed().as_millis();
+    let _ = append_log_line(
+        "info",
+        "rust:actions",
+        "list_installed_apps_json completed",
+        Some(&format!("elapsed_ms={} app_count={}", elapsed_ms, entries.len())),
+    );
     serde_json::to_string(&entries).map_err(|e| format!("failed to serialize installed apps: {}", e))
 }
 
