@@ -167,25 +167,6 @@ public class MessagingKafkaService
         producer.Flush(TimeSpan.FromSeconds(10));
     }
 
-    /// <summary>
-    /// Publishes a remote action result message.
-    /// </summary>
-    public async Task PublishActionResultAsync(DeviceActionResultMessage message, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
-    {
-        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
-        var payload = JsonSerializer.SerializeToUtf8Bytes(message, MessagingJson.SerializerOptions);
-
-        await producer.ProduceAsync(
-            _settings.ActionResultsTopic,
-            new Message<string, byte[]>
-            {
-                Key = message.Id,
-                Value = payload
-            },
-            cancellationToken);
-
-        producer.Flush(TimeSpan.FromSeconds(10));
-    }
 
     /// <summary>
     /// Consumes pending notifications for a device from Kafka.
@@ -339,80 +320,6 @@ public class MessagingKafkaService
         producer.Flush(TimeSpan.FromSeconds(10));
     }
 
-    /// <summary>
-    /// Consumes pending action result messages for a device.
-    /// </summary>
-    public async Task<List<DeviceActionResultMessage>> ConsumePendingActionResultsAsync(
-        string deviceId,
-        Guid userId,
-        KafkaAuthMode authMode,
-        string? oauthToken,
-        CancellationToken cancellationToken)
-    {
-        using var consumer = _clientFactory.CreateConsumer($"action-results-{deviceId}", authMode, oauthToken);
-        consumer.Subscribe(_settings.ActionResultsTopic);
-
-        var messages = new List<DeviceActionResultMessage>();
-        var emptyReads = 0;
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            ConsumeResult<string, byte[]>? result;
-            try
-            {
-                result = consumer.Consume(TimeSpan.FromMilliseconds(250));
-            }
-            catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
-            {
-                _logger.LogWarning("Action results topic '{Topic}' is not available yet; returning empty result set.", _settings.ActionResultsTopic);
-                return messages;
-            }
-
-            if (result == null)
-            {
-                emptyReads++;
-                if (emptyReads >= 1)
-                    break;
-
-                continue;
-            }
-
-            if (result.Message?.Value == null || result.Message.Value.Length == 0)
-            {
-                consumer.Commit(result);
-                continue;
-            }
-
-            var message = JsonSerializer.Deserialize<DeviceActionResultMessage>(result.Message.Value, MessagingJson.SerializerOptions);
-            if (message != null &&
-                message.UserId == userId &&
-                message.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
-            {
-                messages.Add(message);
-            }
-
-            consumer.Commit(result);
-        }
-
-        return messages;
-    }
-
-    /// <summary>
-    /// Deletes an action result message from Kafka using a tombstone.
-    /// </summary>
-    public async Task DeleteActionResultAsync(string resultId, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
-    {
-        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
-        await producer.ProduceAsync(
-            _settings.ActionResultsTopic,
-            new Message<string, byte[]>
-            {
-                Key = resultId,
-                Value = null!
-            },
-            cancellationToken);
-        producer.Flush(TimeSpan.FromSeconds(10));
-    }
 
     /// <summary>
     /// Consumes pending messages for a device from Kafka.
