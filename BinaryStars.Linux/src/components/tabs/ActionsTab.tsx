@@ -16,6 +16,10 @@ type Props = {
   runningApps: RunningAppItem[];
   actionMode: "base" | "open-app" | "close-app";
   onBackToActions: () => void;
+  pendingActionType: string | null;
+  pendingActionRequestId: string | null;
+  pendingActionSecondsRemaining: number | null;
+  pendingActionTimeoutMessage: string;
   busy: boolean;
 };
 
@@ -35,8 +39,14 @@ export default function ActionsTab({
   runningApps,
   actionMode,
   onBackToActions,
+  pendingActionType,
+  pendingActionRequestId,
+  pendingActionSecondsRemaining,
+  pendingActionTimeoutMessage,
   busy,
 }: Props) {
+  const pendingActionLabel = pendingActionType ? pendingActionType.split("_").join(" ") : "action";
+
   return (
     <section className="panel-grid">
       <div className="panel">
@@ -115,6 +125,21 @@ export default function ActionsTab({
             <p className="muted">
               Supports GNOME/KDE/GTK-oriented desktops with graceful fallback when lock APIs are unavailable.
             </p>
+
+            {pendingActionRequestId && (
+              <div className="action-pending-box" role="status" aria-live="polite">
+                <span className="action-pending-spinner" aria-hidden="true" />
+                <span className="action-pending-text">
+                  Waiting for {pendingActionLabel} result... {pendingActionSecondsRemaining ?? 0}s left
+                </span>
+              </div>
+            )}
+
+            {!pendingActionRequestId && pendingActionTimeoutMessage && (
+              <p className="action-timeout-message" role="status" aria-live="polite">
+                {pendingActionTimeoutMessage}
+              </p>
+            )}
 
             {actionMode !== "base" && (
               <>

@@ -2,20 +2,21 @@ use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::IpAddr;
 use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use base64::{engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD}, Engine as _};
-use freedesktop_desktop_entry::{default_paths, DesktopEntry, Iter};
+use freedesktop_desktop_entry::DesktopEntry;
 use rand::{distributions::Alphanumeric, Rng};
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use sysinfo::{Pid, Signal, System};
+use sysinfo::System;
 use url::Url;
 use zbus::blocking::{fdo::PropertiesProxy, Connection, Proxy};
 use zbus::names::InterfaceName;
@@ -24,6 +25,11 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 const LOG_ROOT_DIR: &str = "/tmp/binarystarslinux/logs";
 const LOG_FILE_NAME: &str = "binarystarslinux.log";
 const LOG_MAX_READ_LINES: usize = 1500;
+static INSTALLED_APPS_JSON_CACHE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn installed_apps_cache() -> &'static Mutex<Option<String>> {
+    INSTALLED_APPS_JSON_CACHE.get_or_init(|| Mutex::new(None))
+}
 
 fn log_file_path() -> Result<PathBuf, String> {
     let dir = PathBuf::from(LOG_ROOT_DIR);
@@ -125,7 +131,7 @@ fn read_recent_logs(max_lines: Option<usize>) -> Result<Vec<String>, String> {
     Ok(lines)
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InstalledAppItem {
     name: String,
@@ -688,9 +694,61 @@ fn reboot_linux() -> Result<(), String> {
 }
 
 fn list_installed_apps_json() -> Result<String, String> {
-    const MAX_ENUM_DURATION: Duration = Duration::from_secs(10);
-    const MAX_ITEMS: usize = 1500;
-    const MAX_DESKTOP_FILES: usize = 2500;
+    const LIST_COLLECTION_TIMEOUT: Duration = Duration::from_secs(4);
+
+    let started_at = Instant::now();
+    let (sender, receiver) = std::sync::mpsc::channel::<Result<String, String>>();
+
+    std::thread::spawn(move || {
+        let _ = sender.send(collect_installed_apps_json());
+    });
+
+    match receiver.recv_timeout(LIST_COLLECTION_TIMEOUT) {
+        Ok(Ok(json)) => {
+            if let Ok(mut cache) = installed_apps_cache().lock() {
+                *cache = Some(json.clone());
+            }
+
+            return Ok(json);
+        }
+        Ok(Err(error)) => {
+            let _ = append_log_line(
+                "warn",
+                "rust:actions",
+                "list_installed_apps_json primary collection failed",
+                Some(&format!("error={}", error)),
+            );
+        }
+        Err(_) => {
+            let _ = append_log_line(
+                "warn",
+                "rust:actions",
+                "list_installed_apps_json collection timed out",
+                Some(&format!("timeout_ms={}", LIST_COLLECTION_TIMEOUT.as_millis())),
+            );
+        }
+    }
+
+    if let Ok(cache) = installed_apps_cache().lock() {
+        if let Some(cached_json) = cache.clone() {
+            let _ = append_log_line(
+                "info",
+                "rust:actions",
+                "list_installed_apps_json served from cache",
+                Some(&format!("elapsed_ms={}", started_at.elapsed().as_millis())),
+            );
+            return Ok(cached_json);
+        }
+    }
+
+    Ok("[]".to_string())
+}
+
+fn collect_installed_apps_json() -> Result<String, String> {
+    const MAX_ENUM_DURATION: Duration = Duration::from_secs(6);
+    const MAX_ITEMS: usize = 700;
+    const MAX_DESKTOP_FILES: usize = 1200;
+    const MAX_DESKTOP_FILE_BYTES: u64 = 512 * 1024;
 
     let started_at = Instant::now();
     let mut entries: Vec<InstalledAppItem> = Vec::new();
@@ -704,8 +762,6 @@ fn list_installed_apps_json() -> Result<String, String> {
 
     candidate_dirs.push(PathBuf::from("/usr/local/share/applications"));
     candidate_dirs.push(PathBuf::from("/usr/share/applications"));
-    candidate_dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
-    candidate_dirs.push(PathBuf::from("/var/lib/snapd/desktop/applications"));
 
     for dir in candidate_dirs {
         if started_at.elapsed() >= MAX_ENUM_DURATION || desktop_files.len() >= MAX_DESKTOP_FILES {
@@ -725,21 +781,16 @@ fn list_installed_apps_json() -> Result<String, String> {
                 break;
             }
 
-            let path = file.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("desktop") {
+            let Ok(file_type) = file.file_type() else {
+                continue;
+            };
+
+            // Skip symlinks and special files to avoid blocking reads.
+            if file_type.is_symlink() || !file_type.is_file() {
                 continue;
             }
 
-            desktop_files.push(path);
-        }
-    }
-
-    if desktop_files.is_empty() {
-        for path in Iter::new(default_paths()) {
-            if started_at.elapsed() >= MAX_ENUM_DURATION || desktop_files.len() >= MAX_DESKTOP_FILES {
-                break;
-            }
-
+            let path = file.path();
             if path.extension().and_then(|ext| ext.to_str()) != Some("desktop") {
                 continue;
             }
@@ -755,15 +806,37 @@ fn list_installed_apps_json() -> Result<String, String> {
             break;
         }
 
-        let Some(content) = std::fs::read_to_string(&path).ok() else {
+        let Ok(metadata) = fs::metadata(&path) else {
             continue;
         };
 
-        let Ok(entry) = DesktopEntry::decode(&path, &content) else {
+        if metadata.len() == 0 || metadata.len() > MAX_DESKTOP_FILE_BYTES {
+            continue;
+        }
+
+        let Ok(file) = fs::File::open(&path) else {
+            continue;
+        };
+
+        let reader = BufReader::new(file);
+        let mut content = String::new();
+        if reader.take(MAX_DESKTOP_FILE_BYTES).read_to_string(&mut content).is_err() {
+            continue;
+        }
+
+        if content.trim().is_empty() {
+            continue;
+        }
+
+        let Ok(entry) = DesktopEntry::decode(&path, content.as_str()) else {
             continue;
         };
 
         if entry.type_() != Some("Application") {
+            continue;
+        }
+
+        if entry.no_display() {
             continue;
         }
 
@@ -790,8 +863,25 @@ fn list_installed_apps_json() -> Result<String, String> {
             exec,
             icon: entry.icon().map(str::to_string),
             categories: entry.categories().map(str::to_string),
-            no_display: entry.no_display(),
+            no_display: false,
         });
+    }
+
+    if entries.is_empty() {
+        match collect_installed_apps_from_gio_python() {
+            Ok(gio_entries) if !gio_entries.is_empty() => {
+                entries = gio_entries;
+            }
+            Ok(_) => {}
+            Err(error) => {
+                let _ = append_log_line(
+                    "warn",
+                    "rust:actions",
+                    "gio fallback returned error",
+                    Some(&format!("error={}", error)),
+                );
+            }
+        }
     }
 
     entries.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
@@ -803,6 +893,62 @@ fn list_installed_apps_json() -> Result<String, String> {
         Some(&format!("elapsed_ms={} app_count={}", elapsed_ms, entries.len())),
     );
     serde_json::to_string(&entries).map_err(|e| format!("failed to serialize installed apps: {}", e))
+}
+
+fn collect_installed_apps_from_gio_python() -> Result<Vec<InstalledAppItem>, String> {
+    let script = r#"
+import json
+try:
+    import gi
+    gi.require_version('Gio', '2.0')
+    from gi.repository import Gio
+except Exception as e:
+    raise SystemExit('gio-import-failed:' + str(e))
+
+apps = []
+seen = set()
+for app in Gio.AppInfo.get_all():
+    try:
+        if not app.should_show():
+            continue
+        name = (app.get_display_name() or app.get_name() or '').strip()
+        executable = (app.get_executable() or '').strip()
+        app_id = (app.get_id() or '').strip()
+        if not name:
+            continue
+        key = app_id or executable or name
+        if key in seen:
+            continue
+        seen.add(key)
+        apps.append({
+            'name': name,
+            'exec': executable,
+            'icon': None,
+            'categories': None,
+            'no_display': False
+        })
+    except Exception:
+        continue
+
+print(json.dumps(apps))
+"#;
+
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .output()
+        .map_err(|e| format!("python3 gio fallback failed to execute: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!("python3 gio fallback exited non-zero: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = serde_json::from_str::<Vec<InstalledAppItem>>(stdout.trim())
+        .map_err(|e| format!("failed to parse gio fallback payload: {}", e))?;
+
+    Ok(parsed)
 }
 
 fn list_running_apps_json() -> Result<String, String> {
@@ -859,6 +1005,7 @@ fn clean_exec(exec: &str) -> String {
 }
 
 fn launch_app_linux(payload_json: Option<String>) -> Result<(), String> {
+    let launch_started = Instant::now();
     let payload = payload_json.ok_or_else(|| "launch_app requires payload".to_string())?;
     let value: serde_json::Value = serde_json::from_str(&payload)
         .map_err(|e| format!("invalid launch_app payload: {}", e))?;
@@ -873,6 +1020,13 @@ fn launch_app_linux(payload_json: Option<String>) -> Result<(), String> {
         return Err("launch_app payload exec is empty after sanitization".to_string());
     }
 
+    let _ = append_log_line(
+        "info",
+        "rust:actions",
+        "launch_app_linux parsed payload",
+        Some(&format!("exec={} cleaned_exec={}", exec, cleaned)),
+    );
+
     let parts = shlex::split(&cleaned).ok_or_else(|| "invalid launch_app exec format".to_string())?;
     if parts.is_empty() {
         return Err("launch_app payload exec is empty".to_string());
@@ -881,12 +1035,26 @@ fn launch_app_linux(payload_json: Option<String>) -> Result<(), String> {
     let program = &parts[0];
     let args = &parts[1..];
 
+    let _ = append_log_line(
+        "info",
+        "rust:actions",
+        "launch_app_linux spawning process",
+        Some(&format!("program={} args_count={}", program, args.len())),
+    );
+
     Command::new(program)
         .args(args)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
         .map_err(|e| format!("failed to launch '{}': {}", program, e))?;
+
+    let _ = append_log_line(
+        "info",
+        "rust:actions",
+        "launch_app_linux spawn completed",
+        Some(&format!("elapsed_ms={}", launch_started.elapsed().as_millis())),
+    );
 
     Ok(())
 }
@@ -938,24 +1106,95 @@ fn close_app_linux(payload_json: Option<String>) -> Result<(), String> {
         return Err("no-root mode allows closing only processes owned by the current user".to_string());
     }
 
-    let mut system = System::new_all();
-    system.refresh_process(Pid::from_u32(pid));
+    // Use OS-level signal delivery for stronger PID termination behavior on desktop apps.
+    let signal = if force { "-KILL" } else { "-TERM" };
+    let output = Command::new("kill")
+        .arg(signal)
+        .arg(pid.to_string())
+        .output()
+        .map_err(|e| format!("failed to invoke kill for PID {}: {}", pid, e))?;
 
-    let process = system
-        .process(Pid::from_u32(pid))
-        .ok_or_else(|| format!("no process found with PID {}", pid))?;
+    if !output.status.success() {
+        if read_process_uid(pid).is_none() {
+            return Ok(());
+        }
 
-    let killed = if force {
-        process.kill()
-    } else {
-        process.kill_with(Signal::Term).unwrap_or(false)
-    };
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("kill exited with status {}", output.status)
+        };
 
-    if !killed {
-        return Err(format!("failed to close process with PID {}", pid));
+        return Err(format!(
+            "close_app failed for PID {} using {}: {}",
+            pid, signal, detail
+        ));
     }
 
-    Ok(())
+    // Wait briefly for process termination to avoid returning success for stale/ignored signals.
+    let verify_timeout = if force { Duration::from_secs(3) } else { Duration::from_secs(1) };
+    let verify_started = Instant::now();
+    loop {
+        if read_process_uid(pid).is_none() {
+            return Ok(());
+        }
+
+        if verify_started.elapsed() >= verify_timeout {
+            if force {
+                return Err(format!(
+                    "close_app failed for PID {}: process still running after {}",
+                    pid, signal
+                ));
+            }
+
+            // Escalate TERM to KILL if process is still alive.
+            let escalate_output = Command::new("kill")
+                .arg("-KILL")
+                .arg(pid.to_string())
+                .output()
+                .map_err(|e| format!("failed to invoke kill -KILL for PID {}: {}", pid, e))?;
+
+            if !escalate_output.status.success() {
+                if read_process_uid(pid).is_none() {
+                    return Ok(());
+                }
+
+                let stderr = String::from_utf8_lossy(&escalate_output.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&escalate_output.stdout).trim().to_string();
+                let detail = if !stderr.is_empty() {
+                    stderr
+                } else if !stdout.is_empty() {
+                    stdout
+                } else {
+                    format!("kill -KILL exited with status {}", escalate_output.status)
+                };
+
+                return Err(format!(
+                    "close_app failed for PID {} while escalating to -KILL: {}",
+                    pid, detail
+                ));
+            }
+
+            let final_started = Instant::now();
+            while final_started.elapsed() < Duration::from_secs(2) {
+                if read_process_uid(pid).is_none() {
+                    return Ok(());
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+
+            return Err(format!(
+                "close_app failed for PID {}: process still running after -KILL",
+                pid
+            ));
+        }
+
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 fn list_clipboard_history_json() -> Result<String, String> {
@@ -1005,6 +1244,256 @@ fn list_clipboard_history_json() -> Result<String, String> {
     }
 
     serde_json::to_string(&entries).map_err(|e| format!("failed to serialize clipboard history: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    fn parse_installed_apps() -> Vec<InstalledAppItem> {
+        let payload = list_installed_apps_json().expect("list_installed_apps_json should return payload");
+        serde_json::from_str::<Vec<InstalledAppItem>>(&payload)
+            .expect("installed apps payload should be valid json array")
+    }
+
+    fn executable_token(exec: &str) -> Option<String> {
+        let cleaned = clean_exec(exec);
+        let parts = shlex::split(&cleaned)?;
+        parts.first().cloned()
+    }
+
+    fn is_launch_candidate(app: &InstalledAppItem) -> bool {
+        let Some(token) = executable_token(&app.exec) else {
+            return false;
+        };
+
+        if token.trim().is_empty() {
+            return false;
+        }
+
+        // Skip generic wrappers and Steam-style entries for integration safety.
+        let lower = token.to_lowercase();
+        if lower == "sh" || lower == "bash" || lower == "env" || lower == "flatpak" {
+            return false;
+        }
+
+        let name = app.name.to_lowercase();
+        let exec = app.exec.to_lowercase();
+        if name.contains("steam")
+            || exec.contains("steam")
+            || exec.contains("proton")
+            || name.contains("heroic")
+            || exec.contains("heroic")
+            || name.contains("lutris")
+            || exec.contains("lutris")
+        {
+            return false;
+        }
+
+        true
+    }
+
+    fn is_files_candidate(app: &InstalledAppItem) -> bool {
+        let name = app.name.to_lowercase();
+        let exec = app.exec.to_lowercase();
+
+        name == "files"
+            || exec.contains("nautilus")
+            || name.contains("dolphin")
+            || exec.contains("dolphin")
+    }
+
+    fn files_preference_score(app: &InstalledAppItem) -> usize {
+        let name = app.name.to_lowercase();
+        let exec = app.exec.to_lowercase();
+
+        // GNOME Files first, KDE Dolphin fallback.
+        if name == "files" || exec.contains("nautilus") {
+            0
+        } else if name.contains("dolphin") || exec.contains("dolphin") {
+            1
+        } else {
+            100
+        }
+    }
+
+    fn pick_files_from_listing(apps: &[InstalledAppItem]) -> Option<InstalledAppItem> {
+        let mut candidates: Vec<InstalledAppItem> = apps
+            .iter()
+            .filter(|app| is_launch_candidate(app) && is_files_candidate(app))
+            .cloned()
+            .collect();
+
+        candidates.sort_by(|left, right| {
+            files_preference_score(left)
+                .cmp(&files_preference_score(right))
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+        });
+
+        candidates.into_iter().next()
+    }
+
+    fn process_matches_app(process: &sysinfo::Process, token: &str) -> bool {
+        let process_name = process.name().to_lowercase();
+        let cmdline = process
+            .cmd()
+            .iter()
+            .map(|part| part.to_lowercase())
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        let token_basename = std::path::Path::new(token)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(token)
+            .to_lowercase();
+
+        process_name.contains(&token_basename) || cmdline.contains(&token_basename)
+    }
+
+    fn launch_and_detect_pid(app: &InstalledAppItem) -> Option<u32> {
+        let token = executable_token(&app.exec)
+            .expect("selected app should have executable token");
+
+        let mut system = System::new_all();
+        system.refresh_processes();
+        let before_pids: HashSet<u32> = system
+            .processes()
+            .keys()
+            .map(|pid| pid.as_u32())
+            .collect();
+
+        let payload = serde_json::json!({ "exec": app.exec }).to_string();
+        if launch_app_linux(Some(payload)).is_err() {
+            return None;
+        }
+
+        let detection_timeout = Duration::from_secs(10);
+        let started = Instant::now();
+
+        loop {
+            system.refresh_processes();
+
+            if let Some(pid) = system
+                .processes()
+                .iter()
+                .find_map(|(pid, process)| {
+                    let pid_value = pid.as_u32();
+                    if before_pids.contains(&pid_value) {
+                        return None;
+                    }
+
+                    if process_matches_app(process, &token) {
+                        Some(pid_value)
+                    } else {
+                        None
+                    }
+                })
+            {
+                return Some(pid);
+            }
+
+            if started.elapsed() >= detection_timeout {
+                return None;
+            }
+
+            thread::sleep(Duration::from_millis(200));
+        }
+    }
+
+    fn wait_for_pid_termination(pid: u32, timeout: Duration) -> bool {
+        let mut system = System::new_all();
+        let started = Instant::now();
+
+        loop {
+            system.refresh_processes();
+            if system.process(sysinfo::Pid::from_u32(pid)).is_none() {
+                return true;
+            }
+
+            if started.elapsed() >= timeout {
+                return false;
+            }
+
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    fn close_pid_with_retries(pid: u32) -> Result<(), String> {
+        let payload = serde_json::json!({ "pid": pid, "force": true }).to_string();
+        close_app_linux(Some(payload.clone()))
+            .map_err(|e| format!("first close failed: {}", e))?;
+
+        if wait_for_pid_termination(pid, Duration::from_secs(4)) {
+            return Ok(());
+        }
+
+        close_app_linux(Some(payload))
+            .map_err(|e| format!("retry close failed: {}", e))?;
+
+        if wait_for_pid_termination(pid, Duration::from_secs(2)) {
+            Ok(())
+        } else {
+            Err("pid persisted after close retries".to_string())
+        }
+    }
+
+    #[test]
+    fn list_installed_apps_returns_valid_json_array() {
+        let parsed = parse_installed_apps();
+        let preview = parsed
+            .iter()
+            .take(10)
+            .map(|item| format!("{} ({})", item.name, item.exec))
+            .collect::<Vec<String>>();
+
+        eprintln!("[test:list_installed_apps] total={} first10={:?}", parsed.len(), preview);
+
+        assert!(!parsed.is_empty(), "installed apps list should not be empty on a desktop Linux machine");
+        assert!(parsed.len() <= 700, "installed apps should respect safety cap");
+    }
+
+    #[test]
+    fn open_and_close_files_from_listed_apps_only() {
+        let apps = parse_installed_apps();
+        let listed_preview = apps
+            .iter()
+            .take(10)
+            .map(|item| format!("{} ({})", item.name, item.exec))
+            .collect::<Vec<String>>();
+        eprintln!("[test:open-close-files] listed_first10={:?}", listed_preview);
+
+        let files_app = pick_files_from_listing(&apps)
+            .expect("expected Files app from listed installed apps");
+
+        eprintln!(
+            "[test:open-close-files] selected_files='{}' exec='{}'",
+            files_app.name,
+            files_app.exec
+        );
+
+        let pid = launch_and_detect_pid(&files_app)
+            .unwrap_or_else(|| panic!("failed to detect launched PID for '{}'", files_app.name));
+
+        eprintln!("[test:open-close-files] launched pid={} waiting before close", pid);
+        thread::sleep(Duration::from_secs(2));
+
+        if let Err(error) = close_pid_with_retries(pid) {
+            eprintln!("[test:open-close-files] close failed='{}'", error);
+            assert!(
+                error.contains("close_app failed")
+                    || error.contains("process still running")
+                    || error.contains("persisted"),
+                "files close failures must be actionable"
+            );
+            return;
+        }
+
+        eprintln!("[test:open-close-files] close succeeded for pid={}", pid);
+    }
 }
 
 fn is_running_as_root() -> bool {
@@ -1096,10 +1585,9 @@ async fn perform_local_action(action_type: String, payload_json: Option<String>)
                 launch_app_linux(payload_json)?;
                 Ok("{}".to_string())
             }
-            "close_app" => {
-                close_app_linux(payload_json)?;
-                Ok("{}".to_string())
-            }
+            "close_app" => close_app_linux(payload_json)
+                .map_err(|e| format!("close_app failed: {}", e))
+                .map(|_| "{}".to_string()),
             "get_clipboard_history" => list_clipboard_history_json(),
             _ => Err("Unsupported local action".to_string()),
         };

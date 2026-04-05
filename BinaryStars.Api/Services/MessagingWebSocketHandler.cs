@@ -310,25 +310,6 @@ public class MessagingWebSocketHandler
             _logger.LogWarning("Realtime action result dropped because requester websocket is not connected: targetDeviceId={TargetDeviceId} correlationId={CorrelationId}",
                 request.TargetDeviceId,
                 request.CorrelationId);
-
-            var normalizedActionTypeForQueue = NormalizeActionType(request.ActionType) ?? request.ActionType.Trim().ToLowerInvariant();
-            var queuedResult = new DeviceActionResultMessage(
-                Guid.NewGuid().ToString("D"),
-                userId,
-                request.SenderDeviceId,
-                request.TargetDeviceId,
-                normalizedActionTypeForQueue,
-                request.Status,
-                request.PayloadJson,
-                request.Error,
-                request.CorrelationId,
-                DateTimeOffset.UtcNow);
-
-            const KafkaAuthMode authMode = KafkaAuthMode.Scram;
-            await _kafkaService.PublishActionResultAsync(queuedResult, authMode, null, cancellationToken);
-            _logger.LogInformation("Queued realtime action result for requester pull: targetDeviceId={TargetDeviceId} correlationId={CorrelationId}",
-                request.TargetDeviceId,
-                request.CorrelationId);
             return;
         }
 

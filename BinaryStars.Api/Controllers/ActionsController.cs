@@ -20,7 +20,6 @@ public class ActionsController : ControllerBase
 {
     private readonly IDeviceRepository _deviceRepository;
     private readonly MessagingConnectionManager _connectionManager;
-    private readonly MessagingKafkaService _kafkaService;
     private readonly ILogger<ActionsController> _logger;
 
     /// <summary>
@@ -29,12 +28,10 @@ public class ActionsController : ControllerBase
     public ActionsController(
         IDeviceRepository deviceRepository,
         MessagingConnectionManager connectionManager,
-        MessagingKafkaService kafkaService,
         ILogger<ActionsController> logger)
     {
         _deviceRepository = deviceRepository;
         _connectionManager = connectionManager;
-        _kafkaService = kafkaService;
         _logger = logger;
     }
 
@@ -156,13 +153,11 @@ public class ActionsController : ControllerBase
         if (!_connectionManager.TryGet(result.TargetDeviceId, out var requesterConnection)
             || requesterConnection?.Socket.State != WebSocketState.Open)
         {
-            const KafkaAuthMode authMode = KafkaAuthMode.Scram;
-            await _kafkaService.PublishActionResultAsync(result, authMode, null, cancellationToken);
-            _logger.LogInformation(
-                "Requester websocket unavailable; queued action result for pull. targetDeviceId={TargetDeviceId} correlationId={CorrelationId}",
+            _logger.LogWarning(
+                "Requester websocket unavailable; dropping realtime-only action result. targetDeviceId={TargetDeviceId} correlationId={CorrelationId}",
                 result.TargetDeviceId,
                 result.CorrelationId);
-            return Ok(result);
+            return BadRequest(new[] { "Requester device is not connected to realtime channel." });
         }
 
         await SendEnvelopeAsync(requesterConnection.Socket, "action_result", result, cancellationToken);
@@ -176,20 +171,7 @@ public class ActionsController : ControllerBase
     [HttpGet("results/pull")]
     public async Task<IActionResult> PullResults([FromQuery] string deviceId, CancellationToken cancellationToken)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-        var target = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
-        if (target == null || target.UserId != userId)
-            return BadRequest(new[] { "Invalid device." });
-
-        const KafkaAuthMode authMode = KafkaAuthMode.Scram;
-        var pending = await _kafkaService.ConsumePendingActionResultsAsync(deviceId, userId, authMode, null, cancellationToken);
-        foreach (var message in pending)
-        {
-            await _kafkaService.DeleteActionResultAsync(message.Id, authMode, null, cancellationToken);
-        }
-
-        return Ok(pending);
+        return StatusCode(StatusCodes.Status410Gone, new[] { "Action results pull is disabled. Use realtime websocket action_result events." });
     }
 
     private static async Task SendEnvelopeAsync<T>(WebSocket socket, string type, T payload, CancellationToken cancellationToken)

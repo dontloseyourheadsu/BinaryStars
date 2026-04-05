@@ -39,6 +39,8 @@ object MessagingSocketManager {
 
     private var webSocket: WebSocket? = null
     private var currentDeviceId: String? = null
+    @Volatile
+    private var socketConnected: Boolean = false
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -56,6 +58,7 @@ object MessagingSocketManager {
 
         webSocket?.close(1000, "Reconnecting")
         webSocket = null
+        socketConnected = false
 
         val request = Request.Builder()
             .url("$WS_BASE_URL?deviceId=$deviceId")
@@ -64,6 +67,7 @@ object MessagingSocketManager {
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                socketConnected = true
                 notifyConnection(true)
             }
 
@@ -75,6 +79,7 @@ object MessagingSocketManager {
                 if (this@MessagingSocketManager.webSocket === webSocket) {
                     this@MessagingSocketManager.webSocket = null
                 }
+                socketConnected = false
                 notifyConnection(false)
             }
 
@@ -82,6 +87,7 @@ object MessagingSocketManager {
                 if (this@MessagingSocketManager.webSocket === webSocket) {
                     this@MessagingSocketManager.webSocket = null
                 }
+                socketConnected = false
                 notifyConnection(false)
             }
         })
@@ -93,7 +99,10 @@ object MessagingSocketManager {
     fun disconnect() {
         webSocket?.close(1000, "Client closing")
         webSocket = null
+        socketConnected = false
     }
+
+    fun isConnected(): Boolean = socketConnected
 
     /**
      * Sends a message through the websocket if connected.

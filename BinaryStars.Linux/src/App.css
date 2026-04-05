@@ -372,6 +372,44 @@ button.ghost,
   margin: 0;
 }
 
+.action-pending-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 78%, var(--primary-purple) 22%);
+}
+
+.action-pending-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary-purple);
+  animation: action-spin 1s linear infinite;
+  flex: 0 0 auto;
+}
+
+.action-pending-text {
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.action-timeout-message {
+  margin: 10px 0 0;
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+@keyframes action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .list {
   display: grid;
   gap: 8px;
