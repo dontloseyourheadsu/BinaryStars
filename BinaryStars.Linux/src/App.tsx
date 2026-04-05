@@ -104,6 +104,10 @@ function App() {
   const [launchableApps, setLaunchableApps] = useState<LaunchableAppItem[]>([]);
   const [runningApps, setRunningApps] = useState<RunningAppItem[]>([]);
   const [pendingActionRequestId, setPendingActionRequestId] = useState<string | null>(null);
+  const [pendingActionType, setPendingActionType] = useState<string | null>(null);
+  const [pendingActionDeadlineAtMs, setPendingActionDeadlineAtMs] = useState<number | null>(null);
+  const [pendingActionSecondsRemaining, setPendingActionSecondsRemaining] = useState<number | null>(null);
+  const [pendingActionTimeoutMessage, setPendingActionTimeoutMessage] = useState("");
   const [clipboardHistory, setClipboardHistory] = useState<string[]>([]);
   const [clipboardHistoryLoading, setClipboardHistoryLoading] = useState(false);
   const [clipboardHistoryMessage, setClipboardHistoryMessage] = useState("");
@@ -157,9 +161,65 @@ function App() {
   const clipboardAutoFetchKeyRef = useRef<string>("");
   const myDeviceId = getDeviceId();
 
+  const getActionTimeoutMs = (actionType: string): number => {
+    if (actionType === "list_installed_apps" || actionType === "launch_app") {
+      return 120_000;
+    }
+    return 30_000;
+  };
+
+  const formatActionLabel = (actionType: string | null): string => {
+    if (!actionType) {
+      return "Action";
+    }
+
+    return actionType
+      .split("_")
+      .map((part) => (part.length > 0 ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
+      .join(" ");
+  };
+
+  const clearPendingAction = (): void => {
+    setPendingActionRequestId(null);
+    setPendingActionType(null);
+    setPendingActionDeadlineAtMs(null);
+    setPendingActionSecondsRemaining(null);
+  };
+
+  const startPendingAction = (requestId: string, actionType: string): void => {
+    const timeoutMs = getActionTimeoutMs(actionType);
+    setPendingActionTimeoutMessage("");
+    setPendingActionRequestId(requestId);
+    setPendingActionType(actionType);
+    setPendingActionDeadlineAtMs(Date.now() + timeoutMs);
+    setPendingActionSecondsRemaining(Math.ceil(timeoutMs / 1000));
+  };
+
   useEffect(() => {
     selectedMapDeviceIdRef.current = selectedMapDeviceId;
   }, [selectedMapDeviceId]);
+
+  useEffect(() => {
+    if (!pendingActionRequestId || !pendingActionDeadlineAtMs || !pendingActionType) {
+      return;
+    }
+
+    const timeoutMs = getActionTimeoutMs(pendingActionType);
+    const timer = window.setInterval(() => {
+      const remainingMs = pendingActionDeadlineAtMs - Date.now();
+      const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      setPendingActionSecondsRemaining(remainingSeconds);
+
+      if (remainingMs <= 0) {
+        const actionLabel = formatActionLabel(pendingActionType);
+        clearPendingAction();
+        setPendingActionTimeoutMessage(`${actionLabel} timed out after ${Math.ceil(timeoutMs / 1000)}s. Please try again.`);
+        setError(`${actionLabel} timed out`);
+      }
+    }, 250);
+
+    return () => window.clearInterval(timer);
+  }, [pendingActionRequestId, pendingActionDeadlineAtMs, pendingActionType]);
 
   const handleTabSelect = (tab: Tab): void => {
     logEvent("info", "ui.navigation", "tab-selected", { tab });
@@ -1966,10 +2026,31 @@ function App() {
       return;
     }
 
+    if (result.actionType === "list_installed_apps" && result.status.toLowerCase() === "partial") {
+      if (pendingActionRequestId && result.correlationId !== pendingActionRequestId) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(result.payloadJson ?? "[]") as LaunchableAppItem[];
+        setLaunchableApps((prev) => {
+          const byExec = new Map(prev.map((entry) => [entry.exec, entry] as const));
+          for (const app of parsed) {
+            byExec.set(app.exec, app);
+          }
+          return Array.from(byExec.values()).sort((left, right) => left.name.localeCompare(right.name));
+        });
+      } catch {
+        setError("Failed to parse partial installed apps payload");
+      }
+
+      return;
+    }
+
     if (result.status.toLowerCase() !== "success") {
       setError(result.error ?? `Action ${result.actionType} failed`);
       if (pendingActionRequestId && result.correlationId === pendingActionRequestId) {
-        setPendingActionRequestId(null);
+        clearPendingAction();
       }
       return;
     }
@@ -1982,10 +2063,10 @@ function App() {
       try {
         const parsed = JSON.parse(result.payloadJson ?? "[]") as LaunchableAppItem[];
         setLaunchableApps(parsed);
-        setPendingActionRequestId(null);
       } catch {
         setError("Failed to parse installed apps payload");
       }
+      clearPendingAction();
       return;
     }
 
@@ -1993,10 +2074,15 @@ function App() {
       try {
         const parsed = JSON.parse(result.payloadJson ?? "[]") as RunningAppItem[];
         setRunningApps(parsed);
-        setPendingActionRequestId(null);
       } catch {
         setError("Failed to parse running apps payload");
       }
+      clearPendingAction();
+      return;
+    }
+
+    if (result.actionType === "launch_app" || result.actionType === "close_app") {
+      clearPendingAction();
     }
   };
 
@@ -2051,12 +2137,36 @@ function App() {
         actionType: command.actionType,
         correlationId: command.correlationId,
       });
-      const actionTimeoutMs = command.actionType === "list_installed_apps" ? 45_000 : 30_000;
-      const payload = await withTimeout(
-        executeActionLocally(command.actionType, command.payloadJson ?? null),
-        actionTimeoutMs,
-        "Local action execution timed out",
-      );
+      const shouldUseTimeout = command.actionType !== "list_installed_apps" && command.actionType !== "launch_app";
+      const payload = shouldUseTimeout
+        ? await withTimeout(
+            executeActionLocally(command.actionType, command.payloadJson ?? null),
+            30_000,
+            "Local action execution timed out",
+          )
+        : await executeActionLocally(command.actionType, command.payloadJson ?? null);
+
+      if (command.actionType === "list_installed_apps" && payload) {
+        try {
+          const apps = JSON.parse(payload) as LaunchableAppItem[];
+          const chunkSize = 10;
+          for (let index = 0; index < apps.length; index += chunkSize) {
+            const chunk = apps.slice(index, index + chunkSize);
+            await deliverActionResult({
+              senderDeviceId: myDeviceId,
+              targetDeviceId: command.senderDeviceId,
+              actionType: command.actionType,
+              status: "partial",
+              payloadJson: JSON.stringify(chunk),
+              error: null,
+              correlationId: command.correlationId ?? command.id,
+            });
+          }
+        } catch {
+          // ignore chunking failures and continue with final full payload result
+        }
+      }
+
       await deliverActionResult({
         senderDeviceId: myDeviceId,
         targetDeviceId: command.senderDeviceId,
@@ -2108,27 +2218,27 @@ function App() {
     payloadJson?: string | null,
     correlationId?: string | null,
     targetDeviceId?: string,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const requestedTargetId = targetDeviceId ?? selectedActionDevice?.id;
     if (!requestedTargetId) {
       setError("Select a Linux device first");
-      return;
+      return false;
     }
 
     const targetDevice = devices.find((entry) => entry.id === requestedTargetId) ?? null;
     if (!targetDevice || targetDevice.type !== "Linux") {
       setError("Target must be a Linux device");
-      return;
+      return false;
     }
 
     if (!requireOnline()) {
       setError("No connection available");
-      return;
+      return false;
     }
 
     if (!targetDevice.isOnline) {
       setError("Target device must be online");
-      return;
+      return false;
     }
 
     const sent = sendSocketEnvelope("action_command", {
@@ -2141,7 +2251,7 @@ function App() {
 
     if (!sent) {
       setError("Realtime channel is not connected");
-      return;
+      return false;
     }
 
     logEvent("info", "actions", "action-command-sent", {
@@ -2151,6 +2261,7 @@ function App() {
     });
 
     setSuccess("Action sent");
+    return true;
   };
 
   const sendBlockScreenAction = async (): Promise<void> => {
@@ -2167,28 +2278,44 @@ function App() {
 
   const fetchLaunchableApps = async (): Promise<void> => {
     const requestId = crypto.randomUUID();
-    setPendingActionRequestId(requestId);
+    startPendingAction(requestId, "list_installed_apps");
     setActionMode("open-app");
     setLaunchableApps([]);
     logEvent("info", "actions", "request-launchable-apps", { requestId });
-    await sendActionCommand("list_installed_apps", null, requestId);
+    const sent = await sendActionCommand("list_installed_apps", null, requestId);
+    if (!sent) {
+      clearPendingAction();
+    }
   };
 
   const fetchRunningApps = async (): Promise<void> => {
     const requestId = crypto.randomUUID();
-    setPendingActionRequestId(requestId);
+    startPendingAction(requestId, "list_running_apps");
     setActionMode("close-app");
     setRunningApps([]);
     logEvent("info", "actions", "request-running-apps", { requestId });
-    await sendActionCommand("list_running_apps", null, requestId);
+    const sent = await sendActionCommand("list_running_apps", null, requestId);
+    if (!sent) {
+      clearPendingAction();
+    }
   };
 
   const openRemoteApp = async (app: LaunchableAppItem): Promise<void> => {
-    await sendActionCommand("launch_app", JSON.stringify({ exec: app.exec }), crypto.randomUUID());
+    const requestId = crypto.randomUUID();
+    startPendingAction(requestId, "launch_app");
+    const sent = await sendActionCommand("launch_app", JSON.stringify({ exec: app.exec }), requestId);
+    if (!sent) {
+      clearPendingAction();
+    }
   };
 
   const closeRemoteApp = async (app: RunningAppItem): Promise<void> => {
-    await sendActionCommand("close_app", JSON.stringify({ pid: app.pid, force: false }), crypto.randomUUID());
+    const requestId = crypto.randomUUID();
+    startPendingAction(requestId, "close_app");
+    const sent = await sendActionCommand("close_app", JSON.stringify({ pid: app.pid, force: false }), requestId);
+    if (!sent) {
+      clearPendingAction();
+    }
   };
 
   const refreshClipboardHistory = async (): Promise<void> => {
@@ -2221,7 +2348,13 @@ function App() {
     setClipboardTargetDeviceId(selectedDeviceDetail.id);
 
     try {
-      await sendActionCommand("get_clipboard_history", null, requestId, selectedDeviceDetail.id);
+      const sent = await sendActionCommand("get_clipboard_history", null, requestId, selectedDeviceDetail.id);
+      if (!sent) {
+        setClipboardHistoryLoading(false);
+        setPendingClipboardRequestId(null);
+        setClipboardTargetDeviceId(null);
+        setClipboardHistoryMessage("Failed to request clipboard history.");
+      }
     } catch {
       setClipboardHistoryLoading(false);
       setPendingClipboardRequestId(null);
@@ -2261,7 +2394,8 @@ function App() {
     setActionMode("base");
     setLaunchableApps([]);
     setRunningApps([]);
-    setPendingActionRequestId(null);
+    clearPendingAction();
+    setPendingActionTimeoutMessage("");
     setClipboardHistory([]);
     setClipboardHistoryLoading(false);
     setClipboardHistoryMessage("");
@@ -2626,6 +2760,10 @@ function App() {
             runningApps={runningApps}
             actionMode={actionMode}
             onBackToActions={() => setActionMode("base")}
+            pendingActionType={pendingActionType}
+            pendingActionRequestId={pendingActionRequestId}
+            pendingActionSecondsRemaining={pendingActionSecondsRemaining}
+            pendingActionTimeoutMessage={pendingActionTimeoutMessage}
             busy={busy}
           />
         )}
