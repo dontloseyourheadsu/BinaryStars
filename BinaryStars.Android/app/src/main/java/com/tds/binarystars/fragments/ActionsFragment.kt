@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -46,7 +47,6 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     private companion object {
         private const val POLL_INTERVAL_MS = 10_000L
         private const val LOG_TAG = "BinaryStarsActions"
-        private const val RESULT_POLL_INTERVAL_MS = 1_000L
         private const val RESULT_POLL_TIMEOUT_MS = 45_000L
     }
 
@@ -58,12 +58,13 @@ class ActionsFragment : Fragment(), MessagingEventListener {
 
     private var selectedDevice: Device? = null
     private var pendingCorrelationId: String? = null
+    private var pendingActionType: String? = null
     private var actionMode: ActionMode = ActionMode.Base
     private val gson = Gson()
     private var launchableApps: List<LaunchableAppItemDto> = emptyList()
     private var runningApps: List<RunningAppItemDto> = emptyList()
     private var actionResultPollJob: Job? = null
-    private var actionResultPollInFlight: Boolean = false
+    private var actionPendingUiJob: Job? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -125,7 +126,8 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     override fun onStop() {
         actionResultPollJob?.cancel()
         actionResultPollJob = null
-        actionResultPollInFlight = false
+        actionPendingUiJob?.cancel()
+        actionPendingUiJob = null
         MessagingSocketManager.removeListener(this)
         super.onStop()
     }
@@ -148,9 +150,17 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             return
         }
 
+        if (!MessagingSocketManager.isConnected()) {
+            Toast.makeText(requireContext(), "Realtime channel is disconnected", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val senderId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
         val correlationId = UUID.randomUUID().toString()
+        val actionTimeoutMs = getActionTimeoutMs(actionType)
         pendingCorrelationId = correlationId
+        pendingActionType = actionType
+        showPendingActionStatus(actionType, actionTimeoutMs)
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -164,61 +174,37 @@ class ActionsFragment : Fragment(), MessagingEventListener {
                 val response = ApiClient.apiService.sendAction(request)
                 if (response.isSuccessful) {
                     Log.i(LOG_TAG, "Action API send accepted: actionType=$actionType correlationId=$correlationId target=${target.id}")
-                    startActionResultPolling(senderId, correlationId)
+                    startActionResultTimeoutWatch(correlationId, actionType, actionTimeoutMs)
                     Toast.makeText(requireContext(), "Action sent", Toast.LENGTH_SHORT).show()
                 } else {
                     pendingCorrelationId = null
+                    pendingActionType = null
+                    clearPendingActionStatus()
                     val body = response.errorBody()?.string()
                     Log.w(LOG_TAG, "Action API send rejected: status=${response.code()} actionType=$actionType correlationId=$correlationId body=$body")
                     Toast.makeText(requireContext(), "Action rejected (${response.code()})", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 pendingCorrelationId = null
+                pendingActionType = null
+                clearPendingActionStatus()
                 Log.e(LOG_TAG, "Action API send failed: actionType=$actionType correlationId=$correlationId", e)
                 Toast.makeText(requireContext(), "Failed to send action", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun startActionResultPolling(deviceId: String, correlationId: String) {
+    private fun startActionResultTimeoutWatch(correlationId: String, actionType: String, timeoutMs: Long) {
         actionResultPollJob?.cancel()
         actionResultPollJob = null
         actionResultPollJob = viewLifecycleOwner.lifecycleScope.launch {
-            if (actionResultPollInFlight) {
-                Log.i(LOG_TAG, "Action result poll already running, replacing: correlationId=$correlationId")
-            }
-            actionResultPollInFlight = true
-            val startedAt = System.currentTimeMillis()
-            try {
-                while (isActive && System.currentTimeMillis() - startedAt < RESULT_POLL_TIMEOUT_MS) {
-                    if (pendingCorrelationId != correlationId) {
-                        return@launch
-                    }
+            delay(timeoutMs)
 
-                    try {
-                        val response = ApiClient.apiService.pullActionResults(deviceId)
-                        if (response.isSuccessful) {
-                            val match = response.body()
-                                ?.firstOrNull { it.correlationId == correlationId }
-                            if (match != null) {
-                                Log.i(LOG_TAG, "Action result pulled via API: actionType=${match.actionType} status=${match.status} correlationId=$correlationId")
-                                handleActionResult(match)
-                                return@launch
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.w(LOG_TAG, "Action result polling failed: correlationId=$correlationId", e)
-                    }
-
-                    delay(RESULT_POLL_INTERVAL_MS)
-                }
-
-                if (pendingCorrelationId == correlationId) {
-                    pendingCorrelationId = null
-                    Toast.makeText(requireContext(), "Action response timed out", Toast.LENGTH_SHORT).show()
-                }
-            } finally {
-                actionResultPollInFlight = false
+            if (pendingCorrelationId == correlationId) {
+                pendingCorrelationId = null
+                pendingActionType = null
+                showPendingActionTimeout(actionType, timeoutMs)
+                Toast.makeText(requireContext(), "Action response timed out", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -257,7 +243,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
         if (pendingCorrelationId != null && result.correlationId == pendingCorrelationId) {
             actionResultPollJob?.cancel()
             actionResultPollJob = null
-            actionResultPollInFlight = false
+            clearPendingActionStatus()
         }
 
         handleActionResult(result)
@@ -273,6 +259,34 @@ class ActionsFragment : Fragment(), MessagingEventListener {
 
     private fun handleActionResult(result: DeviceActionResultDto) {
         if (pendingCorrelationId != null && result.correlationId != pendingCorrelationId) {
+            val sameActionType = pendingActionType != null && result.actionType.equals(pendingActionType, ignoreCase = true)
+            if (!sameActionType) {
+                return
+            }
+
+            Log.w(
+                LOG_TAG,
+                "Accepting action result by actionType fallback: pendingCorrelation=$pendingCorrelationId resultCorrelation=${result.correlationId} actionType=${result.actionType}"
+            )
+        }
+
+        if (result.actionType == "list_installed_apps" && result.status.equals("partial", ignoreCase = true)) {
+            val payload = result.payloadJson ?: "[]"
+            val listType = object : TypeToken<List<LaunchableAppItemDto>>() {}.type
+            val partialApps: List<LaunchableAppItemDto> = try {
+                gson.fromJson(payload, listType)
+            } catch (e: Exception) {
+                Log.e(LOG_TAG, "Failed parsing partial installed apps payload: correlationId=${result.correlationId}", e)
+                emptyList()
+            }
+
+            if (partialApps.isNotEmpty()) {
+                val merged = (launchableApps + partialApps)
+                    .distinctBy { it.exec }
+                    .sortedBy { it.name.lowercase() }
+                renderLaunchableApps(merged)
+            }
+
             return
         }
 
@@ -283,6 +297,8 @@ class ActionsFragment : Fragment(), MessagingEventListener {
                 Toast.LENGTH_SHORT
             ).show()
             pendingCorrelationId = null
+            pendingActionType = null
+            clearPendingActionStatus()
             return
         }
 
@@ -291,11 +307,15 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             val listType = object : TypeToken<List<LaunchableAppItemDto>>() {}.type
             val apps: List<LaunchableAppItemDto> = try {
                 gson.fromJson(payload, listType)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(LOG_TAG, "Failed parsing installed apps payload: correlationId=${result.correlationId}", e)
                 emptyList()
             }
+            Log.i(LOG_TAG, "Parsed installed apps result count=${apps.size} correlationId=${result.correlationId}")
             renderLaunchableApps(apps)
             pendingCorrelationId = null
+            pendingActionType = null
+            clearPendingActionStatus()
             return
         }
 
@@ -304,18 +324,76 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             val listType = object : TypeToken<List<RunningAppItemDto>>() {}.type
             val apps: List<RunningAppItemDto> = try {
                 gson.fromJson(payload, listType)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(LOG_TAG, "Failed parsing running apps payload: correlationId=${result.correlationId}", e)
                 emptyList()
             }
             renderRunningApps(apps)
             pendingCorrelationId = null
+            pendingActionType = null
+            clearPendingActionStatus()
             return
         }
 
         if (result.actionType == "launch_app" || result.actionType == "close_app") {
             Toast.makeText(requireContext(), "Action completed", Toast.LENGTH_SHORT).show()
             pendingCorrelationId = null
+            pendingActionType = null
+            clearPendingActionStatus()
         }
+    }
+
+    private fun getActionTimeoutMs(actionType: String): Long {
+        return when (actionType) {
+            "list_installed_apps", "launch_app" -> 120_000L
+            else -> RESULT_POLL_TIMEOUT_MS
+        }
+    }
+
+    private fun showPendingActionStatus(actionType: String, timeoutMs: Long) {
+        val root = view ?: return
+        val statusContainer = root.findViewById<View>(R.id.viewPendingActionStatus)
+        val spinner = root.findViewById<ProgressBar>(R.id.pbActionPending)
+        val statusText = root.findViewById<TextView>(R.id.tvPendingActionStatus)
+        val timeoutText = root.findViewById<TextView>(R.id.tvPendingActionTimeout)
+        val actionLabel = actionType.replace('_', ' ')
+
+        statusContainer.visibility = View.VISIBLE
+        spinner.visibility = View.VISIBLE
+        timeoutText.visibility = View.GONE
+        timeoutText.text = ""
+
+        actionPendingUiJob?.cancel()
+        val countdownStartedAt = System.currentTimeMillis()
+        actionPendingUiJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && pendingActionType == actionType && pendingCorrelationId != null) {
+                val elapsedMs = System.currentTimeMillis() - countdownStartedAt
+                val remainingMs = timeoutMs - elapsedMs
+                val remainingSeconds = if (remainingMs <= 0L) 0L else (remainingMs + 999L) / 1000L
+                statusText.text = "Waiting for $actionLabel result... ${remainingSeconds}s left"
+                delay(1_000L)
+            }
+        }
+    }
+
+    private fun clearPendingActionStatus() {
+        val root = view ?: return
+        actionPendingUiJob?.cancel()
+        actionPendingUiJob = null
+        root.findViewById<View>(R.id.viewPendingActionStatus).visibility = View.GONE
+        root.findViewById<ProgressBar>(R.id.pbActionPending).visibility = View.GONE
+        root.findViewById<TextView>(R.id.tvPendingActionStatus).text = ""
+        root.findViewById<TextView>(R.id.tvPendingActionTimeout).visibility = View.GONE
+        root.findViewById<TextView>(R.id.tvPendingActionTimeout).text = ""
+    }
+
+    private fun showPendingActionTimeout(actionType: String, timeoutMs: Long) {
+        val root = view ?: return
+        clearPendingActionStatus()
+        val timeoutText = root.findViewById<TextView>(R.id.tvPendingActionTimeout)
+        val actionLabel = actionType.replace('_', ' ')
+        timeoutText.text = "$actionLabel timed out after ${timeoutMs / 1000L}s. You can retry this action."
+        timeoutText.visibility = View.VISIBLE
     }
 
     private fun renderActionMode() {
@@ -343,6 +421,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     private fun renderLaunchableApps(apps: List<LaunchableAppItemDto>) {
         val root = view ?: return
         launchableApps = apps
+        Log.i(LOG_TAG, "Rendering launchable apps: count=${apps.size}")
         val list = root.findViewById<RecyclerView>(R.id.listOpenApps)
         val rows = apps.map { app ->
             ActionAppRow(
