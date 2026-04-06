@@ -146,11 +146,21 @@ app.UseSerilogRequestLogging(options =>
 {
     options.GetLevel = (httpContext, elapsed, ex) =>
     {
-        if (httpContext.Request.Path.Value?.EndsWith("/heartbeat") == true ||
-            httpContext.Request.Path.Value?.EndsWith("/telemetry") == true)
+        var path = httpContext.Request.Path.Value;
+        var method = httpContext.Request.Method;
+
+        if (path?.EndsWith("/heartbeat") == true ||
+            path?.EndsWith("/telemetry") == true)
         {
             return Serilog.Events.LogEventLevel.Verbose;
         }
+
+        if (httpContext.Request.Path.StartsWithSegments("/api/devices", StringComparison.OrdinalIgnoreCase) &&
+            (HttpMethods.IsGet(method) || HttpMethods.IsOptions(method)))
+        {
+            return Serilog.Events.LogEventLevel.Debug;
+        }
+
         return ex == null && httpContext.Response.StatusCode < 500 ? Serilog.Events.LogEventLevel.Information : Serilog.Events.LogEventLevel.Error;
     };
 });
