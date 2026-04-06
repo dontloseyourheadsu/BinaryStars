@@ -175,10 +175,26 @@
                 android:textStyle="bold"
                 android:textColor="@color/carbon_text_main" />
 
+            <EditText
+                android:id="@+id/etOpenAppsSearch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="Search launchable apps"
+                android:singleLine="true"
+                android:imeOptions="actionDone"
+                android:inputType="text"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted"
+                android:background="@color/carbon_bg_app"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="8dp" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/listOpenApps"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:overScrollMode="never" />
         </LinearLayout>
 
@@ -197,10 +213,26 @@
                 android:textStyle="bold"
                 android:textColor="@color/carbon_text_main" />
 
+            <EditText
+                android:id="@+id/etCloseAppsSearch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="Search running apps"
+                android:singleLine="true"
+                android:imeOptions="actionDone"
+                android:inputType="text"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted"
+                android:background="@color/carbon_bg_app"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="8dp" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/listCloseApps"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:overScrollMode="never" />
         </LinearLayout>
 

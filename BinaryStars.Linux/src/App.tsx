@@ -1955,21 +1955,13 @@ function App() {
       return;
     }
 
-    logEvent("warn", "actions", "action-result-ws-delivery-failed-fallback-http", {
+    logEvent("warn", "actions", "action-result-ws-delivery-failed", {
       actionType: result.actionType,
       correlationId: result.correlationId,
       status: result.status,
     });
 
-    await api.publishActionResult({
-      senderDeviceId: result.senderDeviceId,
-      targetDeviceId: result.targetDeviceId,
-      actionType: result.actionType,
-      status: result.status,
-      payloadJson: result.payloadJson,
-      error: result.error,
-      correlationId: result.correlationId,
-    });
+    throw new Error("Realtime socket is not connected; action result not delivered.");
   };
 
   const handleRealtimeActionResult = (result: DeviceActionResultMessage): void => {
@@ -2127,6 +2119,10 @@ function App() {
     return null;
   };
 
+  const getLocalActionExecutionTimeoutMs = (): number => {
+    return 30_000;
+  };
+
   const handleRealtimeActionCommand = async (command: DeviceActionCommand): Promise<void> => {
     if (command.targetDeviceId !== myDeviceId) {
       return;
@@ -2137,14 +2133,11 @@ function App() {
         actionType: command.actionType,
         correlationId: command.correlationId,
       });
-      const shouldUseTimeout = command.actionType !== "list_installed_apps" && command.actionType !== "launch_app";
-      const payload = shouldUseTimeout
-        ? await withTimeout(
-            executeActionLocally(command.actionType, command.payloadJson ?? null),
-            30_000,
-            "Local action execution timed out",
-          )
-        : await executeActionLocally(command.actionType, command.payloadJson ?? null);
+      const payload = await withTimeout(
+        executeActionLocally(command.actionType, command.payloadJson ?? null),
+        getLocalActionExecutionTimeoutMs(),
+        "Local action execution timed out",
+      );
 
       if (command.actionType === "list_installed_apps" && payload) {
         try {

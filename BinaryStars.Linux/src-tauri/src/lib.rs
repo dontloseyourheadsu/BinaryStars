@@ -1558,6 +1558,7 @@ async fn request_elevated_mode() -> Result<(), String> {
 
 #[tauri::command]
 async fn perform_local_action(action_type: String, payload_json: Option<String>) -> Result<String, String> {
+    let started_at = Instant::now();
     let _ = append_log_line(
         "info",
         "rust:actions",
@@ -1565,51 +1566,45 @@ async fn perform_local_action(action_type: String, payload_json: Option<String>)
         Some(&format!("action_type={}", action_type)),
     );
 
-    let action_result = tauri::async_runtime::spawn_blocking(move || {
-        let action_result = match action_type.as_str() {
-            "block_screen" => {
-                block_screen_linux()?;
-                Ok("{}".to_string())
-            }
-            "shutdown" => {
-                shutdown_linux()?;
-                Ok("{}".to_string())
-            }
-            "reboot" | "reset" => {
-                reboot_linux()?;
-                Ok("{}".to_string())
-            }
-            "list_installed_apps" => list_installed_apps_json(),
-            "list_running_apps" => list_running_apps_json(),
-            "launch_app" => {
-                launch_app_linux(payload_json)?;
-                Ok("{}".to_string())
-            }
-            "close_app" => close_app_linux(payload_json)
-                .map_err(|e| format!("close_app failed: {}", e))
-                .map(|_| "{}".to_string()),
-            "get_clipboard_history" => list_clipboard_history_json(),
-            _ => Err("Unsupported local action".to_string()),
-        };
-
-        action_result
-    })
-    .await
-    .map_err(|e| format!("spawn error: {}", e))?;
+    let action_result = match action_type.as_str() {
+        "block_screen" => {
+            block_screen_linux()?;
+            Ok("{}".to_string())
+        }
+        "shutdown" => {
+            shutdown_linux()?;
+            Ok("{}".to_string())
+        }
+        "reboot" | "reset" => {
+            reboot_linux()?;
+            Ok("{}".to_string())
+        }
+        "list_installed_apps" => list_installed_apps_json(),
+        "list_running_apps" => list_running_apps_json(),
+        "launch_app" => {
+            launch_app_linux(payload_json)?;
+            Ok("{}".to_string())
+        }
+        "close_app" => close_app_linux(payload_json)
+            .map_err(|e| format!("close_app failed: {}", e))
+            .map(|_| "{}".to_string()),
+        "get_clipboard_history" => list_clipboard_history_json(),
+        _ => Err("Unsupported local action".to_string()),
+    };
 
     if let Err(error) = &action_result {
         let _ = append_log_line(
             "error",
             "rust:actions",
             "perform_local_action failed",
-            Some(&format!("error={}", error)),
+            Some(&format!("error={} elapsed_ms={}", error, started_at.elapsed().as_millis())),
         );
     } else {
         let _ = append_log_line(
             "info",
             "rust:actions",
             "perform_local_action completed",
-            None,
+            Some(&format!("elapsed_ms={}", started_at.elapsed().as_millis())),
         );
     }
 
