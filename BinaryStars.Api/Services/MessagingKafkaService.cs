@@ -144,31 +144,6 @@ public class MessagingKafkaService
     }
 
     /// <summary>
-    /// Publishes a remote action command for a device.
-    /// </summary>
-    /// <param name="message">The action payload.</param>
-    /// <param name="authMode">The Kafka authentication mode.</param>
-    /// <param name="oauthToken">Optional OAuth bearer token.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    public async Task PublishActionAsync(DeviceActionCommand message, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
-    {
-        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
-        var payload = JsonSerializer.SerializeToUtf8Bytes(message, MessagingJson.SerializerOptions);
-
-        await producer.ProduceAsync(
-            _settings.ActionsTopic,
-            new Message<string, byte[]>
-            {
-                Key = message.Id,
-                Value = payload
-            },
-            cancellationToken);
-
-        producer.Flush(TimeSpan.FromSeconds(10));
-    }
-
-
-    /// <summary>
     /// Consumes pending notifications for a device from Kafka.
     /// </summary>
     /// <param name="deviceId">The device identifier.</param>
@@ -187,40 +162,47 @@ public class MessagingKafkaService
         using var consumer = _clientFactory.CreateConsumer($"notifications-{deviceId}", authMode, oauthToken);
         consumer.Subscribe(_settings.NotificationsTopic);
 
-        var notifications = new List<DeviceNotificationMessage>();
-        var emptyReads = 0;
-
-        while (!cancellationToken.IsCancellationRequested)
+        try
         {
-            var result = consumer.Consume(TimeSpan.FromSeconds(1));
+            var notifications = new List<DeviceNotificationMessage>();
+            var emptyReads = 0;
 
-            if (result == null)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                emptyReads++;
-                if (emptyReads >= 3)
-                    break;
+                var result = consumer.Consume(TimeSpan.FromSeconds(1));
 
-                continue;
-            }
+                if (result == null)
+                {
+                    emptyReads++;
+                    if (emptyReads >= 3)
+                        break;
 
-            if (result.Message?.Value == null || result.Message.Value.Length == 0)
-            {
+                    continue;
+                }
+
+                if (result.Message?.Value == null || result.Message.Value.Length == 0)
+                {
+                    consumer.Commit(result);
+                    continue;
+                }
+
+                var message = JsonSerializer.Deserialize<DeviceNotificationMessage>(result.Message.Value, MessagingJson.SerializerOptions);
+                if (message != null &&
+                    message.UserId == userId &&
+                    message.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    notifications.Add(message);
+                }
+
                 consumer.Commit(result);
-                continue;
             }
 
-            var message = JsonSerializer.Deserialize<DeviceNotificationMessage>(result.Message.Value, MessagingJson.SerializerOptions);
-            if (message != null &&
-                message.UserId == userId &&
-                message.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
-            {
-                notifications.Add(message);
-            }
-
-            consumer.Commit(result);
+            return notifications;
         }
-
-        return notifications;
+        finally
+        {
+            consumer.Close();
+        }
     }
 
     /// <summary>
@@ -245,83 +227,6 @@ public class MessagingKafkaService
     }
 
     /// <summary>
-    /// Consumes pending action commands for a device from Kafka.
-    /// </summary>
-    /// <param name="deviceId">The device identifier.</param>
-    /// <param name="userId">The user identifier.</param>
-    /// <param name="authMode">The Kafka authentication mode.</param>
-    /// <param name="oauthToken">Optional OAuth bearer token.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The pending action commands.</returns>
-    public async Task<List<DeviceActionCommand>> ConsumePendingActionsAsync(
-        string deviceId,
-        Guid userId,
-        KafkaAuthMode authMode,
-        string? oauthToken,
-        CancellationToken cancellationToken)
-    {
-        using var consumer = _clientFactory.CreateConsumer($"actions-{deviceId}", authMode, oauthToken);
-        consumer.Subscribe(_settings.ActionsTopic);
-
-        var commands = new List<DeviceActionCommand>();
-        var emptyReads = 0;
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            var result = consumer.Consume(TimeSpan.FromSeconds(1));
-
-            if (result == null)
-            {
-                emptyReads++;
-                if (emptyReads >= 3)
-                    break;
-
-                continue;
-            }
-
-            if (result.Message?.Value == null || result.Message.Value.Length == 0)
-            {
-                consumer.Commit(result);
-                continue;
-            }
-
-            var command = JsonSerializer.Deserialize<DeviceActionCommand>(result.Message.Value, MessagingJson.SerializerOptions);
-            if (command != null &&
-                command.UserId == userId &&
-                command.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
-            {
-                commands.Add(command);
-            }
-
-            consumer.Commit(result);
-        }
-
-        return commands;
-    }
-
-    /// <summary>
-    /// Deletes a pending action command from Kafka using a tombstone.
-    /// </summary>
-    /// <param name="actionId">The action command identifier.</param>
-    /// <param name="authMode">The Kafka authentication mode.</param>
-    /// <param name="oauthToken">Optional OAuth bearer token.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    public async Task DeleteActionAsync(string actionId, KafkaAuthMode authMode, string? oauthToken, CancellationToken cancellationToken)
-    {
-        using var producer = _clientFactory.CreateProducer(authMode, oauthToken);
-        await producer.ProduceAsync(
-            _settings.ActionsTopic,
-            new Message<string, byte[]>
-            {
-                Key = actionId,
-                Value = null!
-            },
-            cancellationToken);
-        producer.Flush(TimeSpan.FromSeconds(10));
-    }
-
-
-    /// <summary>
     /// Consumes pending messages for a device from Kafka.
     /// </summary>
     /// <param name="deviceId">The device identifier.</param>
@@ -340,39 +245,46 @@ public class MessagingKafkaService
         using var consumer = _clientFactory.CreateConsumer($"messages-{deviceId}", authMode, oauthToken);
         consumer.Subscribe(_settings.MessagingTopic);
 
-        var messages = new List<MessagingMessage>();
-        var emptyReads = 0;
-
-        while (!cancellationToken.IsCancellationRequested)
+        try
         {
-            var result = consumer.Consume(TimeSpan.FromSeconds(1));
-            if (result == null)
-            {
-                emptyReads++;
-                if (emptyReads >= 3)
-                    break;
+            var messages = new List<MessagingMessage>();
+            var emptyReads = 0;
 
-                continue;
-            }
-
-            if (result.Message?.Value == null || result.Message.Value.Length == 0)
+            while (!cancellationToken.IsCancellationRequested)
             {
+                var result = consumer.Consume(TimeSpan.FromSeconds(1));
+                if (result == null)
+                {
+                    emptyReads++;
+                    if (emptyReads >= 3)
+                        break;
+
+                    continue;
+                }
+
+                if (result.Message?.Value == null || result.Message.Value.Length == 0)
+                {
+                    consumer.Commit(result);
+                    continue;
+                }
+
+                var message = JsonSerializer.Deserialize<MessagingMessage>(result.Message.Value, MessagingJson.SerializerOptions);
+                if (message != null &&
+                    message.UserId == userId &&
+                    message.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    messages.Add(message);
+                }
+
                 consumer.Commit(result);
-                continue;
             }
 
-            var message = JsonSerializer.Deserialize<MessagingMessage>(result.Message.Value, MessagingJson.SerializerOptions);
-            if (message != null &&
-                message.UserId == userId &&
-                message.TargetDeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
-            {
-                messages.Add(message);
-            }
-
-            consumer.Commit(result);
+            return messages;
         }
-
-        return messages;
+        finally
+        {
+            consumer.Close();
+        }
     }
 
     /// <summary>
@@ -394,36 +306,43 @@ public class MessagingKafkaService
         using var consumer = _clientFactory.CreateConsumer($"device-removed-{deviceId}", authMode, oauthToken);
         consumer.Subscribe(_settings.DeviceRemovedTopic);
 
-        var events = new List<DeviceRemovedEvent>();
-        var emptyReads = 0;
-
-        while (!cancellationToken.IsCancellationRequested)
+        try
         {
-            var result = consumer.Consume(TimeSpan.FromSeconds(1));
-            if (result == null)
-            {
-                emptyReads++;
-                if (emptyReads >= 3)
-                    break;
+            var events = new List<DeviceRemovedEvent>();
+            var emptyReads = 0;
 
-                continue;
-            }
-
-            if (result.Message?.Value == null || result.Message.Value.Length == 0)
+            while (!cancellationToken.IsCancellationRequested)
             {
+                var result = consumer.Consume(TimeSpan.FromSeconds(1));
+                if (result == null)
+                {
+                    emptyReads++;
+                    if (emptyReads >= 3)
+                        break;
+
+                    continue;
+                }
+
+                if (result.Message?.Value == null || result.Message.Value.Length == 0)
+                {
+                    consumer.Commit(result);
+                    continue;
+                }
+
+                var evt = JsonSerializer.Deserialize<DeviceRemovedEvent>(result.Message.Value, MessagingJson.SerializerOptions);
+                if (evt != null && evt.UserId == userId)
+                {
+                    events.Add(evt);
+                }
+
                 consumer.Commit(result);
-                continue;
             }
 
-            var evt = JsonSerializer.Deserialize<DeviceRemovedEvent>(result.Message.Value, MessagingJson.SerializerOptions);
-            if (evt != null && evt.UserId == userId)
-            {
-                events.Add(evt);
-            }
-
-            consumer.Commit(result);
+            return events;
         }
-
-        return events;
+        finally
+        {
+            consumer.Close();
+        }
     }
 }

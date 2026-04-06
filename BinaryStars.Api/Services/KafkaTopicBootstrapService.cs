@@ -108,9 +108,7 @@ public sealed class KafkaTopicBootstrapService : IHostedService
             _settings.Topic,
             _settings.MessagingTopic,
             _settings.DeviceRemovedTopic,
-            _settings.NotificationsTopic,
-            _settings.ActionsTopic,
-            _settings.ActionResultsTopic
+            _settings.NotificationsTopic
         };
 
         return topics
