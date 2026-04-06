@@ -59,6 +59,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     private var selectedDevice: Device? = null
     private var pendingCorrelationId: String? = null
     private var pendingActionType: String? = null
+    private var pendingActionStartedAtMs: Long? = null
     private var actionMode: ActionMode = ActionMode.Base
     private val gson = Gson()
     private var launchableApps: List<LaunchableAppItemDto> = emptyList()
@@ -160,6 +161,11 @@ class ActionsFragment : Fragment(), MessagingEventListener {
         val actionTimeoutMs = getActionTimeoutMs(actionType)
         pendingCorrelationId = correlationId
         pendingActionType = actionType
+        pendingActionStartedAtMs = System.currentTimeMillis()
+        Log.i(
+            LOG_TAG,
+            "Action send requested: actionType=$actionType correlationId=$correlationId target=${target.id} timeoutMs=$actionTimeoutMs"
+        )
         showPendingActionStatus(actionType, actionTimeoutMs)
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -179,6 +185,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
                 } else {
                     pendingCorrelationId = null
                     pendingActionType = null
+                    pendingActionStartedAtMs = null
                     clearPendingActionStatus()
                     val body = response.errorBody()?.string()
                     Log.w(LOG_TAG, "Action API send rejected: status=${response.code()} actionType=$actionType correlationId=$correlationId body=$body")
@@ -187,6 +194,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             } catch (e: Exception) {
                 pendingCorrelationId = null
                 pendingActionType = null
+                pendingActionStartedAtMs = null
                 clearPendingActionStatus()
                 Log.e(LOG_TAG, "Action API send failed: actionType=$actionType correlationId=$correlationId", e)
                 Toast.makeText(requireContext(), "Failed to send action", Toast.LENGTH_SHORT).show()
@@ -203,6 +211,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             if (pendingCorrelationId == correlationId) {
                 pendingCorrelationId = null
                 pendingActionType = null
+                pendingActionStartedAtMs = null
                 showPendingActionTimeout(actionType, timeoutMs)
                 Toast.makeText(requireContext(), "Action response timed out", Toast.LENGTH_SHORT).show()
             }
@@ -239,6 +248,12 @@ class ActionsFragment : Fragment(), MessagingEventListener {
         if (!isAdded || view == null) {
             return
         }
+
+        val elapsedMs = pendingActionStartedAtMs?.let { System.currentTimeMillis() - it }
+        Log.i(
+            LOG_TAG,
+            "Action result received in fragment: actionType=${result.actionType} status=${result.status} correlationId=${result.correlationId} pendingCorrelation=$pendingCorrelationId pendingActionType=$pendingActionType elapsedMs=${elapsedMs ?: -1}"
+        )
 
         if (pendingCorrelationId != null && result.correlationId == pendingCorrelationId) {
             actionResultPollJob?.cancel()
@@ -298,6 +313,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             ).show()
             pendingCorrelationId = null
             pendingActionType = null
+            pendingActionStartedAtMs = null
             clearPendingActionStatus()
             return
         }
@@ -315,6 +331,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             renderLaunchableApps(apps)
             pendingCorrelationId = null
             pendingActionType = null
+            pendingActionStartedAtMs = null
             clearPendingActionStatus()
             return
         }
@@ -331,6 +348,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             renderRunningApps(apps)
             pendingCorrelationId = null
             pendingActionType = null
+            pendingActionStartedAtMs = null
             clearPendingActionStatus()
             return
         }
@@ -339,6 +357,7 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             Toast.makeText(requireContext(), "Action completed", Toast.LENGTH_SHORT).show()
             pendingCorrelationId = null
             pendingActionType = null
+            pendingActionStartedAtMs = null
             clearPendingActionStatus()
         }
     }

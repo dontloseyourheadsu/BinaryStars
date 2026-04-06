@@ -3,6 +3,7 @@ package com.tds.binarystars.messaging
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.google.gson.Gson
 import com.tds.binarystars.BuildConfig
 import com.tds.binarystars.api.AuthTokenStore
@@ -32,6 +33,7 @@ import java.util.concurrent.TimeUnit
 object MessagingSocketManager {
     private const val WS_BASE_URL = BuildConfig.WS_BASE_URL
     private const val MAX_MESSAGE_LENGTH = 500
+    private const val LOG_TAG = "BinaryStarsWS"
 
     private val gson = Gson()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -68,6 +70,7 @@ object MessagingSocketManager {
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 socketConnected = true
+                Log.i(LOG_TAG, "WebSocket connected: deviceId=$deviceId")
                 notifyConnection(true)
             }
 
@@ -80,6 +83,7 @@ object MessagingSocketManager {
                     this@MessagingSocketManager.webSocket = null
                 }
                 socketConnected = false
+                Log.w(LOG_TAG, "WebSocket failure: deviceId=$deviceId message=${t.message}")
                 notifyConnection(false)
             }
 
@@ -88,6 +92,7 @@ object MessagingSocketManager {
                     this@MessagingSocketManager.webSocket = null
                 }
                 socketConnected = false
+                Log.w(LOG_TAG, "WebSocket closed: deviceId=$deviceId code=$code reason=$reason")
                 notifyConnection(false)
             }
         })
@@ -168,6 +173,10 @@ object MessagingSocketManager {
             }
             "action_result" -> {
                 val payload = gson.fromJson(envelope.payload, DeviceActionResultDto::class.java)
+                Log.i(
+                    LOG_TAG,
+                    "Action result envelope received: actionType=${payload.actionType} status=${payload.status} correlationId=${payload.correlationId} sender=${payload.senderDeviceId} target=${payload.targetDeviceId}"
+                )
                 notifyActionResult(payload)
             }
         }
@@ -249,6 +258,10 @@ object MessagingSocketManager {
 
     private fun notifyActionResult(result: DeviceActionResultDto) {
         mainHandler.post {
+            Log.i(
+                LOG_TAG,
+                "Dispatching action result to listeners: actionType=${result.actionType} status=${result.status} correlationId=${result.correlationId} listeners=${listeners.size}"
+            )
             listeners.forEach { it.onActionResult(result) }
         }
     }
