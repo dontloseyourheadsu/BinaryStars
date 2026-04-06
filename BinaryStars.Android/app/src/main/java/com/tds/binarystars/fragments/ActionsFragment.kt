@@ -4,10 +4,13 @@ import android.annotation.SuppressLint
 import android.util.Log
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -64,6 +67,8 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     private val gson = Gson()
     private var launchableApps: List<LaunchableAppItemDto> = emptyList()
     private var runningApps: List<RunningAppItemDto> = emptyList()
+    private var openAppsQuery: String = ""
+    private var closeAppsQuery: String = ""
     private var actionResultPollJob: Job? = null
     private var actionPendingUiJob: Job? = null
 
@@ -106,6 +111,26 @@ class ActionsFragment : Fragment(), MessagingEventListener {
         view.findViewById<Button>(R.id.btnCloseApps).setOnClickListener {
             requestRunningApps()
         }
+
+        val openAppsSearch = view.findViewById<EditText>(R.id.etOpenAppsSearch)
+        openAppsSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                openAppsQuery = s?.toString().orEmpty()
+                updateOpenAppsAdapter()
+            }
+        })
+
+        val closeAppsSearch = view.findViewById<EditText>(R.id.etCloseAppsSearch)
+        closeAppsSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                closeAppsQuery = s?.toString().orEmpty()
+                updateCloseAppsAdapter()
+            }
+        })
 
         refreshLinuxDevices()
 
@@ -438,15 +463,20 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     }
 
     private fun renderLaunchableApps(apps: List<LaunchableAppItemDto>) {
-        val root = view ?: return
         launchableApps = apps
         Log.i(LOG_TAG, "Rendering launchable apps: count=${apps.size}")
+        updateOpenAppsAdapter()
+    }
+
+    private fun updateOpenAppsAdapter() {
+        val root = view ?: return
         val list = root.findViewById<RecyclerView>(R.id.listOpenApps)
-        val rows = apps.map { app ->
+        val filtered = filterLaunchableApps()
+        val rows = filtered.map { app ->
             ActionAppRow(
                 id = app.exec,
                 title = app.name,
-                subtitle = app.exec
+                subtitle = trimForSubtitle(app.exec)
             )
         }
 
@@ -457,14 +487,20 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     }
 
     private fun renderRunningApps(apps: List<RunningAppItemDto>) {
-        val root = view ?: return
         runningApps = apps
+        updateCloseAppsAdapter()
+    }
+
+    private fun updateCloseAppsAdapter() {
+        val root = view ?: return
         val list = root.findViewById<RecyclerView>(R.id.listCloseApps)
-        val rows = apps.map { app ->
+        val filtered = filterRunningApps()
+        val rows = filtered.map { app ->
+            val commandPreview = app.commandLine.ifBlank { app.exe }
             ActionAppRow(
                 id = app.pid.toString(),
                 title = app.name,
-                subtitle = "PID ${app.pid} • ${app.commandLine}"
+                subtitle = "PID ${app.pid} • ${trimForSubtitle(commandPreview)}"
             )
         }
 
@@ -472,6 +508,40 @@ class ActionsFragment : Fragment(), MessagingEventListener {
             val app = runningApps.firstOrNull { it.pid.toString() == row.id } ?: return@ActionAppsAdapter
             closeApp(app)
         }
+    }
+
+    private fun filterLaunchableApps(): List<LaunchableAppItemDto> {
+        val query = openAppsQuery.trim().lowercase()
+        if (query.isEmpty()) {
+            return launchableApps
+        }
+
+        return launchableApps.filter { app ->
+            app.name.lowercase().contains(query) || app.exec.lowercase().contains(query)
+        }
+    }
+
+    private fun filterRunningApps(): List<RunningAppItemDto> {
+        val query = closeAppsQuery.trim().lowercase()
+        if (query.isEmpty()) {
+            return runningApps
+        }
+
+        return runningApps.filter { app ->
+            app.name.lowercase().contains(query) ||
+                app.commandLine.lowercase().contains(query) ||
+                app.exe.lowercase().contains(query) ||
+                app.pid.toString().contains(query)
+        }
+    }
+
+    private fun trimForSubtitle(value: String, maxChars: Int = 80): String {
+        val normalized = value.trim()
+        if (normalized.length <= maxChars) {
+            return normalized
+        }
+
+        return normalized.take(maxChars - 3) + "..."
     }
 
     private fun refreshLinuxDevices() {
