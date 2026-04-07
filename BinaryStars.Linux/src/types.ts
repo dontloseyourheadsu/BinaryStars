@@ -104,12 +104,16 @@ export interface LaunchableAppItem {
 }
 
 export interface RunningAppItem {
+  mainPid: number;
   pid: number;
   name: string;
   exe: string;
   cpuUsage: number;
   memoryMb: number;
   commandLine: string;
+  processCount: number;
+  pids: number[];
+  hasVisibleWindow: boolean;
 }
 
 export interface Note {

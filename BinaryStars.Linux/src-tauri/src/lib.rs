@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::IpAddr;
 use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -141,10 +141,25 @@ struct InstalledAppItem {
     no_display: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RunningAppItem {
+    main_pid: i32,
     pid: i32,
+    name: String,
+    exe: String,
+    cpu_usage: f32,
+    memory_mb: f64,
+    command_line: String,
+    process_count: usize,
+    pids: Vec<i32>,
+    has_visible_window: bool,
+}
+
+#[derive(Clone)]
+struct RunningProcessSnapshot {
+    pid: u32,
+    ppid: u32,
     name: String,
     exe: String,
     cpu_usage: f32,
@@ -951,12 +966,164 @@ print(json.dumps(apps))
     Ok(parsed)
 }
 
+fn is_generic_exec_token(token: &str) -> bool {
+    matches!(
+        token,
+        "sh"
+            | "bash"
+            | "env"
+            | "flatpak"
+            | "python"
+            | "python3"
+            | "java"
+            | "systemd"
+            | "gdbus"
+            | "dbus-daemon"
+    )
+}
+
+fn exec_primary_token(exec: &str) -> Option<String> {
+    let cleaned = clean_exec(exec);
+    let parts = shlex::split(&cleaned)?;
+    let program = parts.first()?;
+    let token = Path::new(program)
+        .file_name()
+        .and_then(|value| value.to_str())?
+        .trim()
+        .to_lowercase();
+
+    if token.is_empty() || token.len() < 3 || is_generic_exec_token(token.as_str()) {
+        return None;
+    }
+
+    Some(token)
+}
+
+fn process_identity_tokens(process: &RunningProcessSnapshot) -> HashSet<String> {
+    let mut tokens: HashSet<String> = HashSet::new();
+
+    let process_name = process.name.trim().to_lowercase();
+    if !process_name.is_empty() {
+        tokens.insert(process_name);
+    }
+
+    let process_exe_basename = Path::new(&process.exe)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
+    if !process_exe_basename.is_empty() {
+        tokens.insert(process_exe_basename);
+    }
+
+    let cmd_parts = shlex::split(&process.command_line)
+        .unwrap_or_else(|| process.command_line.split_whitespace().map(|part| part.to_string()).collect());
+
+    for part in cmd_parts {
+        let raw = part.trim().to_lowercase();
+        if raw.is_empty() {
+            continue;
+        }
+
+        let basename = Path::new(&raw)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+
+        if !basename.is_empty() {
+            tokens.insert(basename);
+        }
+    }
+
+    tokens
+}
+
+fn build_token_grouped_running_apps(processes: &[RunningProcessSnapshot]) -> Option<Vec<RunningAppItem>> {
+    let payload = list_installed_apps_json().ok()?;
+    let installed_apps = serde_json::from_str::<Vec<InstalledAppItem>>(&payload).ok()?;
+
+    let mut token_to_name: HashMap<String, String> = HashMap::new();
+    for app in installed_apps {
+        if let Some(token) = exec_primary_token(&app.exec) {
+            token_to_name.entry(token).or_insert(app.name);
+        }
+    }
+
+    if token_to_name.is_empty() {
+        return None;
+    }
+
+    let mut grouped: HashMap<String, Vec<RunningProcessSnapshot>> = HashMap::new();
+    for process in processes {
+        let identities = process_identity_tokens(process);
+        let mut matched_tokens: HashSet<String> = HashSet::new();
+
+        for identity in identities {
+            if token_to_name.contains_key(&identity) {
+                matched_tokens.insert(identity);
+            }
+        }
+
+        if matched_tokens.is_empty() {
+            continue;
+        }
+
+        for token in matched_tokens {
+            grouped.entry(token).or_default().push(process.clone());
+        }
+    }
+
+    let mut items: Vec<RunningAppItem> = grouped
+        .into_iter()
+        .filter_map(|(token, mut members)| {
+            if members.is_empty() {
+                return None;
+            }
+
+            members.sort_by_key(|member| member.pid);
+            let main = members.first()?.clone();
+            let mut pids: Vec<i32> = members.iter().map(|member| member.pid as i32).collect();
+            pids.sort_unstable();
+            pids.dedup();
+
+            let cpu_usage = members.iter().map(|member| member.cpu_usage).sum::<f32>();
+            let memory_mb = members.iter().map(|member| member.memory_mb).sum::<f64>();
+
+            Some(RunningAppItem {
+                main_pid: main.pid as i32,
+                pid: main.pid as i32,
+                name: token_to_name
+                    .get(&token)
+                    .cloned()
+                    .unwrap_or_else(|| main.name.clone()),
+                exe: main.exe,
+                cpu_usage,
+                memory_mb,
+                command_line: main.command_line,
+                process_count: pids.len(),
+                pids,
+                has_visible_window: false,
+            })
+        })
+        .collect();
+
+    if items.is_empty() {
+        return None;
+    }
+
+    items.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    Some(items)
+}
+
 fn list_running_apps_json() -> Result<String, String> {
     let mut system = System::new_all();
     system.refresh_processes();
     let current_uid = read_current_uid();
 
-    let mut items: Vec<RunningAppItem> = system
+    let processes: Vec<RunningProcessSnapshot> = system
         .processes()
         .values()
         .filter(|process| {
@@ -966,8 +1133,9 @@ fn list_running_apps_json() -> Result<String, String> {
 
             read_process_uid(process.pid().as_u32()) == Some(uid)
         })
-        .map(|process| RunningAppItem {
-            pid: process.pid().as_u32() as i32,
+        .map(|process| RunningProcessSnapshot {
+            pid: process.pid().as_u32(),
+            ppid: read_process_ppid(process.pid().as_u32()).unwrap_or(0),
             name: process.name().to_string(),
             exe: process
                 .exe()
@@ -984,7 +1152,85 @@ fn list_running_apps_json() -> Result<String, String> {
         })
         .collect();
 
-    items.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    let parent_by_pid: HashMap<u32, u32> = processes
+        .iter()
+        .map(|process| (process.pid, process.ppid))
+        .collect();
+
+    let process_by_pid: HashMap<u32, RunningProcessSnapshot> = processes
+        .iter()
+        .map(|process| (process.pid, process.clone()))
+        .collect();
+
+    if let Some(items) = build_token_grouped_running_apps(&processes) {
+        let _ = append_log_line(
+            "info",
+            "rust:actions",
+            "list_running_apps_json using token grouping",
+            Some(&format!("app_count={}", items.len())),
+        );
+        return serde_json::to_string(&items)
+            .map_err(|e| format!("failed to serialize token-grouped running apps: {}", e));
+    }
+
+    let window_owner_pids = detect_window_owner_pids();
+
+    let mut grouped_by_leader: HashMap<u32, Vec<RunningProcessSnapshot>> = HashMap::new();
+
+    for process in processes {
+        let leader = resolve_group_leader_pid(process.pid, &parent_by_pid, &window_owner_pids);
+        grouped_by_leader.entry(leader).or_default().push(process);
+    }
+
+    let mut items: Vec<RunningAppItem> = grouped_by_leader
+        .into_iter()
+        .map(|(leader_pid, mut members)| {
+            members.sort_by_key(|member| member.pid);
+            let leader = process_by_pid
+                .get(&leader_pid)
+                .cloned()
+                .unwrap_or_else(|| members[0].clone());
+
+            let mut pids: Vec<i32> = members.iter().map(|member| member.pid as i32).collect();
+            pids.sort_unstable();
+            pids.dedup();
+
+            let cpu_usage = members.iter().map(|member| member.cpu_usage).sum::<f32>();
+            let memory_mb = members.iter().map(|member| member.memory_mb).sum::<f64>();
+
+            RunningAppItem {
+                main_pid: leader.pid as i32,
+                pid: leader.pid as i32,
+                name: leader.name,
+                exe: leader.exe,
+                cpu_usage,
+                memory_mb,
+                command_line: leader.command_line,
+                process_count: pids.len(),
+                pids,
+                has_visible_window: window_owner_pids.contains(&leader.pid),
+            }
+        })
+        .collect();
+
+    if items.iter().any(|item| item.has_visible_window) {
+        items.retain(|item| item.has_visible_window);
+    }
+
+    items.sort_by(|left, right| {
+        right
+            .has_visible_window
+            .cmp(&left.has_visible_window)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+    });
+
+    let _ = append_log_line(
+        "info",
+        "rust:actions",
+        "list_running_apps_json using window/group fallback",
+        Some(&format!("app_count={} visible_window_count={}", items.len(), items.iter().filter(|item| item.has_visible_window).count())),
+    );
+
     serde_json::to_string(&items).map_err(|e| format!("failed to serialize running apps: {}", e))
 }
 
@@ -1084,6 +1330,140 @@ fn read_process_uid(pid: u32) -> Option<u32> {
     None
 }
 
+fn read_process_ppid(pid: u32) -> Option<u32> {
+    let path = format!("/proc/{}/status", pid);
+    let raw = std::fs::read_to_string(path).ok()?;
+    for line in raw.lines() {
+        if let Some(rest) = line.strip_prefix("PPid:") {
+            let ppid_text = rest.split_whitespace().next()?;
+            return ppid_text.parse::<u32>().ok();
+        }
+    }
+
+    None
+}
+
+fn detect_window_owner_pids() -> HashSet<u32> {
+    let mut result: HashSet<u32> = HashSet::new();
+    let output = Command::new("wmctrl").args(["-lp"]).output();
+
+    let Ok(output) = output else {
+        return result;
+    };
+
+    if !output.status.success() {
+        return result;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let mut parts = line.split_whitespace();
+        let _window_id = parts.next();
+        let _desktop = parts.next();
+        let pid_text = parts.next();
+        let Some(pid_text) = pid_text else {
+            continue;
+        };
+
+        if let Ok(pid) = pid_text.parse::<u32>() {
+            if pid > 0 {
+                result.insert(pid);
+            }
+        }
+    }
+
+    result
+}
+
+fn resolve_group_leader_pid(
+    pid: u32,
+    parent_by_pid: &HashMap<u32, u32>,
+    window_owner_pids: &HashSet<u32>,
+) -> u32 {
+    if window_owner_pids.contains(&pid) {
+        return pid;
+    }
+
+    let mut current = pid;
+    let mut last_known = pid;
+    let mut guard = 0usize;
+
+    while guard < 64 {
+        guard += 1;
+        let Some(parent) = parent_by_pid.get(&current).copied() else {
+            break;
+        };
+
+        if parent == 0 || parent == current {
+            break;
+        }
+
+        last_known = parent;
+        if window_owner_pids.contains(&parent) {
+            return parent;
+        }
+
+        current = parent;
+    }
+
+    last_known
+}
+
+fn resolve_close_targets_by_app_name(app_name: &str) -> Result<Vec<u32>, String> {
+    let requested = app_name.trim().to_lowercase();
+    if requested.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let payload = list_running_apps_json()?;
+    let groups = serde_json::from_str::<Vec<RunningAppItem>>(&payload)
+        .map_err(|e| format!("failed to parse running app groups: {}", e))?;
+
+    let mut candidates: Vec<&RunningAppItem> = groups
+        .iter()
+        .filter(|group| {
+            let name = group.name.trim().to_lowercase();
+            if name.is_empty() {
+                return false;
+            }
+
+            name == requested || name.contains(&requested) || requested.contains(&name)
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        candidates = groups
+            .iter()
+            .filter(|group| {
+                let cmd = group.command_line.to_lowercase();
+                let exe = group.exe.to_lowercase();
+                cmd.contains(&requested) || exe.contains(&requested)
+            })
+            .collect();
+    }
+
+    let mut targets: Vec<u32> = Vec::new();
+    for candidate in candidates {
+        if candidate.pids.is_empty() {
+            let fallback = candidate.main_pid.max(candidate.pid);
+            if fallback > 0 {
+                targets.push(fallback as u32);
+            }
+            continue;
+        }
+
+        for pid in &candidate.pids {
+            if *pid > 0 {
+                targets.push(*pid as u32);
+            }
+        }
+    }
+
+    targets.sort_unstable();
+    targets.dedup();
+    Ok(targets)
+}
+
 fn close_app_linux(payload_json: Option<String>) -> Result<(), String> {
     let payload = payload_json.ok_or_else(|| "close_app requires payload".to_string())?;
     let value: serde_json::Value = serde_json::from_str(&payload)
@@ -1094,11 +1474,54 @@ fn close_app_linux(payload_json: Option<String>) -> Result<(), String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let pid = value
-        .get("pid")
-        .and_then(|v| v.as_u64())
-        .ok_or_else(|| "close_app payload missing pid".to_string())? as u32;
+    let mut pid_targets: Vec<u32> = value
+        .get("pids")
+        .and_then(|v| v.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|entry| entry.as_u64())
+                .filter(|entry| *entry > 0)
+                .map(|entry| entry as u32)
+                .collect::<Vec<u32>>()
+        })
+        .unwrap_or_default();
 
+    if pid_targets.is_empty() {
+        if let Some(app_name) = value.get("appName").and_then(|v| v.as_str()) {
+            let resolved = resolve_close_targets_by_app_name(app_name)?;
+            if !resolved.is_empty() {
+                pid_targets.extend(resolved);
+            }
+        }
+    }
+
+    if pid_targets.is_empty() {
+        let pid = value
+            .get("pid")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| "close_app payload missing pid, pids, or appName".to_string())? as u32;
+        pid_targets.push(pid);
+    }
+
+    pid_targets.sort_unstable();
+    pid_targets.dedup();
+
+    let mut failures: Vec<String> = Vec::new();
+    for pid in pid_targets {
+        if let Err(error) = close_single_pid_linux(pid, force) {
+            failures.push(error);
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("close_app failed: {}", failures.join(" | ")))
+    }
+}
+
+fn close_single_pid_linux(pid: u32, force: bool) -> Result<(), String> {
     let current_uid = read_current_uid().ok_or_else(|| "failed to determine current uid".to_string())?;
     let process_uid = read_process_uid(pid).ok_or_else(|| format!("no process found with PID {}", pid))?;
 
@@ -1249,7 +1672,6 @@ fn list_clipboard_history_json() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -1306,6 +1728,13 @@ mod tests {
             || exec.contains("dolphin")
     }
 
+    fn is_calculator_candidate(app: &InstalledAppItem) -> bool {
+        let name = app.name.to_lowercase();
+        let exec = app.exec.to_lowercase();
+
+        name.contains("calculator") || exec.contains("calculator")
+    }
+
     fn files_preference_score(app: &InstalledAppItem) -> usize {
         let name = app.name.to_lowercase();
         let exec = app.exec.to_lowercase();
@@ -1336,6 +1765,23 @@ mod tests {
         candidates.into_iter().next()
     }
 
+    fn pick_close_test_app_from_listing(apps: &[InstalledAppItem]) -> Option<InstalledAppItem> {
+        let mut calculator_candidates: Vec<InstalledAppItem> = apps
+            .iter()
+            .filter(|app| is_launch_candidate(app) && is_calculator_candidate(app))
+            .cloned()
+            .collect();
+
+        calculator_candidates
+            .sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+
+        if let Some(candidate) = calculator_candidates.into_iter().next() {
+            return Some(candidate);
+        }
+
+        pick_files_from_listing(apps)
+    }
+
     fn process_matches_app(process: &sysinfo::Process, token: &str) -> bool {
         let process_name = process.name().to_lowercase();
         let cmdline = process
@@ -1354,91 +1800,75 @@ mod tests {
         process_name.contains(&token_basename) || cmdline.contains(&token_basename)
     }
 
-    fn launch_and_detect_pid(app: &InstalledAppItem) -> Option<u32> {
-        let token = executable_token(&app.exec)
-            .expect("selected app should have executable token");
-
-        let mut system = System::new_all();
-        system.refresh_processes();
-        let before_pids: HashSet<u32> = system
+    fn count_matching_processes(system: &System, token: &str) -> usize {
+        system
             .processes()
-            .keys()
-            .map(|pid| pid.as_u32())
-            .collect();
+            .values()
+            .filter(|process| process_matches_app(process, token))
+            .count()
+    }
 
-        let payload = serde_json::json!({ "exec": app.exec }).to_string();
-        if launch_app_linux(Some(payload)).is_err() {
-            return None;
-        }
+    fn parse_running_apps() -> Vec<RunningAppItem> {
+        let payload = list_running_apps_json().expect("list_running_apps_json should return payload");
+        serde_json::from_str::<Vec<RunningAppItem>>(&payload)
+            .expect("running apps payload should be valid json array")
+    }
 
-        let detection_timeout = Duration::from_secs(10);
-        let started = Instant::now();
+    fn find_running_group_for_app(app: &InstalledAppItem, groups: &[RunningAppItem]) -> Option<RunningAppItem> {
+        let app_name = app.name.to_lowercase();
+        let app_exec_token = executable_token(&app.exec)
+            .unwrap_or_default()
+            .to_lowercase();
+        let app_exec_basename = std::path::Path::new(&app_exec_token)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_lowercase();
 
-        loop {
-            system.refresh_processes();
+        groups.iter().find_map(|group| {
+            let group_name = group.name.to_lowercase();
+            let group_cmd = group.command_line.to_lowercase();
+            let group_exe = group.exe.to_lowercase();
 
-            if let Some(pid) = system
-                .processes()
-                .iter()
-                .find_map(|(pid, process)| {
-                    let pid_value = pid.as_u32();
-                    if before_pids.contains(&pid_value) {
-                        return None;
-                    }
+            let name_match = !app_name.is_empty() && (group_name.contains(&app_name) || app_name.contains(&group_name));
+            let token_match = !app_exec_basename.is_empty()
+                && (group_name.contains(&app_exec_basename)
+                    || group_exe.contains(&app_exec_basename)
+                    || group_cmd.contains(&app_exec_basename));
 
-                    if process_matches_app(process, &token) {
-                        Some(pid_value)
-                    } else {
-                        None
-                    }
+            if name_match || token_match {
+                Some(RunningAppItem {
+                    main_pid: group.main_pid,
+                    pid: group.pid,
+                    name: group.name.clone(),
+                    exe: group.exe.clone(),
+                    cpu_usage: group.cpu_usage,
+                    memory_mb: group.memory_mb,
+                    command_line: group.command_line.clone(),
+                    process_count: group.process_count,
+                    pids: group.pids.clone(),
+                    has_visible_window: group.has_visible_window,
                 })
-            {
-                return Some(pid);
+            } else {
+                None
             }
-
-            if started.elapsed() >= detection_timeout {
-                return None;
-            }
-
-            thread::sleep(Duration::from_millis(200));
-        }
+        })
     }
 
-    fn wait_for_pid_termination(pid: u32, timeout: Duration) -> bool {
-        let mut system = System::new_all();
-        let started = Instant::now();
-
-        loop {
-            system.refresh_processes();
-            if system.process(sysinfo::Pid::from_u32(pid)).is_none() {
-                return true;
-            }
-
-            if started.elapsed() >= timeout {
-                return false;
-            }
-
-            thread::sleep(Duration::from_millis(50));
-        }
-    }
-
-    fn close_pid_with_retries(pid: u32) -> Result<(), String> {
-        let payload = serde_json::json!({ "pid": pid, "force": true }).to_string();
-        close_app_linux(Some(payload.clone()))
-            .map_err(|e| format!("first close failed: {}", e))?;
-
-        if wait_for_pid_termination(pid, Duration::from_secs(4)) {
-            return Ok(());
-        }
-
-        close_app_linux(Some(payload))
-            .map_err(|e| format!("retry close failed: {}", e))?;
-
-        if wait_for_pid_termination(pid, Duration::from_secs(2)) {
-            Ok(())
+    fn close_group_with_graceful_then_force(group: &RunningAppItem) -> Result<(), String> {
+        let pids: Vec<i32> = if group.pids.is_empty() {
+            vec![group.main_pid.max(group.pid)]
         } else {
-            Err("pid persisted after close retries".to_string())
-        }
+            group.pids.clone()
+        };
+
+        let payload = serde_json::json!({
+            "pid": group.main_pid.max(group.pid),
+            "pids": pids,
+            "force": false
+        })
+        .to_string();
+        close_app_linux(Some(payload))
     }
 
     #[test]
@@ -1466,22 +1896,50 @@ mod tests {
             .collect::<Vec<String>>();
         eprintln!("[test:open-close-files] listed_first10={:?}", listed_preview);
 
-        let files_app = pick_files_from_listing(&apps)
-            .expect("expected Files app from listed installed apps");
+        let target_app = pick_close_test_app_from_listing(&apps)
+            .expect("expected Calculator or Files app from listed installed apps");
 
         eprintln!(
             "[test:open-close-files] selected_files='{}' exec='{}'",
-            files_app.name,
-            files_app.exec
+            target_app.name,
+            target_app.exec
         );
 
-        let pid = launch_and_detect_pid(&files_app)
-            .unwrap_or_else(|| panic!("failed to detect launched PID for '{}'", files_app.name));
+        let token = executable_token(&target_app.exec)
+            .expect("selected app should have executable token");
 
-        eprintln!("[test:open-close-files] launched pid={} waiting before close", pid);
-        thread::sleep(Duration::from_secs(2));
+        let mut system = System::new_all();
+        system.refresh_processes();
+        let baseline_count = count_matching_processes(&system, &token);
 
-        if let Err(error) = close_pid_with_retries(pid) {
+        let launch_payload = serde_json::json!({ "exec": target_app.exec }).to_string();
+        launch_app_linux(Some(launch_payload))
+            .unwrap_or_else(|error| panic!("failed to launch '{}' for close-app test: {}", target_app.name, error));
+
+        let group_lookup_timeout = Duration::from_secs(12);
+        let group_lookup_started = Instant::now();
+        let matched_group = loop {
+            let running_groups = parse_running_apps();
+            if let Some(group) = find_running_group_for_app(&target_app, &running_groups) {
+                break group;
+            }
+
+            if group_lookup_started.elapsed() >= group_lookup_timeout {
+                panic!("failed to find running app group for '{}' after launch", target_app.name);
+            }
+
+            thread::sleep(Duration::from_millis(250));
+        };
+
+        eprintln!(
+            "[test:open-close-files] matched_group name='{}' main_pid={} process_count={} pids={:?}",
+            matched_group.name,
+            matched_group.main_pid,
+            matched_group.process_count,
+            matched_group.pids
+        );
+
+        if let Err(error) = close_group_with_graceful_then_force(&matched_group) {
             eprintln!("[test:open-close-files] close failed='{}'", error);
             assert!(
                 error.contains("close_app failed")
@@ -1492,7 +1950,100 @@ mod tests {
             return;
         }
 
-        eprintln!("[test:open-close-files] close succeeded for pid={}", pid);
+        let verify_timeout = Duration::from_secs(8);
+        let started = Instant::now();
+        let mut recovered_to_baseline = false;
+        while started.elapsed() < verify_timeout {
+            system.refresh_processes();
+            let current_count = count_matching_processes(&system, &token);
+            if current_count <= baseline_count {
+                recovered_to_baseline = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+
+        assert!(
+            recovered_to_baseline,
+            "app-level close should return matching process count to baseline"
+        );
+
+        eprintln!("[test:open-close-files] close succeeded for app token='{}'", token);
+    }
+
+    #[test]
+    fn action_parser_supports_block_shutdown_and_restart_aliases() {
+        assert_eq!(
+            parse_local_action_type("block_screen").expect("block_screen should be supported"),
+            LocalActionType::BlockScreen
+        );
+        assert_eq!(
+            parse_local_action_type("shutdown").expect("shutdown should be supported"),
+            LocalActionType::Shutdown
+        );
+        assert_eq!(
+            parse_local_action_type("reboot").expect("reboot should be supported"),
+            LocalActionType::Reboot
+        );
+        assert_eq!(
+            parse_local_action_type("reset").expect("reset should map to reboot"),
+            LocalActionType::Reboot
+        );
+    }
+
+    #[test]
+    fn action_parser_rejects_unknown_action() {
+        let error = parse_local_action_type("unknown_action")
+            .expect_err("unknown action should be rejected");
+        assert_eq!(error, "Unsupported local action");
+    }
+
+    #[test]
+    fn perform_local_action_rejects_unknown_action() {
+        let result = tauri::async_runtime::block_on(perform_local_action(
+            "unknown_action".to_string(),
+            None,
+        ));
+        assert!(result.is_err(), "unknown action should return an error");
+        assert_eq!(
+            result.expect_err("unknown action must fail"),
+            "Unsupported local action"
+        );
+    }
+
+    // Manual test: this exercises the same command path used by the app UI.
+    #[test]
+    #[ignore = "manual test only: this will lock/suspend the current desktop session"]
+    fn block_screen_action_manual_smoke_test() {
+        let result = tauri::async_runtime::block_on(perform_local_action(
+            "block_screen".to_string(),
+            None,
+        ));
+        assert!(result.is_ok(), "block_screen action should succeed when desktop APIs allow it");
+    }
+
+    // Disabled by default so `cargo test` never powers off a developer machine unexpectedly.
+    #[test]
+    #[ignore = "manual test only: this can power off the computer"]
+    fn shutdown_action_manual_smoke_test() {
+        // Call the app command path, not the low-level helper directly.
+        let result = tauri::async_runtime::block_on(perform_local_action(
+            "shutdown".to_string(),
+            None,
+        ));
+        assert!(result.is_ok(), "shutdown action should succeed when policy allows it");
+    }
+
+    // Disabled by default so `cargo test` never reboots a developer machine unexpectedly.
+    #[test]
+    #[ignore = "manual test only: this can reboot the computer"]
+    fn reboot_action_manual_smoke_test() {
+        // Call the app command path, not the low-level helper directly.
+        let result = tauri::async_runtime::block_on(perform_local_action(
+            "reboot".to_string(),
+            None,
+        ));
+        assert!(result.is_ok(), "reboot action should succeed when policy allows it");
     }
 }
 
@@ -1556,6 +2107,32 @@ async fn request_elevated_mode() -> Result<(), String> {
     Err("Full-app sudo relaunch is deprecated. Run BinaryStars normally and authorize privileged actions (shutdown/reboot) when prompted by PolicyKit.".to_string())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum LocalActionType {
+    BlockScreen,
+    Shutdown,
+    Reboot,
+    ListInstalledApps,
+    ListRunningApps,
+    LaunchApp,
+    CloseApp,
+    GetClipboardHistory,
+}
+
+fn parse_local_action_type(action_type: &str) -> Result<LocalActionType, String> {
+    match action_type {
+        "block_screen" => Ok(LocalActionType::BlockScreen),
+        "shutdown" => Ok(LocalActionType::Shutdown),
+        "reboot" | "reset" => Ok(LocalActionType::Reboot),
+        "list_installed_apps" => Ok(LocalActionType::ListInstalledApps),
+        "list_running_apps" => Ok(LocalActionType::ListRunningApps),
+        "launch_app" => Ok(LocalActionType::LaunchApp),
+        "close_app" => Ok(LocalActionType::CloseApp),
+        "get_clipboard_history" => Ok(LocalActionType::GetClipboardHistory),
+        _ => Err("Unsupported local action".to_string()),
+    }
+}
+
 #[tauri::command]
 async fn perform_local_action(action_type: String, payload_json: Option<String>) -> Result<String, String> {
     let started_at = Instant::now();
@@ -1566,30 +2143,29 @@ async fn perform_local_action(action_type: String, payload_json: Option<String>)
         Some(&format!("action_type={}", action_type)),
     );
 
-    let action_result = match action_type.as_str() {
-        "block_screen" => {
+    let action_result = match parse_local_action_type(action_type.as_str())? {
+        LocalActionType::BlockScreen => {
             block_screen_linux()?;
             Ok("{}".to_string())
         }
-        "shutdown" => {
+        LocalActionType::Shutdown => {
             shutdown_linux()?;
             Ok("{}".to_string())
         }
-        "reboot" | "reset" => {
+        LocalActionType::Reboot => {
             reboot_linux()?;
             Ok("{}".to_string())
         }
-        "list_installed_apps" => list_installed_apps_json(),
-        "list_running_apps" => list_running_apps_json(),
-        "launch_app" => {
+        LocalActionType::ListInstalledApps => list_installed_apps_json(),
+        LocalActionType::ListRunningApps => list_running_apps_json(),
+        LocalActionType::LaunchApp => {
             launch_app_linux(payload_json)?;
             Ok("{}".to_string())
         }
-        "close_app" => close_app_linux(payload_json)
+        LocalActionType::CloseApp => close_app_linux(payload_json)
             .map_err(|e| format!("close_app failed: {}", e))
             .map(|_| "{}".to_string()),
-        "get_clipboard_history" => list_clipboard_history_json(),
-        _ => Err("Unsupported local action".to_string()),
+        LocalActionType::GetClipboardHistory => list_clipboard_history_json(),
     };
 
     if let Err(error) = &action_result {

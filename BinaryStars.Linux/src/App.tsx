@@ -2305,7 +2305,11 @@ function App() {
   const closeRemoteApp = async (app: RunningAppItem): Promise<void> => {
     const requestId = crypto.randomUUID();
     startPendingAction(requestId, "close_app");
-    const sent = await sendActionCommand("close_app", JSON.stringify({ pid: app.pid, force: false }), requestId);
+    const sent = await sendActionCommand(
+      "close_app",
+      JSON.stringify({ pid: app.mainPid, pids: app.pids, appName: app.name, force: false }),
+      requestId,
+    );
     if (!sent) {
       clearPendingAction();
     }

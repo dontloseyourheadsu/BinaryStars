@@ -266,7 +266,14 @@ class ActionsFragment : Fragment(), MessagingEventListener {
     @SuppressLint("HardwareIds")
     private fun closeApp(app: RunningAppItemDto) {
         val groupedPids = if (app.pids.isNotEmpty()) app.pids else listOf(if (app.mainPid > 0) app.mainPid else app.pid)
-        val payload = gson.toJson(mapOf("pid" to (if (app.mainPid > 0) app.mainPid else app.pid), "pids" to groupedPids, "force" to false))
+        val payload = gson.toJson(
+            mapOf(
+                "pid" to (if (app.mainPid > 0) app.mainPid else app.pid),
+                "pids" to groupedPids,
+                "appName" to app.name,
+                "force" to false
+            )
+        )
         sendAction("close_app", payload)
     }
 
