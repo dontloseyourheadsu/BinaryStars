@@ -158,7 +158,7 @@ app.UseSerilogRequestLogging(options =>
         if (httpContext.Request.Path.StartsWithSegments("/api/devices", StringComparison.OrdinalIgnoreCase) &&
             (HttpMethods.IsGet(method) || HttpMethods.IsOptions(method)))
         {
-            return Serilog.Events.LogEventLevel.Debug;
+            return Serilog.Events.LogEventLevel.Information;
         }
 
         return ex == null && httpContext.Response.StatusCode < 500 ? Serilog.Events.LogEventLevel.Information : Serilog.Events.LogEventLevel.Error;

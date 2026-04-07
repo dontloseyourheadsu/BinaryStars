@@ -38,9 +38,15 @@ object MessagingSocketManager {
     private val gson = Gson()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArrayList<MessagingEventListener>()
+    private const val RECONNECT_DELAY_MS = 2_000L
 
     private var webSocket: WebSocket? = null
     private var currentDeviceId: String? = null
+    private var appContext: Context? = null
+    @Volatile
+    private var shouldReconnect: Boolean = false
+    @Volatile
+    private var reconnectScheduled: Boolean = false
     @Volatile
     private var socketConnected: Boolean = false
 
@@ -54,6 +60,9 @@ object MessagingSocketManager {
      */
     fun connect(context: Context, deviceId: String) {
         if (webSocket != null && currentDeviceId == deviceId) return
+        appContext = context.applicationContext
+        shouldReconnect = true
+        reconnectScheduled = false
 
         val token = AuthTokenStore.getStoredToken() ?: return
         currentDeviceId = deviceId
@@ -70,6 +79,7 @@ object MessagingSocketManager {
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 socketConnected = true
+                reconnectScheduled = false
                 Log.i(LOG_TAG, "WebSocket connected: deviceId=$deviceId")
                 notifyConnection(true)
             }
@@ -85,6 +95,7 @@ object MessagingSocketManager {
                 socketConnected = false
                 Log.w(LOG_TAG, "WebSocket failure: deviceId=$deviceId message=${t.message}")
                 notifyConnection(false)
+                scheduleReconnect()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -94,6 +105,7 @@ object MessagingSocketManager {
                 socketConnected = false
                 Log.w(LOG_TAG, "WebSocket closed: deviceId=$deviceId code=$code reason=$reason")
                 notifyConnection(false)
+                scheduleReconnect()
             }
         })
     }
@@ -102,12 +114,37 @@ object MessagingSocketManager {
      * Closes the websocket connection.
      */
     fun disconnect() {
+        shouldReconnect = false
+        reconnectScheduled = false
         webSocket?.close(1000, "Client closing")
         webSocket = null
         socketConnected = false
     }
 
     fun isConnected(): Boolean = socketConnected
+
+    private fun scheduleReconnect() {
+        if (!shouldReconnect || reconnectScheduled) {
+            return
+        }
+
+        val context = appContext ?: return
+        val deviceId = currentDeviceId ?: return
+        reconnectScheduled = true
+        mainHandler.postDelayed({
+            reconnectScheduled = false
+            if (!shouldReconnect || socketConnected) {
+                return@postDelayed
+            }
+
+            val token = AuthTokenStore.getStoredToken()
+            if (token.isNullOrBlank()) {
+                return@postDelayed
+            }
+
+            connect(context, deviceId)
+        }, RECONNECT_DELAY_MS)
+    }
 
     /**
      * Sends a message through the websocket if connected.

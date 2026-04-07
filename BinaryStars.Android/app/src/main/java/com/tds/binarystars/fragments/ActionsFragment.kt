@@ -265,7 +265,15 @@ class ActionsFragment : Fragment(), MessagingEventListener {
 
     @SuppressLint("HardwareIds")
     private fun closeApp(app: RunningAppItemDto) {
-        val payload = gson.toJson(mapOf("pid" to app.pid, "force" to false))
+        val groupedPids = if (app.pids.isNotEmpty()) app.pids else listOf(if (app.mainPid > 0) app.mainPid else app.pid)
+        val payload = gson.toJson(
+            mapOf(
+                "pid" to (if (app.mainPid > 0) app.mainPid else app.pid),
+                "pids" to groupedPids,
+                "appName" to app.name,
+                "force" to false
+            )
+        )
         sendAction("close_app", payload)
     }
 
@@ -497,15 +505,19 @@ class ActionsFragment : Fragment(), MessagingEventListener {
         val filtered = filterRunningApps()
         val rows = filtered.map { app ->
             val commandPreview = app.commandLine.ifBlank { app.exe }
+            val mainPid = if (app.mainPid > 0) app.mainPid else app.pid
             ActionAppRow(
-                id = app.pid.toString(),
+                id = mainPid.toString(),
                 title = app.name,
-                subtitle = "PID ${app.pid} • ${trimForSubtitle(commandPreview)}"
+                subtitle = "Main PID $mainPid • ${app.processCount} processes • ${trimForSubtitle(commandPreview)}"
             )
         }
 
         list.adapter = ActionAppsAdapter(rows, "Close") { row ->
-            val app = runningApps.firstOrNull { it.pid.toString() == row.id } ?: return@ActionAppsAdapter
+            val app = runningApps.firstOrNull {
+                val mainPid = if (it.mainPid > 0) it.mainPid else it.pid
+                mainPid.toString() == row.id
+            } ?: return@ActionAppsAdapter
             closeApp(app)
         }
     }
@@ -528,10 +540,13 @@ class ActionsFragment : Fragment(), MessagingEventListener {
         }
 
         return runningApps.filter { app ->
+            val mainPid = if (app.mainPid > 0) app.mainPid else app.pid
             app.name.lowercase().contains(query) ||
                 app.commandLine.lowercase().contains(query) ||
                 app.exe.lowercase().contains(query) ||
-                app.pid.toString().contains(query)
+                app.pid.toString().contains(query) ||
+                mainPid.toString().contains(query) ||
+                app.processCount.toString().contains(query)
         }
     }
 
@@ -561,8 +576,10 @@ class ActionsFragment : Fragment(), MessagingEventListener {
                     return@launch
                 }
 
+                val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+
                 val linuxDevices = response.body()!!
-                    .filter { it.type == DeviceTypeDto.Linux && it.isOnline }
+                    .filter { it.type == DeviceTypeDto.Linux && it.isOnline && it.id != currentDeviceId }
                     .map { dto ->
                         Device(
                             id = dto.id,

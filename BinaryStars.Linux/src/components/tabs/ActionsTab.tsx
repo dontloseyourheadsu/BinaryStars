@@ -164,9 +164,10 @@ export default function ActionsTab({
                   <div className="list compact">
                     {runningApps.length === 0 && <p className="empty-state">No running apps available.</p>}
                     {runningApps.map((app) => (
-                      <article className="row-card static" key={`${app.pid}-${app.name}`}>
+                      <article className="row-card static" key={`${app.mainPid}-${app.name}`}>
                         <strong>{app.name}</strong>
-                        <span className="muted">PID {app.pid}</span>
+                        <span className="muted">Main PID {app.mainPid}</span>
+                        <span className="muted">{app.processCount} related processes</span>
                         {app.exe && <span className="muted">{app.exe}</span>}
                         <span className="muted">{app.commandLine}</span>
                         <button onClick={() => onCloseApp(app)} type="button" disabled={busy}>Close</button>
