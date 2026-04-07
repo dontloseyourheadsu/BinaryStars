@@ -294,12 +294,16 @@ data class LaunchableAppItemDto(
 
 /** Running app entry returned by Linux target. */
 data class RunningAppItemDto(
+    val mainPid: Int = 0,
     val pid: Int,
     val name: String,
     val exe: String = "",
     val cpuUsage: Float = 0f,
     val memoryMb: Double = 0.0,
-    val commandLine: String
+    val commandLine: String,
+    val processCount: Int = 1,
+    val pids: List<Int> = emptyList(),
+    val hasVisibleWindow: Boolean = false
 )
 
 // Location Models
