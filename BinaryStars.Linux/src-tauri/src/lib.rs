@@ -167,15 +167,139 @@ struct RunningProcessSnapshot {
     command_line: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LinuxDesktopEnvironment {
+    Gnome,
+    Kde,
+    Other,
+}
+
+fn detect_linux_desktop_environment(raw: &str) -> LinuxDesktopEnvironment {
+    let normalized = raw.to_ascii_lowercase();
+    if normalized.contains("gnome") {
+        LinuxDesktopEnvironment::Gnome
+    } else if normalized.contains("kde") || normalized.contains("plasma") {
+        LinuxDesktopEnvironment::Kde
+    } else {
+        LinuxDesktopEnvironment::Other
+    }
+}
+
+fn notification_command_plan_for_desktop(
+    desktop: &str,
+    title: &str,
+    body: &str,
+) -> Vec<(String, Vec<String>)> {
+    let mut commands: Vec<(String, Vec<String>)> = Vec::new();
+    let environment = detect_linux_desktop_environment(desktop);
+
+    if environment == LinuxDesktopEnvironment::Gnome {
+        commands.push((
+            "gdbus".to_string(),
+            vec![
+                "call".to_string(),
+                "--session".to_string(),
+                "--dest".to_string(),
+                "org.freedesktop.Notifications".to_string(),
+                "--object-path".to_string(),
+                "/org/freedesktop/Notifications".to_string(),
+                "--method".to_string(),
+                "org.freedesktop.Notifications.Notify".to_string(),
+                "BinaryStars".to_string(),
+                "0".to_string(),
+                "dialog-information".to_string(),
+                title.to_string(),
+                body.to_string(),
+                "[]".to_string(),
+                "{}".to_string(),
+                "3000".to_string(),
+            ],
+        ));
+    }
+
+    if environment == LinuxDesktopEnvironment::Kde {
+        let qdbus_args = vec![
+            "org.freedesktop.Notifications".to_string(),
+            "/org/freedesktop/Notifications".to_string(),
+            "org.freedesktop.Notifications.Notify".to_string(),
+            "BinaryStars".to_string(),
+            "0".to_string(),
+            "dialog-information".to_string(),
+            title.to_string(),
+            body.to_string(),
+            "[]".to_string(),
+            "{}".to_string(),
+            "3000".to_string(),
+        ];
+
+        commands.push(("qdbus".to_string(), qdbus_args.clone()));
+        commands.push(("qdbus6".to_string(), qdbus_args));
+    }
+
+    commands.push((
+        "notify-send".to_string(),
+        vec![title.to_string(), body.to_string()],
+    ));
+
+    commands
+}
+
+fn execute_notification_command(program: &str, args: &[String]) -> Result<(), String> {
+    let output = Command::new(program).args(args).output();
+    let output = match output {
+        Ok(value) => value,
+        Err(error) => {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                return Err(format!("missing:{}", program));
+            }
+            return Err(format!("{} failed to start: {}", program, error));
+        }
+    };
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+    let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+    let detail = if !stderr.trim().is_empty() {
+        stderr.trim().to_string()
+    } else {
+        stdout.trim().to_string()
+    };
+
+    Err(format!("{} exited with status {}: {}", program, output.status, detail))
+}
+
+pub fn trigger_linux_notification(title: &str, body: &str) -> Result<String, String> {
+    let desktop = current_desktop();
+    let command_plan = notification_command_plan_for_desktop(&desktop, title, body);
+
+    let mut errors: Vec<String> = Vec::new();
+    for (program, args) in command_plan {
+        match execute_notification_command(&program, &args) {
+            Ok(()) => return Ok(program),
+            Err(error) => errors.push(error),
+        }
+    }
+
+    Err(format!(
+        "Unable to deliver Linux notification via desktop APIs. Details: {}",
+        errors.join(" | ")
+    ))
+}
+
 #[tauri::command]
 fn show_notification(title: String, body: String) -> Result<(), String> {
-    let _ = append_log_line("info", "rust:notification", "show_notification called", Some(&format!("title={}", title)));
-    std::process::Command::new("notify-send")
-        .arg(&title)
-        .arg(&body)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    let desktop = current_desktop();
+    let _ = append_log_line(
+        "info",
+        "rust:notification",
+        "show_notification called",
+        Some(&format!("title={} desktop={}", title, desktop)),
+    );
+
+    trigger_linux_notification(&title, &body).map(|_| ())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
