@@ -29,6 +29,33 @@ public class MessagingKafkaService
         _clientFactory = clientFactory;
     }
 
+    private bool WaitForAssignment(IConsumer<string, byte[]> consumer, string groupId, string topic, CancellationToken cancellationToken)
+    {
+        var started = DateTime.UtcNow;
+        while (!cancellationToken.IsCancellationRequested && DateTime.UtcNow - started < TimeSpan.FromSeconds(5))
+        {
+            // Poll while subscribing so the consumer can complete group join and partition assignment.
+            consumer.Consume(TimeSpan.FromMilliseconds(250));
+            if (consumer.Assignment.Count > 0)
+            {
+                _logger.LogDebug(
+                    "Kafka consumer assignment ready: groupId={GroupId} topic={Topic} partitions={PartitionCount} waitMs={WaitMs}",
+                    groupId,
+                    topic,
+                    consumer.Assignment.Count,
+                    (DateTime.UtcNow - started).TotalMilliseconds);
+                return true;
+            }
+        }
+
+        _logger.LogWarning(
+            "Kafka consumer assignment timeout: groupId={GroupId} topic={Topic} waitMs={WaitMs}",
+            groupId,
+            topic,
+            (DateTime.UtcNow - started).TotalMilliseconds);
+        return false;
+    }
+
     /// <summary>
     /// Publishes a device-to-device message.
     /// </summary>
@@ -159,8 +186,10 @@ public class MessagingKafkaService
         string? oauthToken,
         CancellationToken cancellationToken)
     {
-        using var consumer = _clientFactory.CreateConsumer($"notifications-{deviceId}", authMode, oauthToken);
+        var groupId = $"notifications-{deviceId}";
+        using var consumer = _clientFactory.CreateConsumer(groupId, authMode, oauthToken);
         consumer.Subscribe(_settings.NotificationsTopic);
+        WaitForAssignment(consumer, groupId, _settings.NotificationsTopic, cancellationToken);
 
         try
         {
@@ -173,6 +202,11 @@ public class MessagingKafkaService
 
                 if (result == null)
                 {
+                    if (consumer.Assignment.Count == 0)
+                    {
+                        continue;
+                    }
+
                     emptyReads++;
                     if (emptyReads >= 3)
                         break;
@@ -242,8 +276,10 @@ public class MessagingKafkaService
         string? oauthToken,
         CancellationToken cancellationToken)
     {
-        using var consumer = _clientFactory.CreateConsumer($"messages-{deviceId}", authMode, oauthToken);
+        var groupId = $"messages-{deviceId}";
+        using var consumer = _clientFactory.CreateConsumer(groupId, authMode, oauthToken);
         consumer.Subscribe(_settings.MessagingTopic);
+        WaitForAssignment(consumer, groupId, _settings.MessagingTopic, cancellationToken);
 
         try
         {
@@ -255,6 +291,11 @@ public class MessagingKafkaService
                 var result = consumer.Consume(TimeSpan.FromSeconds(1));
                 if (result == null)
                 {
+                    if (consumer.Assignment.Count == 0)
+                    {
+                        continue;
+                    }
+
                     emptyReads++;
                     if (emptyReads >= 3)
                         break;
@@ -303,8 +344,10 @@ public class MessagingKafkaService
         string? oauthToken,
         CancellationToken cancellationToken)
     {
-        using var consumer = _clientFactory.CreateConsumer($"device-removed-{deviceId}", authMode, oauthToken);
+        var groupId = $"device-removed-{deviceId}";
+        using var consumer = _clientFactory.CreateConsumer(groupId, authMode, oauthToken);
         consumer.Subscribe(_settings.DeviceRemovedTopic);
+        WaitForAssignment(consumer, groupId, _settings.DeviceRemovedTopic, cancellationToken);
 
         try
         {
@@ -316,6 +359,11 @@ public class MessagingKafkaService
                 var result = consumer.Consume(TimeSpan.FromSeconds(1));
                 if (result == null)
                 {
+                    if (consumer.Assignment.Count == 0)
+                    {
+                        continue;
+                    }
+
                     emptyReads++;
                     if (emptyReads >= 3)
                         break;

@@ -38,6 +38,9 @@ public class DeviceDomainModelTests
             isSynced,
             wifiUploadSpeed,
             wifiDownloadSpeed,
+            42,
+            58,
+            true,
             lastSeen);
 
         // Assert
@@ -93,6 +96,9 @@ public class DeviceDomainModelTests
             isSynced,
             wifiUploadSpeed,
             wifiDownloadSpeed,
+            50,
+            60,
+            true,
             lastSeen));
 
         Assert.Contains(expectedErrorMessage, exception.Message);

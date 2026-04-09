@@ -1,6 +1,7 @@
 package com.tds.binarystars.presence
 
 import android.content.Context
+import android.util.Log
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.NotificationSyncAckRequestDto
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
  */
 object PresenceHeartbeatManager {
     private const val HEARTBEAT_INTERVAL_MS = 10_000L
+    private const val LOG_TAG = "BinaryStarsNotifications"
 
     private var heartbeatScope: CoroutineScope? = null
     private var heartbeatJob: Job? = null
@@ -43,21 +45,31 @@ object PresenceHeartbeatManager {
                     if (response.isSuccessful) {
                         val deviceDto = response.body()
                         if (deviceDto?.hasPendingNotificationSync == true) {
+                            Log.i(LOG_TAG, "Heartbeat reports pending notification sync: deviceId=$deviceId")
                             val pullResp = ApiClient.apiService.pullNotifications(deviceId)
                             if (pullResp.isSuccessful) {
-                                val instant = pullResp.body()?.instant ?: emptyList()
-                                val ackIds = mutableListOf<String>()
-                                instant.forEach { msg ->
+                                val pullBody = pullResp.body()
+                                val notifications = pullBody?.notifications ?: emptyList()
+                                val hasPending = pullBody?.hasPendingNotificationSync == true
+                                Log.i(LOG_TAG, "Pulled notifications: deviceId=$deviceId count=${notifications.size}")
+                                notifications.forEach { msg ->
                                     NotificationUtils.showNotification(appContext, msg.title, msg.body)
-                                    ackIds.add(msg.id)
                                 }
-                                if (ackIds.isNotEmpty()) {
-                                    ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId, ackIds))
+                                if (notifications.isEmpty() && hasPending) {
+                                    Log.w(LOG_TAG, "Skipping notification ack because pull was empty but pending flag is still true: deviceId=$deviceId")
+                                } else {
+                                    ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId))
+                                    Log.i(LOG_TAG, "Notification sync ack sent: deviceId=$deviceId")
                                 }
+                            } else {
+                                Log.w(LOG_TAG, "Notification pull failed: status=${pullResp.code()} deviceId=$deviceId")
                             }
                         }
+                    } else {
+                        Log.w(LOG_TAG, "Heartbeat failed: status=${response.code()} deviceId=$deviceId")
                     }
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    Log.w(LOG_TAG, "Heartbeat sync exception: deviceId=$deviceId error=${e.message}")
                 }
                 delay(HEARTBEAT_INTERVAL_MS)
             }

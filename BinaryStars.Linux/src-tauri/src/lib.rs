@@ -274,18 +274,40 @@ fn execute_notification_command(program: &str, args: &[String]) -> Result<(), St
 pub fn trigger_linux_notification(title: &str, body: &str) -> Result<String, String> {
     let desktop = current_desktop();
     let command_plan = notification_command_plan_for_desktop(&desktop, title, body);
+    let _ = append_log_line(
+        "info",
+        "rust:notification",
+        "trigger_linux_notification start",
+        Some(&format!("desktop={} title={}", desktop, title)),
+    );
 
     let mut errors: Vec<String> = Vec::new();
     for (program, args) in command_plan {
         match execute_notification_command(&program, &args) {
-            Ok(()) => return Ok(program),
+            Ok(()) => {
+                let _ = append_log_line(
+                    "info",
+                    "rust:notification",
+                    "trigger_linux_notification delivered",
+                    Some(&format!("backend={} title={}", program, title)),
+                );
+                return Ok(program);
+            }
             Err(error) => errors.push(error),
         }
     }
 
+    let joined = errors.join(" | ");
+    let _ = append_log_line(
+        "error",
+        "rust:notification",
+        "trigger_linux_notification failed",
+        Some(&joined),
+    );
+
     Err(format!(
         "Unable to deliver Linux notification via desktop APIs. Details: {}",
-        errors.join(" | ")
+        joined
     ))
 }
 

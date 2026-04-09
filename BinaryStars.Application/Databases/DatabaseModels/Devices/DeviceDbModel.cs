@@ -78,6 +78,11 @@ public class DeviceDbModel
     public int? CpuLoadPercent { get; set; }
 
     /// <summary>
+    /// Gets or sets the optional memory load percentage.
+    /// </summary>
+    public int? MemoryLoadPercent { get; set; }
+
+    /// <summary>
     /// Gets or sets whether telemetry/data sharing is enabled.
     /// </summary>
     public bool IsAvailable { get; set; }

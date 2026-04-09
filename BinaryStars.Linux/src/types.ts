@@ -36,6 +36,7 @@ export interface Device {
   isAvailable: boolean;
   isSynced: boolean;
   cpuLoadPercent: number | null;
+  memoryLoadPercent: number | null;
   wifiUploadSpeed: string;
   wifiDownloadSpeed: string;
   lastSeen: string;

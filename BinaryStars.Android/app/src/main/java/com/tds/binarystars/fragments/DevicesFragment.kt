@@ -216,6 +216,7 @@ class DevicesFragment : Fragment(), MessagingEventListener {
                             isAvailable = dto.isAvailable,
                             isSynced = dto.isSynced,
                             cpuLoadPercent = dto.cpuLoadPercent,
+                            memoryLoadPercent = dto.memoryLoadPercent,
                             wifiUploadSpeed = dto.wifiUploadSpeed,
                             wifiDownloadSpeed = dto.wifiDownloadSpeed,
                             lastSeen = System.currentTimeMillis()

@@ -26,7 +26,9 @@ import androidx.lifecycle.lifecycleScope
 import com.tds.binarystars.crypto.CryptoManager
 import androidx.drawerlayout.widget.DrawerLayout
 import com.tds.binarystars.messaging.MessagingSocketManager
-import com.tds.binarystars.presence.PresenceHeartbeatManager
+import com.tds.binarystars.background.BackgroundRequirementsActivity
+import com.tds.binarystars.background.BackgroundRequirementsManager
+import com.tds.binarystars.background.DeviceSyncForegroundService
 import androidx.core.view.GravityCompat
 import com.tds.binarystars.api.DeviceTypeDto
 import com.tds.binarystars.model.Device
@@ -44,7 +46,6 @@ class MainActivity : AppCompatActivity() {
             return true
         }
 
-        PresenceHeartbeatManager.stop()
         MessagingSocketManager.disconnect()
         startActivity(android.content.Intent(this, LoginActivity::class.java))
         finish()
@@ -56,6 +57,12 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (!BackgroundRequirementsManager.areMandatoryRequirementsMet(this)) {
+            startActivity(android.content.Intent(this, BackgroundRequirementsActivity::class.java))
+            finish()
+            return
+        }
 
         if (!ensureAuthenticatedSession()) {
             return
@@ -70,7 +77,7 @@ class MainActivity : AppCompatActivity() {
 
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         MessagingSocketManager.connect(this, deviceId)
-        PresenceHeartbeatManager.start(this, deviceId)
+        DeviceSyncForegroundService.start(this)
 
         drawerLayout = findViewById(R.id.drawer_layout)
 
@@ -152,7 +159,6 @@ class MainActivity : AppCompatActivity() {
         networkCallback = null
         super.onDestroy()
         MessagingSocketManager.disconnect()
-        PresenceHeartbeatManager.stop()
     }
 
     override fun onResume() {
@@ -203,6 +209,7 @@ class MainActivity : AppCompatActivity() {
                         isAvailable = dto.isAvailable,
                         isSynced = dto.isSynced,
                         cpuLoadPercent = dto.cpuLoadPercent,
+                        memoryLoadPercent = dto.memoryLoadPercent,
                         wifiUploadSpeed = dto.wifiUploadSpeed,
                         wifiDownloadSpeed = dto.wifiDownloadSpeed,
                         isBluetoothOnline = false,
@@ -233,7 +240,7 @@ class MainActivity : AppCompatActivity() {
 
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         MessagingSocketManager.connect(this, deviceId)
-        PresenceHeartbeatManager.start(this, deviceId)
+        DeviceSyncForegroundService.start(this)
     }
 
     @SuppressLint("HardwareIds")

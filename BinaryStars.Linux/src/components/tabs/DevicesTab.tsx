@@ -51,9 +51,9 @@ export default function DevicesTab({
     const bluetoothState = selectedDevice.isBluetoothOnline ? " • Bluetooth online" : "";
     const connectionState = `${baseConnectionState}${bluetoothState}`;
     const syncState = selectedDevice.isSynced ? "Synced" : "Not Synced";
-    const cpuValue = selectedDevice.type === "Android"
-      ? "Not available"
-      : `${selectedDevice.cpuLoadPercent ?? 0}%`;
+    const cpuValue = selectedDevice.cpuLoadPercent != null
+      ? `${selectedDevice.cpuLoadPercent}%`
+      : "Not available";
     const uploadValue = selectedDevice.wifiUploadSpeed && selectedDevice.wifiUploadSpeed !== "0 Mbps"
       ? selectedDevice.wifiUploadSpeed
       : "Not available";
@@ -163,7 +163,7 @@ export default function DevicesTab({
               <span className="muted">{device.type} • {device.ipAddress}</span>
               {device.isBluetoothOnline && <span className="muted">Bluetooth online</span>}
               <span className="muted">
-                CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
+                CPU {device.cpuLoadPercent != null ? `${device.cpuLoadPercent}%` : "Not available"} · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
               </span>
               <span className="muted">RAM {formatRam(device)} · Battery {formatBattery(device)}</span>
             </button>
@@ -183,7 +183,7 @@ export default function DevicesTab({
               <span className="muted">{device.type} • Last seen {new Date(device.lastSeen).toLocaleString()}</span>
               {device.isBluetoothOnline && <span className="muted">Bluetooth online</span>}
               <span className="muted">
-                CPU {device.cpuLoadPercent ?? 0}% · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
+                CPU {device.cpuLoadPercent != null ? `${device.cpuLoadPercent}%` : "Not available"} · ↑ {device.wifiUploadSpeed} · ↓ {device.wifiDownloadSpeed}
               </span>
               <span className="muted">RAM {formatRam(device)} · Battery {formatBattery(device)}</span>
               <div className="split-row">
