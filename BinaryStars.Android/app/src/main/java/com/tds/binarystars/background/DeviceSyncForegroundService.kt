@@ -127,6 +127,7 @@ class DeviceSyncForegroundService : Service() {
                 UpdateDeviceTelemetryRequest(
                     batteryLevel = batteryLevel.coerceIn(0, 100),
                     cpuLoadPercent = cpuLoadPercent,
+                    memoryLoadPercent = memoryPercent,
                     isOnline = true,
                     isAvailable = available,
                     isSynced = true,

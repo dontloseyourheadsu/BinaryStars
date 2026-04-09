@@ -209,6 +209,7 @@ class MainActivity : AppCompatActivity() {
                         isAvailable = dto.isAvailable,
                         isSynced = dto.isSynced,
                         cpuLoadPercent = dto.cpuLoadPercent,
+                        memoryLoadPercent = dto.memoryLoadPercent,
                         wifiUploadSpeed = dto.wifiUploadSpeed,
                         wifiDownloadSpeed = dto.wifiDownloadSpeed,
                         isBluetoothOnline = false,
