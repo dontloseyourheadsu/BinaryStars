@@ -179,6 +179,7 @@ export const api = {
   async updateTelemetry(deviceId: string, payload: {
     batteryLevel: number;
     cpuLoadPercent: number;
+    memoryLoadPercent: number | null;
     isOnline: boolean;
     isAvailable: boolean;
     isSynced: boolean;

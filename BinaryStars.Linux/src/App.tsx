@@ -1424,6 +1424,7 @@ function App() {
     await api.updateTelemetry(myDeviceId, {
       batteryLevel: local.battery_level ?? 100,
       cpuLoadPercent: local.cpu_load_percent ?? 0,
+      memoryLoadPercent: local.memory_load_percent ?? null,
       isOnline: true,
       isAvailable: true,
       isSynced: true,
@@ -2476,6 +2477,7 @@ function App() {
         await api.updateTelemetry(myDeviceId, {
           batteryLevel: local.battery_level ?? 100,
           cpuLoadPercent: local.cpu_load_percent ?? 0,
+          memoryLoadPercent: local.memory_load_percent ?? null,
           isOnline: true,
           isAvailable: true,
           isSynced: true,
@@ -2498,6 +2500,7 @@ function App() {
             isAvailable: true,
             isSynced: true,
             cpuLoadPercent: local.cpu_load_percent ?? device.cpuLoadPercent,
+            memoryLoadPercent: local.memory_load_percent ?? device.memoryLoadPercent,
             wifiUploadSpeed: local.wifi_upload_speed,
             wifiDownloadSpeed: local.wifi_download_speed,
             lastSeen: new Date().toISOString(),
@@ -2576,11 +2579,11 @@ function App() {
   };
 
   const formatRam = (device: Device): string => {
-    if (device.id !== myDeviceId) {
-      return "Not available";
+    if (device.id === myDeviceId) {
+      return localMemoryLoadPercent != null ? `${localMemoryLoadPercent}%` : "Not available";
     }
 
-    return localMemoryLoadPercent != null ? `${localMemoryLoadPercent}%` : "Not available";
+    return device.memoryLoadPercent != null ? `${device.memoryLoadPercent}%` : "Not available";
   };
 
   return (
