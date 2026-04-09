@@ -158,10 +158,16 @@ app.UseSerilogRequestLogging(options =>
         if (httpContext.Request.Path.StartsWithSegments("/api/devices", StringComparison.OrdinalIgnoreCase) &&
             (HttpMethods.IsGet(method) || HttpMethods.IsOptions(method)))
         {
-            return Serilog.Events.LogEventLevel.Information;
+            return Serilog.Events.LogEventLevel.Debug;
         }
 
-        return ex == null && httpContext.Response.StatusCode < 500 ? Serilog.Events.LogEventLevel.Information : Serilog.Events.LogEventLevel.Error;
+        if (httpContext.Request.Path.StartsWithSegments("/api/notifications", StringComparison.OrdinalIgnoreCase) &&
+            (HttpMethods.IsGet(method) || HttpMethods.IsPost(method) || HttpMethods.IsOptions(method)))
+        {
+            return Serilog.Events.LogEventLevel.Debug;
+        }
+
+        return ex == null && httpContext.Response.StatusCode < 500 ? Serilog.Events.LogEventLevel.Debug : Serilog.Events.LogEventLevel.Error;
     };
 });
 

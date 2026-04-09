@@ -50,6 +50,12 @@ public class NotificationsController : ControllerBase
     public async Task<IActionResult> Send([FromBody] SendNotificationRequestDto request, CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        _logger.LogDebug(
+            "Notification send requested: userId={UserId} senderDeviceId={SenderDeviceId} targetDeviceId={TargetDeviceId} titleLength={TitleLength}",
+            userId,
+            request.SenderDeviceId,
+            request.TargetDeviceId,
+            request.Title?.Length ?? 0);
 
         if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Body))
             return BadRequest(new[] { "Title and body are required." });
@@ -70,10 +76,20 @@ public class NotificationsController : ControllerBase
 
         const KafkaAuthMode authMode = KafkaAuthMode.Scram;
         await _kafkaService.PublishNotificationAsync(message, authMode, null, cancellationToken);
+        _logger.LogDebug(
+            "Notification published to Kafka: userId={UserId} notificationId={NotificationId} targetDeviceId={TargetDeviceId}",
+            userId,
+            message.Id,
+            request.TargetDeviceId);
 
         var pendingResult = await _notificationsWriteService.SetPendingSyncFlagAsync(userId, request.TargetDeviceId, true, cancellationToken);
         if (!pendingResult.IsSuccess)
             return BadRequest(pendingResult.Errors);
+
+        _logger.LogDebug(
+            "Pending notification sync flag set: userId={UserId} targetDeviceId={TargetDeviceId}",
+            userId,
+            request.TargetDeviceId);
 
         return Ok(message);
     }
@@ -176,6 +192,7 @@ public class NotificationsController : ControllerBase
     public async Task<IActionResult> Pull([FromQuery] string deviceId, CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        _logger.LogDebug("Notification pull requested: userId={UserId} deviceId={DeviceId}", userId, deviceId);
 
         var pendingFlagResult = await _notificationsReadService.GetPendingSyncFlagAsync(userId, deviceId, cancellationToken);
         if (!pendingFlagResult.IsSuccess)
@@ -197,6 +214,22 @@ public class NotificationsController : ControllerBase
             notifications,
             schedulesResult.Value);
 
+        _logger.LogDebug(
+            "Notification pull result: userId={UserId} deviceId={DeviceId} notifications={NotificationCount} schedules={ScheduleCount} hasPending={HasPending}",
+            userId,
+            deviceId,
+            notifications.Count,
+            schedulesResult.Value.Count,
+            response.HasPendingNotificationSync);
+
+        if (notifications.Count == 0 && response.HasPendingNotificationSync)
+        {
+            _logger.LogWarning(
+                "Notification pull inconsistency: userId={UserId} deviceId={DeviceId} hasPending=true but notification payload is empty",
+                userId,
+                deviceId);
+        }
+
         return Ok(response);
     }
 
@@ -209,10 +242,20 @@ public class NotificationsController : ControllerBase
     public async Task<IActionResult> Acknowledge([FromBody] NotificationSyncAckRequestDto request, CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        _logger.LogDebug(
+            "Notification ack requested: userId={UserId} deviceId={DeviceId} remoteIp={RemoteIp} userAgent={UserAgent}",
+            userId,
+            request.DeviceId,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.Request.Headers.UserAgent.ToString());
+
         var result = await _notificationsWriteService.SetPendingSyncFlagAsync(userId, request.DeviceId, false, cancellationToken);
 
         if (result.IsSuccess)
+        {
+            _logger.LogDebug("Notification ack completed: userId={UserId} deviceId={DeviceId}", userId, request.DeviceId);
             return Ok();
+        }
 
         return BadRequest(result.Errors);
     }

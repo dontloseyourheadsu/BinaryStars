@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -159,6 +159,7 @@ function App() {
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
   const clipboardAutoFetchKeyRef = useRef<string>("");
+  const notificationSyncInFlightRef = useRef(false);
   const myDeviceId = getDeviceId();
 
   const getActionTimeoutMs = (actionType: string): number => {
@@ -739,13 +740,31 @@ function App() {
     }
   };
 
-  const syncNotificationsFromServer = async (surfaceError = false): Promise<void> => {
+  const syncNotificationsFromServer = useCallback(async (surfaceError = false): Promise<void> => {
     if (!isAuthed || !online) {
       return;
     }
 
+    if (notificationSyncInFlightRef.current) {
+      logEvent("debug", "ui.notifications", "sync-skipped-in-flight", {
+        deviceId: myDeviceId,
+      });
+      return;
+    }
+
+    notificationSyncInFlightRef.current = true;
+
     try {
+      logEvent("info", "ui.notifications", "sync-start", {
+        deviceId: myDeviceId,
+      });
       const payload = await api.pullNotifications(myDeviceId);
+      logEvent("info", "ui.notifications", "pull-success", {
+        deviceId: myDeviceId,
+        notifications: payload.notifications.length,
+        schedules: payload.schedules.length,
+        hasPendingNotificationSync: payload.hasPendingNotificationSync,
+      });
       setNotificationSchedules(payload.schedules);
 
       if (payload.notifications.length > 0) {
@@ -753,7 +772,24 @@ function App() {
           const byId = new Map(prev.map((entry) => [entry.id, entry]));
           payload.notifications.forEach((entry) => {
             if (!byId.has(entry.id)) {
-              invoke("show_notification", { title: entry.title, body: entry.body }).catch(console.error);
+              logEvent("info", "ui.notifications", "native-notification-dispatch", {
+                notificationId: entry.id,
+                senderDeviceId: entry.senderDeviceId,
+                targetDeviceId: entry.targetDeviceId,
+              });
+              invoke("show_notification", { title: entry.title, body: entry.body })
+                .then(() => {
+                  logEvent("info", "ui.notifications", "native-notification-dispatch-ok", {
+                    notificationId: entry.id,
+                  });
+                })
+                .catch((error: unknown) => {
+                  const message = error instanceof Error ? error.message : String(error);
+                  logEvent("error", "ui.notifications", "native-notification-dispatch-failed", {
+                    notificationId: entry.id,
+                    error: message,
+                  });
+                });
             }
             byId.set(entry.id, {
               ...entry,
@@ -767,7 +803,18 @@ function App() {
         });
       }
 
+      if (payload.notifications.length === 0 && payload.hasPendingNotificationSync) {
+        logEvent("warn", "ui.notifications", "ack-skipped-empty-pending", {
+          deviceId: myDeviceId,
+          hasPendingNotificationSync: payload.hasPendingNotificationSync,
+        });
+        return;
+      }
+
       await api.acknowledgeNotificationSync(myDeviceId);
+      logEvent("info", "ui.notifications", "ack-success", {
+        deviceId: myDeviceId,
+      });
       setDevices((prev) => prev.map((device) => {
         if (device.id !== myDeviceId) {
           return device;
@@ -779,11 +826,18 @@ function App() {
         };
       }));
     } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Failed to sync notifications";
+      logEvent("error", "ui.notifications", "sync-failed", {
+        deviceId: myDeviceId,
+        error: message,
+      });
       if (surfaceError) {
-        setError(nextError instanceof Error ? nextError.message : "Failed to sync notifications");
+        setError(message);
       }
+    } finally {
+      notificationSyncInFlightRef.current = false;
     }
-  };
+  }, [isAuthed, myDeviceId, online]);
 
   const initSession = async (): Promise<void> => {
     const canUseNetwork = typeof navigator === "undefined" || navigator.onLine;
@@ -1116,13 +1170,18 @@ function App() {
     };
   }, [isAuthed, myDeviceId]);
 
-  usePresenceHeartbeat(isAuthed, myDeviceId, (device) => {
+  const handlePresenceHeartbeat = useCallback((device: Device): void => {
     if (!device.hasPendingNotificationSync) {
       return;
     }
 
+    logEvent("debug", "ui.notifications", "heartbeat-pending-sync", {
+      deviceId: device.id,
+    });
     void syncNotificationsFromServer();
-  });
+  }, [syncNotificationsFromServer]);
+
+  usePresenceHeartbeat(isAuthed, myDeviceId, handlePresenceHeartbeat);
 
   useEffect(() => {
     if (!isAuthed) {
