@@ -78,6 +78,11 @@ public readonly record struct Device
     public int? CpuLoadPercent { get; init; }
 
     /// <summary>
+    /// Gets the optional memory load percentage.
+    /// </summary>
+    public int? MemoryLoadPercent { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether telemetry/data sharing is enabled for this device.
     /// </summary>
     public bool IsAvailable { get; init; }
@@ -106,6 +111,7 @@ public readonly record struct Device
     /// <param name="wifiUploadSpeed">The upload speed.</param>
     /// <param name="wifiDownloadSpeed">The download speed.</param>
     /// <param name="cpuLoadPercent">The optional CPU load percentage.</param>
+    /// <param name="memoryLoadPercent">The optional memory load percentage.</param>
     /// <param name="isAvailable">Whether the device allows telemetry sharing.</param>
     /// <param name="lastSeen">The last seen timestamp.</param>
     /// <param name="publicKey">The public key used for end-to-end encryption.</param>
@@ -124,6 +130,7 @@ public readonly record struct Device
         string wifiUploadSpeed,
         string wifiDownloadSpeed,
         int? cpuLoadPercent,
+        int? memoryLoadPercent,
         bool isAvailable,
         DateTimeOffset lastSeen,
         string? publicKey = null,
@@ -149,6 +156,7 @@ public readonly record struct Device
         WifiUploadSpeed = wifiUploadSpeed;
         WifiDownloadSpeed = wifiDownloadSpeed;
         CpuLoadPercent = cpuLoadPercent;
+        MemoryLoadPercent = memoryLoadPercent;
         IsAvailable = isAvailable;
         LastSeen = lastSeen;
         HasPendingNotificationSync = hasPendingNotificationSync;

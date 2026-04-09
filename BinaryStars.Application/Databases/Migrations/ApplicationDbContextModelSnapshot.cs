@@ -101,6 +101,9 @@ namespace BinaryStars.Application.Databases.Migrations
                     b.Property<int?>("CpuLoadPercent")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("MemoryLoadPercent")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("HasPendingNotificationSync")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

@@ -32,6 +32,7 @@ public record RegisterDeviceRequest(
 /// </summary>
 /// <param name="BatteryLevel">Battery level (0-100).</param>
 /// <param name="CpuLoadPercent">Optional CPU load percentage.</param>
+/// <param name="MemoryLoadPercent">Optional memory load percentage.</param>
 /// <param name="IsOnline">Whether the device is online.</param>
 /// <param name="IsAvailable">Whether telemetry/data sharing is enabled.</param>
 /// <param name="IsSynced">Whether the device is synced.</param>
@@ -40,6 +41,7 @@ public record RegisterDeviceRequest(
 public record UpdateDeviceTelemetryRequest(
     int BatteryLevel,
     int? CpuLoadPercent,
+    int? MemoryLoadPercent,
     bool IsOnline,
     bool IsAvailable,
     bool IsSynced,
@@ -176,6 +178,7 @@ public class DevicesWriteService : IDevicesWriteService
             IsAvailable = true,
             IsSynced = false,
             CpuLoadPercent = null,
+            MemoryLoadPercent = null,
             WifiDownloadSpeed = "0 Mbps",
             WifiUploadSpeed = "0 Mbps",
             Type = requestedType ?? DeviceType.Android,
@@ -212,6 +215,9 @@ public class DevicesWriteService : IDevicesWriteService
         device.BatteryLevel = Math.Clamp(request.BatteryLevel, 0, 100);
         device.CpuLoadPercent = request.CpuLoadPercent.HasValue
             ? Math.Clamp(request.CpuLoadPercent.Value, 0, 100)
+            : null;
+        device.MemoryLoadPercent = request.MemoryLoadPercent.HasValue
+            ? Math.Clamp(request.MemoryLoadPercent.Value, 0, 100)
             : null;
         device.IsOnline = request.IsOnline;
         device.IsAvailable = request.IsAvailable;
@@ -278,6 +284,7 @@ public class DevicesWriteService : IDevicesWriteService
             dbModel.WifiUploadSpeed,
             dbModel.WifiDownloadSpeed,
             dbModel.CpuLoadPercent,
+            dbModel.MemoryLoadPercent,
             dbModel.IsAvailable,
             dbModel.LastSeen,
             dbModel.PublicKey,
