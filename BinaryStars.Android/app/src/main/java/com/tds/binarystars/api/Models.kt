@@ -211,27 +211,53 @@ data class DeviceNotificationMessage(
 )
 
 data class NotificationsPullResponse(
-    val scheduled: List<DeviceNotificationMessage>,
-    val instant: List<DeviceNotificationMessage>
+    val hasPendingNotificationSync: Boolean,
+    val notifications: List<DeviceNotificationMessage>,
+    val schedules: List<NotificationScheduleDto>
 )
 
-data class NotificationScheduleResponse(
-    val scheduledCount: Int,
-    val instantCount: Int,
-    val synced: Boolean
+data class NotificationScheduleDto(
+    val id: String,
+    val sourceDeviceId: String,
+    val targetDeviceId: String,
+    val title: String,
+    val body: String,
+    val isEnabled: Boolean,
+    val scheduledForUtc: String?,
+    val repeatMinutes: Int?,
+    val createdAt: String,
+    val updatedAt: String
 )
 
 data class SendNotificationRequestDto(
     val senderDeviceId: String,
     val targetDeviceId: String,
     val title: String,
-    val body: String,
-    val scheduleAt: String? = null
+    val body: String
 )
 
 data class NotificationSyncAckRequestDto(
-    val senderDeviceId: String,
-    val ackMessageIds: List<String>
+    val deviceId: String
+)
+
+data class CreateNotificationScheduleRequestDto(
+    val sourceDeviceId: String,
+    val targetDeviceId: String,
+    val title: String,
+    val body: String,
+    val isEnabled: Boolean,
+    val scheduledForUtc: String?,
+    val repeatMinutes: Int?
+)
+
+data class UpdateNotificationScheduleRequestDto(
+    val sourceDeviceId: String,
+    val targetDeviceId: String,
+    val title: String,
+    val body: String,
+    val isEnabled: Boolean,
+    val scheduledForUtc: String?,
+    val repeatMinutes: Int?
 )
 
 /** Request payload for clearing one conversation. */

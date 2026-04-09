@@ -64,6 +64,25 @@ interface ApiService {
     @POST("notifications/send")
     suspend fun sendNotification(@Body request: SendNotificationRequestDto): Response<DeviceNotificationMessage>
 
+    /** List notification schedules for a target device. */
+    @GET("notifications/schedules")
+    suspend fun getNotificationSchedules(@Query("deviceId") deviceId: String): Response<List<NotificationScheduleDto>>
+
+    /** Create a notification schedule. */
+    @POST("notifications/schedules")
+    suspend fun createNotificationSchedule(@Body request: CreateNotificationScheduleRequestDto): Response<NotificationScheduleDto>
+
+    /** Update a notification schedule. */
+    @PUT("notifications/schedules/{scheduleId}")
+    suspend fun updateNotificationSchedule(
+        @Path("scheduleId") scheduleId: String,
+        @Body request: UpdateNotificationScheduleRequestDto
+    ): Response<NotificationScheduleDto>
+
+    /** Delete a notification schedule. */
+    @DELETE("notifications/schedules/{scheduleId}")
+    suspend fun deleteNotificationSchedule(@Path("scheduleId") scheduleId: String): Response<Void>
+
     /** Send a remote action command to a target device. */
     @POST("actions/send")
     suspend fun sendAction(@Body request: SendActionRequestDto): Response<DeviceActionCommandDto>
