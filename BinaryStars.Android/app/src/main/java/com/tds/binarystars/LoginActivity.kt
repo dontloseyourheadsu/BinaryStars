@@ -31,6 +31,8 @@ import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.ExternalAuthRequest
 import com.tds.binarystars.api.LoginRequest
+import com.tds.binarystars.background.BackgroundRequirementsActivity
+import com.tds.binarystars.background.BackgroundRequirementsManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Job
@@ -91,6 +93,12 @@ class LoginActivity : AppCompatActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (!BackgroundRequirementsManager.areMandatoryRequirementsMet(this)) {
+            startActivity(Intent(this, BackgroundRequirementsActivity::class.java))
+            finish()
+            return
+        }
 
         // Auto-login whenever a persisted session exists.
         // API calls will refresh/replace the token as responses arrive.
