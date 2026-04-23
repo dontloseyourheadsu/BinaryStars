@@ -32,9 +32,12 @@ sudo apt install wmctrl copyq bluetooth-sendto network-manager geoclue-2.0 libdb
 - **Standard Mode**: Full access to UI, messaging, and most remote actions.
 - **Sudo Mode (Elevated)**: Required for certain system-level actions if polkit rules are restrictive. Note: Native location (GeoClue) may be blocked in full-app sudo mode due to desktop session permissions.
 
-## Bluetooth Server Mode
+## Bluetooth Support
 
-The Linux app acts as an RFCOMM server to allow Android devices to connect for P2P Chat and File Transfers.
+The Linux app supports **client-side Bluetooth sending** to Android targets.
+
+- **Sender Mode**: Can discover nearby devices and send files via `bluetooth-sendto`.
+- **Receiver Mode**: Currently not supported in the Linux app runtime. Use Android as the primary P2P host.
 
 ### Configuration (BlueZ)
 

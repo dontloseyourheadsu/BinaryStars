@@ -31,7 +31,7 @@ BinaryStars utilizes multiple communication protocols to balance reliability, re
 | **Real-time Messaging** | Fallback | **Primary** | Queue/Persistence | - |
 | **Remote Actions** | Bridge | **Primary** | - | - |
 | **Live Location Updates** | - | **Primary** | - | - |
-| **File Transfers** | Metadata/Bridge | - | **Packet Stream** | **Android, Linux, Pi** |
+| **File Transfers** | Metadata/Bridge | - | **Packet Stream** | **Android, Linux(S), Pi(S)** |
 | **Notifications** | Scheduling/Sync | - | **Queue/Push** | - |
 
 ### 2. Communication Flow
@@ -68,8 +68,7 @@ flowchart TD
     Linux -- "WS (Real-time Messaging, Actions)" <--> WS
 
     Android -- "RFCOMM (P2P Chat/File)" <--> Android
-    Android -- "RFCOMM (P2P Chat/File)" <--> Linux
-    Linux -- "RFCOMM (P2P Chat/File)" <--> Linux
+    Linux -- "RFCOMM (P2P File)" --> Android
 
     %% Internal API logic
 
@@ -141,17 +140,20 @@ sequenceDiagram
 
 ## Bluetooth P2P Transfers & Chat
 
-BinaryStars supports direct Bluetooth communication between any combination of supported devices (Android, Linux, Raspberry Pi) using RFCOMM.
+BinaryStars supports direct Bluetooth communication using RFCOMM.
+
+- **Android**: Full P2P support. Acts as both Sender and Receiver (Server) for chat and files.
+- **Linux / Raspberry Pi**: Client-only support. Can discover nearby devices and **send** files to Android targets using `bluetooth-sendto`.
 
 ```mermaid
 sequenceDiagram
-    participant S as Sender (A or L)
-    participant T as Receiver (A or L)
+    participant S as Sender (Android/Linux)
+    participant R as Android Receiver
     S->>S: Search for nearby devices
-    S->>T: Connect via RFCOMM (Channel 1=Chat, 2=Transfer)
-    Note over S,T: Direct P2P Stream (JSON Frames)
-    S->>T: Sync Message or File Bytes
-    T-->>S: Ack
+    S->>R: Connect via RFCOMM
+    Note over S,R: Direct P2P Stream
+    S->>R: Send Encrypted File
+    R-->>S: Ack
 ```
 
 ### Linux Configuration (BlueZ)
