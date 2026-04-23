@@ -1,261 +1,89 @@
 # BinaryStars.Linux (Tauri)
 
-BinaryStars Linux reproduces the Android app feature set with a responsive desktop/tablet UI:
+BinaryStars Linux is a desktop client built with **React**, **TypeScript**, and **Tauri v2**. It reproduces the Android app feature set with a responsive desktop/tablet UI and adds deep Linux system integration.
 
-- Devices (link/unlink, online/offline status)
-- File transfers (send/list/download/reject)
-- Notes (create/edit/delete, markdown preview)
-- Messaging (chat list + device chat, websocket + REST fallback)
-- Notifications (send now, schedule, sync, local history)
-- Map (device location history + background location posting)
-- Actions (Linux target remote commands: lock, shutdown, reboot, open/close/list apps)
-- Device details clipboard history (for online Linux targets)
-- Settings (profile, connected devices, dark mode, sign out)
+## Feature Coverage
 
-Clipboard history notes:
+- **Devices**: Link/unlink, online/offline status, and detailed telemetry (CPU, Memory, Battery).
+- **File Transfers**: Send/list/download/reject. Supports clearing history by scope.
+- **Notes**: Create/edit/delete with Markdown preview support.
+- **Messaging**: Chat list and direct messaging with real-time WebSocket updates and REST fallback.
+- **Notifications**: Send, schedule, and sync acknowledgement. Native desktop notifications via D-Bus.
+- **Map**: Device location history and background location posting using **GeoClue2**.
+- **Remote Actions**: (Targeting this Linux device)
+  - Lock Screen (`loginctl`, `xdg-screensaver`)
+  - Shutdown / Reboot (`systemctl`)
+  - List/Launch Installed Apps (`.desktop` parsing + `gio`)
+  - List/Close Running Apps (`sysinfo` + `wmctrl`)
+- **Clipboard History**: Fetch and sync clipboard history (requires `copyq` or `cliphist`).
+- **Settings**: Profile management, theme modes (Light/Dark/System), and background location toggles.
 
-- Linux targets: supported when online through remote action results.
-- Android targets: not supported due Android clipboard access restrictions.
+## System Dependencies
 
-## Toolchain (Latest Verified)
+To enable all native features, ensure the following tools are installed on your Linux system:
 
-These versions were verified from npm/crates registries:
+```bash
+# Ubuntu/Debian/Raspberry Pi OS
+sudo apt install wmctrl copyq bluetooth-sendto network-manager geoclue-2.0 libdbus-1-dev
+```
 
-- `@tauri-apps/cli` `2.10.0`
-- `@tauri-apps/api` `2.10.1`
-- `tauri` crate `2.10.2`
-- `@tauri-apps/plugin-opener` `2.5.3`
+## Runtime Modes
 
-## Prerequisites (Linux)
+- **Standard Mode**: Full access to UI, messaging, and most remote actions.
+- **Sudo Mode (Elevated)**: Required for certain system-level actions if polkit rules are restrictive. Note: Native location (GeoClue) may be blocked in full-app sudo mode due to desktop session permissions.
 
-Install Tauri Linux prerequisites first:
+## Bluetooth Server Mode
 
-- `webkit2gtk`
-- Rust toolchain
-- Node.js 20+
+The Linux app acts as an RFCOMM server to allow Android devices to connect for P2P Chat and File Transfers.
 
-Official prerequisites guide:
+### Configuration (BlueZ)
 
-- https://tauri.app/start/prerequisites/
+1.  Enable compatibility mode in `/lib/systemd/system/bluetooth.service`:
+    ```bash
+    ExecStart=/usr/lib/bluetooth/bluetoothd --compat
+    ```
+2.  Restart: `sudo systemctl daemon-reload && sudo systemctl restart bluetooth`
+3.  Permissions: `sudo usermod -aG lp $USER`
+
+## Remote Action Flow
+
+```mermaid
+sequenceDiagram
+    participant A as Android Client
+    participant API as BinaryStars API
+    participant L as Linux App (Rust)
+    participant OS as Linux OS
+
+    A->>API: POST /api/actions/command
+    API-->>L: WebSocket: action_command
+    L->>OS: Execute (e.g., systemctl poweroff)
+    OS-->>L: Success/Failure
+    L->>API: POST /api/actions/results
+    API-->>A: WebSocket: action_result
+```
 
 ## Local Development
 
-From `BinaryStars.Linux`:
+### Prerequisites
+- Node.js (v18+)
+- Rust (latest stable)
+- System dependencies (see above)
 
+### Commands
 ```bash
+# Install JS dependencies
 npm install
+
+# Run in development mode
 npm run tauri dev
+
+# Build release bundle
+npm run tauri build
 ```
 
-For frontend-only development:
-
-```bash
-npm run dev
-```
-
-## Privileged Linux Actions (Shutdown/Reboot)
-
-BinaryStars no longer requires full-app sudo mode. Run the app normally and authorize privileged actions (shutdown/reboot) on demand through PolicyKit.
-
-### Important
-
-- `npm run tauri dev` and release mode do not share login/session storage.
-- Sign in once in release mode for release usage.
-- Full-app root launch is deprecated because it uses a different profile/session and can break WebKit rendering.
-
-### Build release binary
-
-From `BinaryStars.Linux`:
-
-```bash
-npm run tauri:build:local
-```
-
-Release binary path:
-
-- `BinaryStars.Linux/src-tauri/target/release/binarystarslinux`
-
-### Legacy elevated helper
-
-## Recommended workflow (simple)
-
-From `BinaryStars.Linux`:
-
-1. Build release app:
-
-```bash
-npm run tauri:build:local
-```
-
-2. Run normal release app and sign in:
-
-```bash
-./scripts/run-release.sh
-```
-
-3. Use Actions tab normally. Shutdown/reboot will prompt for authorization only when needed.
-
-## Logs (Dev + Release)
-
-BinaryStars Linux writes app logs to a fixed path on Linux in both modes:
-
-- `/tmp/binarystarslinux/logs/binarystarslinux.log`
-
-This includes:
-
-- UI events (tab switches, interactions, websocket send/receive, action lifecycle)
-- Rust backend events (startup, local action execution, notification calls)
-
-Security and stability notes:
-
-- Log directory is created with owner-only permissions.
-- Log file is created with owner-only permissions.
-- The same path is used for both `npm run tauri dev` and release run script.
-
-### View logs live
-
-```bash
-tail -f /tmp/binarystarslinux/logs/binarystarslinux.log
-```
-
-### View recent lines
-
-```bash
-tail -n 300 /tmp/binarystarslinux/logs/binarystarslinux.log
-```
-
-### Search by category/level
-
-```bash
-rg "level=error|source=ui:actions|source=rust:actions|source=ui:ws|source=ui:ws.actions" /tmp/binarystarslinux/logs/binarystarslinux.log
-```
-
-## API Configuration
-
-By default, the Linux app calls:
-
-- `http://localhost:5004/api`
-
-To change base URL, set:
-
-- `VITE_API_BASE_URL`
-
-For OAuth desktop setup (used by PKCE/browser flow), set:
-
-- `VITE_GOOGLE_CLIENT_ID`
-- `VITE_GOOGLE_REDIRECT_URI` (recommended loopback callback)
-- `VITE_GOOGLE_CLIENT_SECRET` (optional; only needed if your Google OAuth client requires it during token exchange)
-- `VITE_MICROSOFT_CLIENT_ID`
-- `VITE_MICROSOFT_TENANT_ID` (use `common` or a specific tenant id)
-- `VITE_MICROSOFT_REDIRECT_URI` (recommended loopback callback)
-- `VITE_MICROSOFT_SCOPE` (optional; defaults to `api://<MICROSOFT_CLIENT_ID>/access_as_user openid profile email offline_access`)
-
-Example:
-
-```bash
-VITE_API_BASE_URL=https://your-api-host/api npm run tauri dev
-```
-
-Example `.env.local`:
-
-```bash
-VITE_API_BASE_URL=http://localhost:5004/api
-VITE_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
-VITE_GOOGLE_REDIRECT_URI=http://127.0.0.1:53123/callback
-VITE_GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
-VITE_MICROSOFT_CLIENT_ID=YOUR_MICROSOFT_CLIENT_ID
-VITE_MICROSOFT_TENANT_ID=common
-VITE_MICROSOFT_REDIRECT_URI=http://127.0.0.1:53124/callback
-VITE_MICROSOFT_SCOPE=api://YOUR_MICROSOFT_CLIENT_ID/access_as_user openid profile email offline_access
-```
-
-Important:
-
-- Prefer OAuth public clients + PKCE (no client secret) for desktop apps.
-- If your Google credential type still requires `client_secret`, set `VITE_GOOGLE_CLIENT_SECRET` for local/dev use and keep it out of git.
-
-## OAuth Setup (Google + Microsoft for Linux/Tauri)
-
-BinaryStars Linux supports the same providers as Android. The current Linux client uses the API `/auth/login/external` exchange and expects you to provide a provider token.
-BinaryStars Linux now supports desktop OAuth PKCE directly from the app for Google and Microsoft (open browser → complete provider sign-in → callback captured locally → token sent to API).
-
-### 1) Google OAuth Setup
-
-1. Open Google Cloud Console → **APIs & Services** → **Credentials**.
-2. Create OAuth client credentials for your Linux desktop flow.
-3. Configure redirect URI(s) for desktop browser sign-in (loopback is recommended for desktop apps, for example `http://127.0.0.1:53123/callback`).
-4. Copy your Google client ID.
-
-### 2) Microsoft OAuth Setup (Azure / Entra ID)
-
-1. Open Azure Portal → **Microsoft Entra ID** → **App registrations**.
-2. Select/create your app registration.
-3. In **Authentication**, add a desktop/public client redirect URI.
-4. In **Expose an API**, ensure your backend scope exists:
-   - `api://c727b034-bd56-4e8a-a749-5ea51a9a1c73/access_as_user`
-5. Grant required API permissions/consent for your test tenant.
-
-### 3) Using OAuth in the Linux App
-
-The login page includes 3 sign-in methods:
-
-- Email/Password (`/api/auth/login`)
-- Continue with Google (`/api/auth/login/external`)
-- Continue with Microsoft (`/api/auth/login/external`)
-
-For external providers, the app starts PKCE, opens the system browser, receives the loopback callback, exchanges the code for token, and then authenticates against your API.
-
-If the external account does not exist yet, the app prompts for username and completes first-time registration through `/api/auth/login/external`.
-
-The login page also includes:
-
-- `Continue with Google`
-- `Continue with Microsoft`
-
-## Detailed OAuth (PKCE) desktop flow
-
-The short prompt-based flow works for quick testing, but for a polished desktop experience you should implement the PKCE (Proof Key for Code Exchange) desktop flow and capture the provider authorization code automatically. High-level steps:
-
-1. Build the authorization URL (example for Google):
-   - `https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_CLIENT_ID&response_type=code&scope=openid%20email%20profile&redirect_uri=http://127.0.0.1:PORT/callback&code_challenge=CODE_CHALLENGE&code_challenge_method=S256&access_type=offline`
-
-2. Generate PKCE values in the app:
-   - Create a random `code_verifier` (43-128 characters), then compute `code_challenge = base64url(SHA256(code_verifier))`.
-
-3. Open the system browser to the authorization URL.
-   - In Tauri you can use the opener plugin or `@tauri-apps/api/shell` to open the URL in the user's default browser.
-
-4. Capture the redirect with a loopback HTTP listener or a custom URI scheme.
-   - Loopback (recommended): start a tiny local HTTP server (listening on `127.0.0.1:PORT`) and register the redirect URI with the provider.
-   - Custom URI scheme: register `myapp://auth/callback` as a redirect for packaged apps; this requires platform-specific registration during packaging.
-
-5. Exchange the authorization `code` for a provider access token using the PKCE `code_verifier`:
-   - POST to the provider token endpoint with `grant_type=authorization_code`, `code`, `redirect_uri`, `client_id`, and `code_verifier`.
-
-6. Send the provider token to your backend's exchange endpoint:
-   - `POST /api/auth/login/external` with JSON body `{ provider: "google"|"microsoft", token: "<provider_access_token_or_id_token>" }`.
-
-7. Backend returns the BinaryStars JWT; store it in the app (the existing client-side `tokenStore` handles this).
-
-Notes & Tauri specifics:
-
-- For development you can use an ephemeral loopback port (e.g., 53123). The provider must include that loopback URI in the OAuth client configuration.
-- When packaging the app, update the redirect URI(s) accordingly (loopback URIs still work for desktop apps; custom URI schemes require OS registration).
-- If you want a fully native UX, open the auth URL using the system browser and capture the provider redirect in the background server; do not embed the provider login in a webview unless explicitly allowed by the provider.
-- You can automate the flow in the frontend by spawning a tiny HTTP listener (e.g., using `node:http` during development or a small Rust sidecar in Tauri) and then exchanging the code server-side.
-
-Example resources and libraries:
-
-- PKCE helper: `@openid/appauth` or implement PKCE with `crypto.subtle` (Web) / Rust `ring` (native).
-- Tauri opener: `@tauri-apps/plugin-opener` or `@tauri-apps/api/shell` to open URLs in default browser.
-
-Security reminders:
-
-- Never embed client secrets in the desktop app. Use public/OAuth client flows (PKCE) without confidential secrets.
-- Validate tokens and use refresh / revocation flows as appropriate on the backend.
-
-## Notes
-
-- Do not commit real OAuth secrets.
-- Use secure environment variables for production builds.
-- If packaging desktop binaries, verify OAuth redirect URIs for packaged app behavior.
+## Technical Notes
+
+- **Logs**: Native and UI logs are stored in `/tmp/binarystarslinux/logs/binarystarslinux.log`.
+- **Location**: Uses the `org.freedesktop.GeoClue2` D-Bus interface.
+- **App Discovery**: Parses `.desktop` files from `/usr/share/applications` and `~/.local/share/applications`.
+- **Clipboard**: Prioritizes `copyq`, falls back to `cliphist`, then `wl-paste`/`xclip` for the current item.

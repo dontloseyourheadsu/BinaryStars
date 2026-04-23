@@ -17,50 +17,104 @@ Current feature set also includes:
 - Kafka TLS/SASL setup: [kafka/README.md](kafka/README.md)
 - Local infrastructure: [docker-compose.yaml](docker-compose.yaml)
 
-## Architecture Overview
+## System Connectivity & Features
 
-BinaryStars is centered on the API service, which handles auth, device
-management, notes, notifications, messaging, remote actions, and file transfer
-coordination. Kafka streams file payloads and queued messages, while PostgreSQL
-stores durable state. Hangfire runs background cleanup and transfer jobs.
+BinaryStars utilizes multiple communication protocols to balance reliability, real-time performance, and peer-to-peer flexibility.
+
+### 1. Protocol Comparison & Feature Map
+
+| Feature | REST API (HTTPS) | WebSocket (WS) | Kafka (Internal) | Bluetooth (P2P) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Authentication & Profile** | Primary | - | - | - |
+| **Device Registration** | Primary | - | - | - |
+| **Notes & History** | Primary | - | - | - |
+| **Real-time Messaging** | Fallback | **Primary** | Queue/Persistence | - |
+| **Remote Actions** | Bridge | **Primary** | - | - |
+| **Live Location Updates** | - | **Primary** | - | - |
+| **File Transfers** | Metadata/Bridge | - | **Packet Stream** | **Android, Linux, Pi** |
+| **Notifications** | Scheduling/Sync | - | **Queue/Push** | - |
+
+### 2. Communication Flow
 
 ```mermaid
-flowchart LR
-	subgraph Clients
-		Android["Android App"]
-		Other["Other Clients"]
-	end
+flowchart TD
+    subgraph Clients
+        Android[Android App]
+        Linux[Linux Tauri App]
+    end
 
-	subgraph API["BinaryStars API (.NET)"]
-		Rest["REST Controllers"]
-		Ws["WebSocket Messaging"]
-		Jobs["Hangfire Jobs"]
-	end
+    subgraph API_Layer [BinaryStars API .NET]
+        REST[REST Controllers]
+        WS[WebSocket Handler]
+    end
 
-	subgraph Data["Data Stores"]
-		Postgres[("PostgreSQL")]
-		Hangfire[("Hangfire DB")]
-	end
+    subgraph Messaging_Backplane [Kafka Topics]
+        KT_Msg[binarystars.messages]
+        KT_Trans[binarystars.transfers]
+        KT_Notif[binarystars.notifications]
+        KT_Dev[binarystars.device-removed]
+    end
 
-	subgraph Streaming
-		Kafka[("Kafka Topics")]
-	end
+    subgraph Storage
+        DB[(PostgreSQL)]
+        HF[(Hangfire DB)]
+    end
 
-	subgraph Observability
-		Loki[("Loki")]
-		Grafana["Grafana"]
-	end
+    %% Communication paths
+    Android -- "HTTPS (Auth, CRUD)" --> REST
+    Linux -- "HTTPS (Auth, CRUD)" --> REST
 
-	Android -->|"HTTPS"| Rest
-	Other -->|"HTTPS"| Rest
-	Android -->|"WebSocket"| Ws
-	Rest --> Postgres
-	Jobs --> Hangfire
-	Rest --> Kafka
-	Jobs --> Kafka
-	Ws --> Kafka
-	API --> Loki
-	Loki --> Grafana
+    Android -- "WS (Real-time Messaging, Actions)" <--> WS
+    Linux -- "WS (Real-time Messaging, Actions)" <--> WS
+
+    Android -- "RFCOMM (P2P Chat/File)" <--> Android
+    Android -- "RFCOMM (P2P Chat/File)" <--> Linux
+    Linux -- "RFCOMM (P2P Chat/File)" <--> Linux
+
+    %% Internal API logic
+
+    REST --> DB
+    REST --> KT_Trans
+    WS <--> KT_Msg
+    WS <--> KT_Dev
+    REST --> KT_Notif
+    
+    %% Background Jobs
+    Jobs[Hangfire Jobs] --> HF
+    Jobs --> KT_Trans
+```
+
+### 3. Kafka Integration Details
+
+Kafka serves as the high-throughput, durable backplane for the system, specifically handling:
+
+- **File Streaming:** Files are split into packets and published to `binarystars.transfers`. This allows for large transfers without blocking API threads.
+- **Message Queuing:** If a target device is offline, messages are queued in `binarystars.messages` and delivered immediately upon WebSocket reconnection.
+- **Device Lifecycle:** `binarystars.device-removed` events ensure all active sessions are notified when a device is unlinked.
+- **Notifications:** Queued in `binarystars.notifications` for reliable delivery to mobile clients.
+
+```mermaid
+sequenceDiagram
+    participant S as Sender
+    participant A as API
+    participant K as Kafka
+    participant R as Receiver
+
+    Note over S,R: Kafka Offline Delivery Flow
+    S->>A: Send Message (POST /api/messaging/send)
+    A->>A: Check Receiver WebSocket
+    alt Receiver is Offline
+        A->>K: Publish to binarystars.messages
+    else Receiver is Online
+        A-->>R: Deliver via WebSocket
+    end
+    
+    Note over R: Receiver Connects
+    R->>A: Connect (WS /ws/messaging)
+    A->>K: Consume Pending from binarystars.messages
+    K-->>A: [Message List]
+    A-->>R: Deliver via WebSocket
+    A->>K: Tombstone/Delete delivered messages
 ```
 
 ## File Transfer Flow
@@ -85,13 +139,42 @@ sequenceDiagram
 	API-->>Target: File stream
 ```
 
-## Bluetooth File Transfers (Android)
+## Bluetooth P2P Transfers & Chat
 
-BinaryStars supports direct Bluetooth file transfers between Android devices as
-an alternative to the API/Kafka path. When the target device is discovered and
-in range, the file transfer list shows a Bluetooth icon and the send dialog
-offers a Bluetooth option. Transfers use RFCOMM and the same encryption envelope
-as the API path, with resume and cancel controls for interrupted transfers.
+BinaryStars supports direct Bluetooth communication between any combination of supported devices (Android, Linux, Raspberry Pi) using RFCOMM.
+
+```mermaid
+sequenceDiagram
+    participant S as Sender (A or L)
+    participant T as Receiver (A or L)
+    S->>S: Search for nearby devices
+    S->>T: Connect via RFCOMM (Channel 1=Chat, 2=Transfer)
+    Note over S,T: Direct P2P Stream (JSON Frames)
+    S->>T: Sync Message or File Bytes
+    T-->>S: Ack
+```
+
+### Linux Configuration (BlueZ)
+
+To enable Bluetooth server functionality on Linux, your Bluetooth daemon must run in compatibility mode for SDP registration.
+
+1.  Edit `/lib/systemd/system/bluetooth.service`:
+    ```bash
+    ExecStart=/usr/lib/bluetooth/bluetoothd --compat
+    ```
+2.  Restart service:
+    ```bash
+    sudo systemctl daemon-reload && sudo systemctl restart bluetooth
+    ```
+3.  Add your user to the `lp` group for RFCOMM socket access:
+    ```bash
+    sudo usermod -aG lp $USER
+    ```
+
+### Protocol Implementation
+
+- **Chat Service:** RFCOMM Channel 1 (SPP). Handles JSON-framed messages.
+- **Transfer Service:** RFCOMM Channel 2. Handles encrypted file byte streams with resume support.
 
 ## Secrets And Configuration
 
@@ -108,17 +191,221 @@ Start the infrastructure stack (PostgreSQL, Kafka, Grafana/Loki):
 docker compose up -d
 ```
 
-Start/rebuild API container:
+Start/rebuild all services:
 
 ```bash
-docker compose up -d --build binarystars.api
+docker compose up -d --build
+```
+
+Start/rebuild only API container:
+
+```bash
+docker compose up -d --build binarystars-api
 ```
 
 Check API logs:
 
 ```bash
-docker compose logs -f binarystars.api
+docker compose logs -f binarystars-api
 ```
+
+## Deploying to Raspberry Pi
+
+You can run the full BinaryStars infrastructure on a Raspberry Pi to serve as a 24/7 home server for your devices on the same network.
+
+### 1. Prerequisites
+
+- Raspberry Pi 4 or 5 (4GB+ RAM recommended).
+- Raspberry Pi OS Lite (64-bit) or any ARM64 Linux distribution.
+- Docker and Docker Compose installed.
+
+Install Docker on Raspberry Pi:
+```bash
+curl -sSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and log back in for group changes to take effect
+```
+
+### 2. Setup
+
+Clone the repository and generate the required Kafka certificates:
+
+```bash
+git clone https://github.com/tds/BinaryStars.git
+cd BinaryStars
+# Follow steps in kafka/README.md to generate certificates
+```
+
+### 3. Run
+
+Start the full stack using Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+### 4. Client Connection
+
+Find your Pi's IP address:
+```bash
+hostname -I
+```
+
+- **Android:** Use the helper script with the Pi's IP:
+  ```bash
+  cd BinaryStars.Android
+  ./scripts/install-device-debug.sh --host <PI_IP>
+  ```
+- **Linux:** Set the environment variable before running:
+  ```bash
+  VITE_API_BASE_URL=http://<PI_IP>:5004/api npm run tauri dev
+  ```
+
+## Full Integration Debug Commands
+
+Use this flow when testing Linux + Android + API together.
+
+### 1. Docker build and run
+
+From repository root:
+
+```bash
+docker compose up -d --build
+```
+
+Check API/container health:
+
+```bash
+docker compose ps
+docker compose logs -f binarystars-api
+```
+
+### 2. Build Linux release
+
+From `BinaryStars.Linux`:
+
+```bash
+npm install
+npm run tauri:build:local
+```
+
+### 3. Run Linux app (release)
+
+From `BinaryStars.Linux`:
+
+```bash
+./scripts/run-release.sh
+```
+
+### 4. View Linux app logs (with and without filters)
+
+Linux app log file:
+
+- `/tmp/binarystarslinux/logs/binarystarslinux.log`
+
+Live logs:
+
+```bash
+tail -f /tmp/binarystarslinux/logs/binarystarslinux.log
+```
+
+Filtered logs (errors + key sources):
+
+```bash
+rg "<LINUX_LOG_FILTER_REGEX>" /tmp/binarystarslinux/logs/binarystarslinux.log
+```
+
+Live filtered stream:
+
+```bash
+tail -f /tmp/binarystarslinux/logs/binarystarslinux.log | rg --line-buffered "<LINUX_LOG_FILTER_REGEX>"
+```
+
+Possible values for `<LINUX_LOG_FILTER_REGEX>`:
+
+- `level=error`
+- `level=warn`
+- `source=ui:actions`
+- `source=rust:actions`
+- `source=ui:ws`
+- `source=ui:ws.actions`
+- Combined example: `level=error|source=ui:actions|source=rust:actions`
+
+### 5. Install Android app on a connected physical device with reachable network config
+
+Important: the helper script auto-detects your host IP and passes it to Gradle (`-PapiHost`), which is what makes the device reach your machine over hotspot/LAN.
+
+From `BinaryStars.Android`:
+
+```bash
+./scripts/install-device-debug.sh
+```
+
+Optional explicit host/port:
+
+```bash
+./scripts/install-device-debug.sh --host <HOST_IP> --port 5004
+```
+
+Manual equivalent command:
+
+```bash
+./gradlew :app:installDeviceDebug -PapiHost=<HOST_IP> -PapiPort=5004
+```
+
+Quick host IP lookup (Linux):
+
+```bash
+ip route get 1.1.1.1
+```
+
+You can also verify device connection before install:
+
+```bash
+adb devices
+```
+
+### 6. View logs from connected Android device (with filters)
+
+Full app logs from connected device:
+
+```bash
+adb logcat --pid "$(adb shell pidof -s com.tds.binarystars | tr -d '\r')"
+```
+
+Filtered logs (app tags + networking/errors):
+
+```bash
+adb logcat --pid "$(adb shell pidof -s com.tds.binarystars | tr -d '\r')" | rg --line-buffered -i "<ANDROID_LOG_FILTER_REGEX>"
+```
+
+Tag-only filter spec (quiet output):
+
+```bash
+adb logcat <ANDROID_LOGCAT_TAG_SPEC> *:S
+```
+
+Possible values for `<ANDROID_LOG_FILTER_REGEX>`:
+
+- `BinaryStars`
+- `BinaryStarsWS`
+- `BinaryStarsActions`
+- `BinaryStarsNotifications`
+- `OkHttp`
+- `WebSocket`
+- `Retrofit`
+- `Exception`
+- `AndroidRuntime`
+- Combined example: `BinaryStarsWS|BinaryStarsActions|Exception|AndroidRuntime`
+
+Possible values for `<ANDROID_LOGCAT_TAG_SPEC>`:
+
+- `BinaryStarsWS:D`
+- `BinaryStarsActions:D`
+- `BinaryStarsNotifications:D`
+- `OkHttp:D`
+- `MessagingSocketManager:D`
+- Combined example: `BinaryStarsWS:D BinaryStarsActions:D BinaryStarsNotifications:D`
 
 ### Android Networking With Docker Compose
 
