@@ -5,7 +5,7 @@
     android:id="@+id/drawer_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_light"
+    android:background="@color/carbon_bg_app"
     tools:context=".MainActivity">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -27,7 +27,7 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:orientation="vertical"
-        android:background="@color/white"
+        android:background="@color/carbon_bg_panel"
         android:padding="16dp">
 
         <LinearLayout
@@ -45,12 +45,13 @@
                 android:layout_weight="1"
                 android:text="Devices"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_computer"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Devices" />
 
         </LinearLayout>
@@ -70,12 +71,13 @@
                 android:layout_weight="1"
                 android:text="Files"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_folder"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Files" />
 
         </LinearLayout>
@@ -95,12 +97,13 @@
                 android:layout_weight="1"
                 android:text="Notes"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_note"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Notes" />
 
         </LinearLayout>
@@ -120,12 +123,13 @@
                 android:layout_weight="1"
                 android:text="Messaging"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_message"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Messaging" />
 
         </LinearLayout>
@@ -145,12 +149,13 @@
                 android:layout_weight="1"
                 android:text="Map"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_map"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Map" />
 
         </LinearLayout>
@@ -170,12 +175,13 @@
                 android:layout_weight="1"
                 android:text="Actions"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_settings"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Actions" />
 
         </LinearLayout>
@@ -195,13 +201,14 @@
                 android:layout_weight="1"
                 android:text="Notifications"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <!-- We reuse an icon -->
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_note"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Notifications" />
 
         </LinearLayout>
@@ -221,12 +228,13 @@
                 android:layout_weight="1"
                 android:text="Settings"
                 android:textSize="16sp"
-                android:textColor="@color/black" />
+                android:textColor="@color/carbon_text_main" />
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_settings"
+                app:tint="@color/carbon_text_muted"
                 android:contentDescription="Settings" />
 
         </LinearLayout>
