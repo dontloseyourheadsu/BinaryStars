@@ -1,300 +1,63 @@
 # BinaryStars.Android
 
+BinaryStars Android is a native client built with **Kotlin** and **Jetpack**. It provides full access to device management, messaging, and real-time location sharing.
+
 ## Feature Coverage
 
-BinaryStars Android currently includes:
+- **Devices**: Link/unlink, telemetry sync, and availability toggles.
+- **Messaging**: Real-time chat via WebSockets with REST fallback. Supports offline queuing.
+- **File Transfers**: 
+  - **API Path**: Streaming uploads/downloads via Kafka.
+  - **Bluetooth Path**: Direct P2P transfers using RFCOMM (Android-to-Android or Android-to-Linux).
+- **Notes**: Full CRUD support for plaintext and Markdown notes.
+- **Map**: Live location tracking of self and other linked devices.
+- **Notifications**: Receive, schedule, and sync with the backend.
+- **Remote Actions**: Trigger actions (Lock, Shutdown, App Launch) on linked Linux targets.
 
-- Devices (link/unlink, full detail view, telemetry, availability toggle)
-- File transfers (create/upload/download/reject + Bluetooth transfer path)
-- Notes (create/edit/delete)
-- Messaging (chat list + direct chat, websocket + API fallback)
-- Map (history + live updates)
-- Notifications (send now, schedule, sync acknowledgement)
-- Remote actions for Linux targets (lock/shutdown/reboot/open/close/list apps)
+## Background Architecture
 
-Clipboard history notes:
+The app uses several background components to ensure data stays in sync even when the UI is closed:
 
-- Android can request clipboard history from online Linux targets.
-- Clipboard history from Android targets is not available due Android OS clipboard access restrictions.
+- **LiveLocationService**: A Foreground Service that posts the device's coordinates to the `/api/locations/live` endpoint every 15 seconds.
+- **LocationUpdateWorker**: A periodic WorkManager job that persists historical location points.
+- **DeviceSyncForegroundService**: Handles long-running data synchronization and ensures the device stays "Online" in the system.
 
-## Secrets And Local Configuration
-
-- Do not commit real OAuth client IDs or signing keys.
-- Update the Google and Microsoft client IDs in app/build.gradle.kts.
-- Keep auth_config_single_account.json and AndroidManifest.xml aligned with
-  your Microsoft redirect URI and signature hash.
-- The debug keystore lives under ~/.android/debug.keystore by default.
-
-## Running On A Physical Android Device (Hotspot/LAN)
-
-When running on a real phone, `10.0.2.2` does not point to your development machine.
-
-1. Start the API so it listens on your machine network interface (not only localhost):
-
-```bash
-ASPNETCORE_URLS="http://0.0.0.0:5004" dotnet run --project ../BinaryStars.Api
+```mermaid
+graph TD
+    UI[Activity/Fragment] -->|Start| LS[LiveLocationService]
+    UI -->|Schedule| LW[LocationUpdateWorker]
+    LS -->|POST /api/locations/live| API[BinaryStars API]
+    LW -->|POST /api/locations| API
 ```
 
-2. Find your machine IP on the hotspot/LAN (example: `192.168.43.120`).
-3. Build/run Android with that host:
+## Bluetooth P2P Support
 
-```bash
-./gradlew :app:installDebug -PapiHost=192.168.43.120 -PapiPort=5004
-```
+The Android app implements two RFCOMM-based services for peer-to-peer communication:
 
-Notes:
+1.  **Chat Service** (UUID: `a64f3f3b-5ad0-4b65-9b8f-585a45c7e9c4`):
+    - Uses JSON framing over Channel 1.
+    - Compatible with `BinaryStars.Linux`.
+2.  **Transfer Service** (UUID: `2b3d7e64-6d7b-4ad4-9d92-4b4c4b8d0d4c`):
+    - Handles large file byte streams with resume/restart support on Channel 2.
 
-- `apiHost` defaults to `10.0.2.2` for emulator.
-- `apiPort` defaults to `5004`.
-- The same host/port override is used for both REST and WebSocket messaging.
-- If your Linux firewall is enabled, allow inbound TCP on port `5004`.
+## Prerequisites & Setup
 
-## Install Commands (Emulator vs Physical Device)
+### Permissions (Android 14+)
+The app requires the following permissions for full functionality:
+- `POST_NOTIFICATIONS`
+- `BLUETOOTH_CONNECT` & `BLUETOOTH_SCAN`
+- `ACCESS_BACKGROUND_LOCATION` (Must be granted manually in settings)
+- `FOREGROUND_SERVICE_LOCATION` & `FOREGROUND_SERVICE_DATA_SYNC`
 
-Run from `BinaryStars.Android`:
+### External Auth
+- **Google Auth**: Uses `credentials` and `googleid` libraries. Client ID is configured in `build.gradle.kts`.
+- **Microsoft Auth**: Configured via `msal_config.json` in assets and `AndroidManifest.xml` (msauth scheme).
 
-### Emulator (default endpoint)
+## Local Development
 
-```bash
-./gradlew :app:installEmulatorDebug
-```
-
-This uses the emulator default endpoint `10.0.2.2:5004`.
-
-### Physical Android Device (phone/hotspot/LAN)
-
-```bash
-./gradlew :app:installDeviceDebug -PapiHost=192.168.43.120 -PapiPort=5004
-```
-
-Or use the helper script (auto-detects host IP):
-
-```bash
-./scripts/install-device-debug.sh
-```
-
-Optional explicit host/port:
-
-```bash
-./scripts/install-device-debug.sh --host 192.168.43.120 --port 5004
-```
-
-Notes:
-
-- `-PapiHost` is required for `installDeviceDebug`.
-- `-PapiPort` is optional (defaults to `5004`).
-- You can still use `:app:installDebug` directly; these tasks are convenience wrappers.
-
-## OAuth Setup Instructions
-
-This project supports authentication via Google and Microsoft. Follow the instructions below to configure the necessary Client IDs and keys in your environment.
-
-### 1. Google OAuth Setup
-
-You need to create **two** Client IDs in the Google Cloud Console for the same project. Although the Android app only explicitly uses the Web Client ID in the code, the Android Client ID is required to associate your app's debug signing key with the project.
-
-#### A. Configure the Android Client ID (Authorization)
-
-1.  Navigate to the [Google Cloud Console](https://console.cloud.google.com/).
-2.  Go to **APIs & Services** > **Credentials**.
-3.  Click **Create Credentials** -> **OAuth client ID**.
-4.  Select **Android** as the application type.
-5.  **Package name**: Enter `com.tds.binarystars`.
-6.  **SHA-1 certificate fingerprint**:
-    - Run the following command in the project root to get your debug keystore SHA-1:
-      ```bash
-      ./gradlew signingReport
-      ```
-    - Locate the `SHA1` hash under the `debug` variant configuration.
-7.  Click **Create**.
-    > **Note:** This Client ID is not used in the code directly but authorizes your specific app binary signed with your debug key.
-
-#### B. Configure the Web Client ID (Token Exchange)
-
-1.  In the same project, click **Create Credentials** -> **OAuth client ID**.
-2.  Select **Web application**.
-3.  Name it something recognizable (e.g., "Web Client for Backend").
-4.  Click **Create**.
-5.  **Copy the Client ID** (it ends in `.apps.googleusercontent.com`).
-
-#### C. Apply to Project
-
-1.  Open `app/build.gradle.kts`.
-2.  Update the `GOOGLE_WEB_CLIENT_ID` field in `defaultConfig`:
-    ```kotlin
-    buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"YOUR_WEB_CLIENT_ID.apps.googleusercontent.com\"")
+1.  Open the `BinaryStars.Android` folder in Android Studio.
+2.  Configure your API host in `local.properties` or via Gradle:
+    ```bash
+    ./gradlew installDeviceDebug -PapiHost=192.168.1.XX
     ```
-
-**Token flow:** The Android app retrieves a **Google ID token** using the Web Client ID and sends it to the API. The API validates it and returns a **BinaryStars API JWT**.
-
----
-
-### 2. Microsoft OAuth Setup (Azure AD)
-
-To enable Microsoft login, you must register the application in the Microsoft Entra admin center (Azure Portal) and configure the Android platform correctly using your signing key.
-
-#### A. Generate the Signature Hash
-
-Microsoft requires a **Base64-encoded SHA-1 hash** of your signing certificate. This is different from the hex string used by Google.
-
-Run the following command in your terminal (ensure you have `openssl` installed):
-
-```bash
-keytool -exportcert -alias AndroidDebugKey -keystore ~/.android/debug.keystore | openssl sha1 -binary | openssl base64
-```
-
-- **Password**: Default is `android`.
-- **Alias**: `AndroidDebugKey`.
-- **Keystore**: Update the path if your keystore is in a different location (e.g., project root or `~/.android/debug.keystore`).
-
-**Copy the output string.** It should look something like `AbCdEfG+H/I=`. This is your **Signature Hash**.
-
-#### B. Configure Application in Azure Portal
-
-1.  Go to the [Azure Portal](https://portal.azure.com/) and navigate to **Microsoft Entra ID** > **App registrations**.
-2.  Select your app (or create a new one).
-3.  Go to **Manage** > **Authentication**.
-4.  Click **Add a platform** and select **Android**.
-5.  **Package name**: Enter `com.tds.binarystars`.
-6.  **Signature hash**: Paste the Base64 string generated in Step A.
-7.  Click **Configure**.
-
-**Important: Redirect URI Configuration**
-Azure automatically generates a Redirect URI in the format `msauth://com.tds.binarystars/<SIGNATURE_HASH>`.
-
-- **The Issue**: Azure might URL-encode valid characters in your hash (e.g., `+` becomes `%2B`). The Android MSAL library and Manifest expect the **raw, unencoded** hash.
-- **The Fix**:
-  1.  Check the Redirect URI generated by Azure. If it contains `%` characters, it is URL-encoded.
-  2.  Add a **new** Redirect URI of type **Mobile and desktop applications**.
-  3.  Enter the URI manually using the **raw** hash: `msauth://com.tds.binarystars/YOUR_RAW_HASH_HERE` (e.g., `msauth://com.tds.binarystars/AbCdEfG+H/I=`).
-  4.  Ensure both files below use this **raw** hash.
-
-#### C. Expose the API and request its scope
-
-1.  In **App registrations** for your backend app, go to **Expose an API**.
-2.  Set the **Application ID URI** to `api://<YOUR_CLIENT_ID>`.
-3.  Add a scope named `access_as_user`.
-
-The Android app will request the scope `api://<YOUR_CLIENT_ID>/access_as_user` and send that access token to the API.
-
-#### D. Apply to Project Files
-
-You need to update three files with the Microsoft configuration values.
-
-1.  **`app/build.gradle.kts`**:
-    Update the Client ID and Tenant ID:
-
-    ```kotlin
-    buildConfigField("String", "MICROSOFT_CLIENT_ID", "\"YOUR_CLIENT_ID\"")
-    buildConfigField("String", "MICROSOFT_TENANT_ID", "\"YOUR_TENANT_ID\"")
-    ```
-
-2.  **`app/src/main/res/raw/auth_config_single_account.json`**:
-    Update `client_id` and the `redirect_uri` using your **raw** Signature Hash:
-
-    ```json
-    {
-      "client_id": "YOUR_CLIENT_ID",
-      "authorization_user_agent": "DEFAULT",
-      "redirect_uri": "msauth://com.tds.binarystars/YOUR_RAW_SIGNATURE_HASH",
-      "account_mode": "SINGLE",
-      "broker_redirect_uri_registered": false,
-      "authorities": [
-        {
-          "type": "AAD",
-          "audience": {
-            "type": "AzureADandPersonalMicrosoftAccount"
-          }
-        }
-      ]
-    }
-    ```
-
-3.  **`app/src/main/AndroidManifest.xml`**:
-    Find the `BrowserTabActivity` and update the `data` element path. The path must start with `/` followed by your **raw** Signature Hash:
-    ```xml
-    <data
-        android:scheme="msauth"
-        android:host="com.tds.binarystars"
-        android:path="/YOUR_RAW_SIGNATURE_HASH" />
-    ```
-
-**Token flow:** The Android app requests a **Microsoft access token** for the API scope `api://<YOUR_CLIENT_ID>/access_as_user` and sends it to the API. The API validates it and returns a **BinaryStars API JWT**.
-
-**Azure: Expose an API (Add a scope)**
-
-Steps to add the API scope in the Azure Portal (use the backend app registration):
-
-- Open **Expose an API** for the backend app.
-- Set **Application ID URI** to `api://<YOUR_CLIENT_ID>` (this should already be set to `api://c727b034-bd56-4e8a-a749-5ea51a9a1c73` for this project).
-- Click **Add a scope** and provide the following values:
-  - **Scope name**: `access_as_user`
-  - **Who can consent?**: `Admins and users`
-  - **Admin consent display name**: `Access BinaryStars API`
-  - **Admin consent description**: `Allows the app to access the BinaryStars API on behalf of the signed-in user.`
-  - **User consent display name**: `Access BinaryStars API`
-  - **User consent description**: `Allow this app to access the BinaryStars API on your behalf.`
-  - **State**: `Enabled`
-
-After you create the scope, use the full scope string in the Android MSAL request:
-
-```
-val apiScope = "api://c727b034-bd56-4e8a-a749-5ea51a9a1c73/access_as_user"
-val scopes = arrayOf(apiScope, "openid", "profile")
-```
-
-If you want the API to accept the Microsoft token for local validation, ensure the backend `appsettings.json` contains the `ApiAudience` and the `Jwt:SigningKey` placeholder is replaced with a secure key.
-
----
-
-## Managing Signing Keys
-
-### View SHA-1 Fingerprint (Google format)
-
-```bash
-./gradlew signingReport
-```
-
-### Generate New Debug Keystore
-
-If you do not have a debug keystore or need to generate a specific one:
-
-```bash
-keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias AndroidDebugKey -keypass android -keyalg RSA -keysize 2048 -validity 10000
-```
-
-## Cloud Deployment Notes
-
-- Update Azure app registrations with release signing hashes and redirect URIs.
-- Use production OAuth client IDs for release builds.
-- Keep client IDs and tenant IDs in a secure build configuration for CI.
-
----
-
-## Bluetooth File Transfers (RFCOMM)
-
-BinaryStars can send files directly between Android devices using Bluetooth
-RFCOMM as an alternative to the API/Kafka path.
-
-### Requirements
-
-- Bluetooth enabled on both devices.
-- Devices must be discoverable and in range.
-- The Bluetooth device name should match the device name registered in the API
-  so the UI can flag transfers as Bluetooth-capable.
-
-### Permissions
-
-The Android app requests the following permissions (runtime on Android 12+):
-
-- `BLUETOOTH_SCAN`
-- `BLUETOOTH_CONNECT`
-- `ACCESS_FINE_LOCATION` (pre-Android 12 discovery)
-
-### UX Notes
-
-- The file transfer list shows a Bluetooth icon when the target device is
-  currently discovered.
-- If the device is in range, the send dialog offers **Bluetooth** or **API**.
-- In-progress Bluetooth transfers can be **canceled** and interrupted transfers
-  can be **resumed** from the file transfer list.
+3.  Ensure the `BinaryStars.Api` is reachable from your device/emulator network.

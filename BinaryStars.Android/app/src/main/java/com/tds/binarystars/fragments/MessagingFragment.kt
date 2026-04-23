@@ -40,6 +40,7 @@ import com.tds.binarystars.model.ChatSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.os.SystemClock
 import java.time.OffsetDateTime
 
 class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListener {
@@ -54,8 +55,12 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
     private val items = mutableListOf<ChatListItem>()
     private var bluetoothAvailableDevices: Set<String> = emptySet()
     private var lastNameLookup: Map<String, String> = emptyMap()
+    private var isLoadingChats = false
+    private var pendingChatReload = false
+    private var lastRemoteLoadAtMs = 0L
     private companion object {
         private const val TABLET_MIN_WIDTH_DP = 600
+        private const val MIN_REMOTE_LOAD_INTERVAL_MS = 1500L
     }
 
     private fun isTabletLayout(): Boolean {
@@ -63,10 +68,13 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
     }
 
     private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
-        bluetoothAvailableDevices = devices.keys
-        newChatButton.isEnabled = NetworkUtils.isOnline(requireContext())
-        viewLifecycleOwner.lifecycleScope.launch {
-            refreshFromCache()
+        val discovered = devices.keys
+        if (discovered != bluetoothAvailableDevices) {
+            bluetoothAvailableDevices = discovered
+            newChatButton.isEnabled = NetworkUtils.isOnline(requireContext())
+            viewLifecycleOwner.lifecycleScope.launch {
+                refreshFromCache()
+            }
         }
     }
 
@@ -169,7 +177,7 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
     }
 
     override fun onChatUpdated(deviceId: String) {
-        loadChats()
+        loadChats(allowRemote = false)
     }
 
     override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {
@@ -181,8 +189,8 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
     }
 
     override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
-        // Presence updates can affect chat name/device picks; refresh list from API/cache.
-        loadChats()
+        // Presence can be high-frequency. Refresh from cache to avoid API spam.
+        loadChats(allowRemote = false)
     }
 
     override fun onBluetoothConnectionChanged(deviceId: String, isConnected: Boolean, isConnecting: Boolean) {
@@ -192,8 +200,14 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
     /**
      * Loads cached chats and applies device name lookups when online.
      */
-    private fun loadChats() {
+    private fun loadChats(allowRemote: Boolean = true) {
+        if (isLoadingChats) {
+            pendingChatReload = true
+            return
+        }
+
         viewLifecycleOwner.lifecycleScope.launch {
+            isLoadingChats = true
             progressBar.visibility = View.VISIBLE
             val summaries = withContext(Dispatchers.IO) { ChatStorage.getChats() }
             val isOnline = NetworkUtils.isOnline(requireContext())
@@ -206,11 +220,26 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                 } else {
                     setNoConnection(false)
                 }
+                isLoadingChats = false
+                if (pendingChatReload) {
+                    pendingChatReload = false
+                    loadChats(allowRemote = false)
+                }
                 return@launch
             }
 
             try {
                 newChatButton.isEnabled = true
+                val now = SystemClock.elapsedRealtime()
+                val shouldDoRemoteLoad = allowRemote && (now - lastRemoteLoadAtMs >= MIN_REMOTE_LOAD_INTERVAL_MS)
+                if (!shouldDoRemoteLoad) {
+                    progressBar.visibility = View.GONE
+                    updateItems(summaries, lastNameLookup)
+                    setNoConnection(false)
+                    return@launch
+                }
+
+                lastRemoteLoadAtMs = now
                 val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
                 val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
                 val chatsResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getMessagingChats(currentDeviceId) }
@@ -246,6 +275,12 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                 newChatButton.isEnabled = false
                 updateItems(summaries, lastNameLookup)
                 setNoConnection(items.isEmpty())
+            } finally {
+                isLoadingChats = false
+                if (pendingChatReload) {
+                    pendingChatReload = false
+                    loadChats(allowRemote = false)
+                }
             }
         }
     }

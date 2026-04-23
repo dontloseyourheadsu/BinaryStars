@@ -1,159 +1,80 @@
 # BinaryStars API
 
-The BinaryStars API is the .NET 10 backend that powers authentication, device management, notes, file transfers, messaging, and location history. It exposes REST endpoints and a websocket endpoint for realtime messaging, while streaming large file transfers through Kafka.
+The BinaryStars API is a **.NET 10.0** backend that powers authentication, device management, messaging, and file transfers.
 
-## What This Service Does
+## Core Features
 
-- Authenticates users (password + external providers) and issues JWTs.
-- Manages devices, notes, and location history stored in PostgreSQL.
-- Handles notification send/schedule/sync endpoints.
-- Handles remote action command/result queues for Linux targets.
-- Streams file transfers to/from Kafka using packetized uploads.
-- Delivers device-to-device messages via websocket or Kafka fallback.
-- Runs background cleanup jobs with Hangfire.
+- **Auth**: JWT-based authentication with support for Google and Microsoft external providers.
+- **Messaging**: Real-time WebSocket relay with Kafka-backed persistence for offline devices.
+- **File Transfers**: Chunked uploads to Kafka for high-throughput, async processing.
+- **Background Jobs**: Powered by **Hangfire** for cleanup, scheduled notifications, and recurring tasks.
+- **Observability**: Structured logging via **Serilog** with a **Grafana Loki** sink for centralized log management.
+- **API Reference**: Built-in **Scalar** documentation available at `/scalar/v1` in development mode.
 
-## Related Docs
+## Architecture & Data Flow
 
-- Endpoints and request/response details: Endpoints.md
-- REST client examples: Endpoints.http
-- Kafka TLS/SASL setup and local certificates: ../kafka/README.md
-- Overall system architecture: ../README.md
-
-## Run Locally (Dotnet)
-
-1. Start infrastructure (PostgreSQL, Kafka, Hangfire DB, Grafana/Loki):
-   ```bash
-   docker compose up -d
-   ```
-2. Configure the API:
-   - Copy BinaryStars.Api/appsettings.json or create BinaryStars.Api/appsettings.Development.json.
-   - Update connection strings and auth settings as needed (see Configuration below).
-3. Run the API:
-   ```bash
-   cd BinaryStars.Api
-   dotnet run
-   ```
-
-The API listens on http://localhost:5004 by default (see docker-compose.yaml).
-
-## Run Locally (Docker)
-
-To run the API in Docker with its dependencies:
-
-```bash
-docker compose up -d binarystars.api
+```mermaid
+graph TD
+    Client[Client Apps] -->|REST/WS| API[BinaryStars API]
+    API -->|Storage| DB[(PostgreSQL)]
+    API -->|Messaging/Files| KF[(Kafka)]
+    API -->|Jobs| HF[(Hangfire)]
+    API -->|Logs| LK[(Loki/Grafana)]
 ```
 
-The API container mounts kafka/secrets for TLS/SASL settings. Make sure you generated local certificates in kafka/secrets first (see ../kafka/README.md).
+### Messaging & Notification Pipeline
 
-If you are using docker compose, the default values in docker-compose.yaml are
-for local development only.
+```mermaid
+sequenceDiagram
+    participant S as Sender
+    participant A as API
+    participant WS as WebSocket Handler
+    participant K as Kafka
+    participant R as Receiver
+
+    S->>A: POST /api/messaging/send
+    A->>A: Validate & Persist to DB
+    alt Receiver Online
+        A->>WS: Push to Active Socket
+        WS-->>R: Deliver realtime message
+    else Receiver Offline
+        A->>K: Publish to binarystars.messages
+        Note over K: Message Queued
+    end
+
+    Note over R: Receiver Reconnects
+    R->>WS: Connect /ws/messaging
+    WS->>K: Fetch pending for DeviceID
+    K-->>WS: Return batch
+    WS-->>R: Deliver pending messages
+```
 
 ## Configuration
 
-The API uses appsettings.json and environment variables. Environment variables use double-underscore keys (for example, ConnectionStrings\_\_DefaultConnection).
+The following sections in `appsettings.json` or environment variables are required:
 
-Minimal configuration:
+- **`Jwt`**: `Issuer`, `Audience`, `SigningKey`.
+- **`Kafka`**: `BootstrapServers`, `SaslUsername`, `SaslPassword`, `SecurityProtocol`.
+- **`Hangfire`**: `ConnectionString` (PostgreSQL), `Schema`.
+- **`FileTransfer`**: `TempFilePath`, `ChunkSize`, `RetentionDays`.
+- **`Serilog`**: `LokiUrl` (Optional).
 
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=binarystars;Username=postgres;Password=yourPassword"
-  },
-  "Jwt": {
-    "Issuer": "BinaryStars.Api",
-    "Audience": "BinaryStars.Api",
-    "SigningKey": "YOUR_LONG_RANDOM_SECRET",
-    "ExpiresInMinutes": 120
-  },
-  "Kafka": {
-    "BootstrapServers": "binarystars.kafka:9093",
-    "Topic": "binarystars.transfers",
-    "MessagingTopic": "binarystars.messages",
-    "DeviceRemovedTopic": "binarystars.device-removed",
-    "Security": {
-      "UseTls": true,
-      "UseSasl": true,
-      "CaPath": "kafka/secrets/ca.pem",
-      "ClientCertPath": "kafka/secrets/client.pem",
-      "ClientKeyPath": "kafka/secrets/client.key"
-    },
-    "Scram": {
-      "Username": "binarystars",
-      "Password": "binarystars"
-    }
-  },
-  "FileTransfers": {
-    "ChunkSizeBytes": 524288,
-    "TempPath": "/tmp/binarystars-transfers",
-    "ExpiresInMinutes": 60
-  },
-  "Hangfire": {
-    "ConnectionString": "Host=localhost;Database=binarystars_hangfire;Username=postgres;Password=yourPassword",
-    "Schema": "hangfire"
-  },
-  "Serilog": {
-    "LokiUrl": "http://localhost:3100"
-  }
-}
+## Local Development
+
+### Run with Docker (Recommended)
+The easiest way to run the API with its dependencies (PostgreSQL, Kafka) is via the root `docker-compose.yaml`:
+```bash
+docker compose up -d binarystars-api
 ```
 
-## OAuth Provider Setup
+### Run Manually
+Ensure PostgreSQL and Kafka are running, then:
+```bash
+dotnet run --project BinaryStars.Api
+```
+Access the API Reference at `http://localhost:5004/scalar/v1`.
 
-### Google OAuth
+## Deployment
 
-- Use the same Web Client ID in the Android app and API.
-- The API validates Google ID tokens using Authentication:Google:ClientId.
-- If the client ID does not match, tokens are rejected.
-
-### Microsoft OAuth (Azure Entra ID)
-
-- Register the backend app in Microsoft Entra ID.
-- Configure Authentication:Microsoft:ClientId, TenantId, ClientSecret, and ApiAudience.
-- Expose the API scope access_as_user and request it from clients.
-
-See the Android README for signature hash and redirect URI details.
-
-## Websocket Messaging
-
-- Endpoint: /ws/messaging
-- Requires a valid Authorization Bearer token.
-- Clients must include deviceId as a query string (deviceId=...).
-
-The websocket handler delivers pending Kafka messages first, then forwards realtime messages. If a device is removed, only device removal events are delivered before the socket closes.
-
-Current websocket event envelope types also include:
-
-- `device_presence`
-- `location_update`
-- `device_removed`
-
-## Remote Actions
-
-- Action endpoints are available under `/api/actions/*`.
-- Targets are currently restricted to Linux devices.
-- Supported actions include power/screen controls, app listing/open/close, and `get_clipboard_history`.
-
-## Notifications
-
-- Notification endpoints are available under `/api/notifications/*`.
-- Supports immediate push-style payloads, per-device schedules, pull sync, and sync acknowledgement.
-
-## OpenAPI + Scalar
-
-- OpenAPI JSON: http://localhost:5004/openapi/v1.json
-- Scalar UI: http://localhost:5004/scalar/v1
-
-## Secrets and Safety
-
-- Do not commit real secrets or private keys.
-- Prefer environment variables or a secrets store in production.
-- Keep appsettings.Development.json out of source control.
-- The docker-compose.yaml values are for local development only.
-
-## Cloud Deployment Notes
-
-- Use managed PostgreSQL and configure ConnectionStrings\_\_DefaultConnection in your deployment environment.
-- Store JWT signing keys and OAuth secrets in a secure secret manager.
-- Provide Kafka certificates and SASL credentials via mounted secrets or a secure configuration service.
-- Replace local Grafana/Loki with your preferred hosted observability stack.
+- **ARM64 Support**: The API is compatible with ARM64 architectures, making it suitable for deployment on Raspberry Pi 4/5.
+- **Scale**: The stateless REST controllers allow for horizontal scaling, while Kafka handles the state for distributed messaging.

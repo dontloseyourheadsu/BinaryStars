@@ -124,7 +124,7 @@ Content-Type: application/json
 }
 
 ### List Transfers
-GET {{host}}/api/files/transfers
+GET {{host}}/api/files/transfers?deviceId={{deviceId}}
 Authorization: Bearer {{token}}
 
 ### List Pending Transfers For Device
@@ -150,6 +150,16 @@ Authorization: Bearer {{token}}
 ### Reject Transfer
 POST {{host}}/api/files/transfers/{{transferId}}/reject?deviceId={{deviceId2}}
 Authorization: Bearer {{token}}
+
+### Clear Transfers
+POST {{host}}/api/files/transfers/clear
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "deviceId": "{{deviceId}}",
+  "scope": "all"
+}
 
 ### Create Location
 POST {{host}}/api/locations
@@ -191,6 +201,24 @@ Content-Type: application/json
   "targetDeviceId": "{{deviceId2}}",
   "body": "Hello from BinaryStars",
   "sentAt": "2026-02-08T16:00:00Z"
+}
+
+### List Chats
+GET {{host}}/api/messaging/chats?deviceId={{deviceId}}
+Authorization: Bearer {{token}}
+
+### Get Conversation History
+GET {{host}}/api/messaging/history?deviceId={{deviceId}}&targetDeviceId={{deviceId2}}
+Authorization: Bearer {{token}}
+
+### Clear Conversation
+POST {{host}}/api/messaging/clear
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "deviceId": "{{deviceId}}",
+  "targetDeviceId": "{{deviceId2}}"
 }
 
 ### Send Notification Now
