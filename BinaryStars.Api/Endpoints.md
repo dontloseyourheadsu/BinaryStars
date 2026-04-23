@@ -174,7 +174,9 @@ DELETE /api/notes/{noteId}
 
 ### List Transfers
 
-GET /api/files/transfers
+GET /api/files/transfers?deviceId={deviceId}
+
+- `deviceId` (optional): If provided, the response includes an `isSender` boolean flag relative to this device.
 
 ### List Pending Transfers For Device
 
@@ -219,6 +221,21 @@ Response headers:
 ### Reject Transfer
 
 POST /api/files/transfers/{transferId}/reject?deviceId={deviceId}
+
+### Clear Transfers
+
+POST /api/files/transfers/clear
+
+Clears transfers for a device based on scope.
+
+```json
+{
+  "deviceId": "android-ssa-id-123",
+  "scope": "all"
+}
+```
+
+- `scope`: `all` (default), `sent`, or `received`.
 
 ## Locations
 
@@ -268,6 +285,29 @@ POST /api/messaging/send
   "targetDeviceId": "android-ssa-id-456",
   "body": "Hello from BinaryStars",
   "sentAt": "2026-02-08T16:00:00Z"
+}
+```
+
+### List Chats (Thread Summaries)
+
+GET /api/messaging/chats?deviceId={deviceId}&limit=500
+
+Returns recent chat thread summaries for the specified device.
+
+### Get Conversation History
+
+GET /api/messaging/history?deviceId={deviceId}&targetDeviceId={targetDeviceId}&limit=200
+
+Returns message history between two devices.
+
+### Clear Conversation
+
+POST /api/messaging/clear
+
+```json
+{
+  "deviceId": "android-ssa-id-123",
+  "targetDeviceId": "android-ssa-id-456"
 }
 ```
 
