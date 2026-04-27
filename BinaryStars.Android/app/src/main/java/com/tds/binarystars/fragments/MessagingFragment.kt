@@ -264,6 +264,10 @@ class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListe
                         )
                     }
 
+                    withContext(Dispatchers.IO) {
+                        chatMessages.forEach { ChatStorage.upsertChatSummary(it) }
+                    }
+
                     updateItems(chatMessages, nameLookup)
                 } else {
                     updateItems(summaries, nameLookup)

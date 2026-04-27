@@ -36,6 +36,17 @@ object ChatStorage {
         }
     }
 
+    /** Upserts a chat summary. */
+    fun upsertChatSummary(summary: ChatSummary) {
+        val db = dbHelper?.writableDatabase ?: return
+        val values = ContentValues().apply {
+            put(COLUMN_CHAT_DEVICE_ID, summary.deviceId)
+            put(COLUMN_LAST_MESSAGE, summary.lastMessage)
+            put(COLUMN_LAST_SENT_AT, summary.lastSentAt)
+        }
+        db.insertWithOnConflict(TABLE_CHATS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
     /** Upserts a message and updates the chat summary. */
     fun upsertMessage(message: ChatMessage) {
         val db = dbHelper?.writableDatabase ?: return

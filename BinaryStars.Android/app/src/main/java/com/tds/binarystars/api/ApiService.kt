@@ -66,18 +66,18 @@ interface ApiService {
 
     /** List notification schedules for a target device. */
     @GET("notifications/schedules")
-    suspend fun getNotificationSchedules(@Query("deviceId") deviceId: String): Response<List<NotificationScheduleDto>>
+    suspend fun getNotificationSchedules(@Query("deviceId") deviceId: String): Response<List<NotificationScheduleResponse>>
 
     /** Create a notification schedule. */
     @POST("notifications/schedules")
-    suspend fun createNotificationSchedule(@Body request: CreateNotificationScheduleRequestDto): Response<NotificationScheduleDto>
+    suspend fun createNotificationSchedule(@Body request: CreateNotificationScheduleRequestDto): Response<NotificationScheduleResponse>
 
     /** Update a notification schedule. */
     @PUT("notifications/schedules/{scheduleId}")
     suspend fun updateNotificationSchedule(
         @Path("scheduleId") scheduleId: String,
         @Body request: UpdateNotificationScheduleRequestDto
-    ): Response<NotificationScheduleDto>
+    ): Response<NotificationScheduleResponse>
 
     /** Delete a notification schedule. */
     @DELETE("notifications/schedules/{scheduleId}")

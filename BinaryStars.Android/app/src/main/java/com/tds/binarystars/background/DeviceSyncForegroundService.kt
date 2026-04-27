@@ -18,6 +18,7 @@ import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.AuthTokenStore
 import com.tds.binarystars.api.NotificationSyncAckRequestDto
 import com.tds.binarystars.api.UpdateDeviceTelemetryRequest
+import com.tds.binarystars.storage.NotificationScheduleStorage
 import com.tds.binarystars.util.NetworkUtils
 import com.tds.binarystars.util.NotificationUtils
 import kotlinx.coroutines.CoroutineScope
@@ -103,10 +104,48 @@ class DeviceSyncForegroundService : Service() {
                 NotificationUtils.showNotification(applicationContext, notification.title, notification.body)
             }
 
+            // Persist schedules pulled from server
+            if (payload.schedules.isNotEmpty()) {
+                NotificationScheduleStorage.upsertSchedules(payload.schedules)
+            }
+
             if (!(payload.notifications.isEmpty() && payload.hasPendingNotificationSync)) {
                 ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId))
             }
         } catch (_: Exception) {
+        }
+    }
+
+    private fun checkLocalSchedules() {
+        val now = System.currentTimeMillis()
+        val schedules = NotificationScheduleStorage.getActiveSchedules()
+        
+        schedules.forEach { schedule ->
+            var shouldNotify = false
+            
+            if (schedule.repeatMinutes != null && schedule.repeatMinutes > 0) {
+                val intervalMs = schedule.repeatMinutes * 60 * 1000L
+                if (now - schedule.lastNotifiedAt >= intervalMs) {
+                    shouldNotify = true
+                }
+            } else if (schedule.scheduledForUtc != null) {
+                try {
+                    val scheduledTime = java.time.OffsetDateTime.parse(schedule.scheduledForUtc).toInstant().toEpochMilli()
+                    // If it's time (or passed) and we haven't notified for this specific one-time schedule yet
+                    if (now >= scheduledTime && schedule.lastNotifiedAt == 0L) {
+                        shouldNotify = true
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (shouldNotify) {
+                NotificationUtils.showNotification(applicationContext, schedule.title, schedule.body)
+                NotificationScheduleStorage.updateLastNotified(schedule.id, now)
+                
+                // If it was a one-time schedule, we could disable or delete it locally, 
+                // but since it's synced from server, it might come back if not deleted there.
+                // For now, setting lastNotifiedAt is enough to prevent re-triggering one-time schedules.
+            }
         }
     }
 

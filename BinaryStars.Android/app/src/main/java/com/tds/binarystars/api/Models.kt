@@ -215,10 +215,10 @@ data class DeviceNotificationMessage(
 data class NotificationsPullResponse(
     val hasPendingNotificationSync: Boolean,
     val notifications: List<DeviceNotificationMessage>,
-    val schedules: List<NotificationScheduleDto>
+    val schedules: List<NotificationScheduleResponse>
 )
 
-data class NotificationScheduleDto(
+data class NotificationScheduleResponse(
     val id: String,
     val sourceDeviceId: String,
     val targetDeviceId: String,

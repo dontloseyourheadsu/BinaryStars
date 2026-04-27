@@ -13,11 +13,13 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.tds.binarystars.MainActivity
 import com.tds.binarystars.R
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.CreateNotificationScheduleRequestDto
@@ -59,6 +61,10 @@ class NotificationsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
+        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
+            (activity as? MainActivity)?.openDrawer()
+        }
+
         spinnerTargetDevice = view.findViewById(R.id.spinnerTargetDevice)
         etNotificationTitle = view.findViewById(R.id.etNotificationTitle)
         etNotificationBody = view.findViewById(R.id.etNotificationBody)
