@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BinaryStars.Application.Databases.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260304180430_AddNotificationSchedulingAndSyncFlag")]
-    partial class AddNotificationSchedulingAndSyncFlag
+    [Migration("20260426175414_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -130,6 +130,9 @@ namespace BinaryStars.Application.Databases.Migrations
                     b.Property<DateTimeOffset>("LastSeen")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("MemoryLoadPercent")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -207,6 +210,43 @@ namespace BinaryStars.Application.Databases.Migrations
                     b.HasIndex("UserId", "DeviceId", "RecordedAt");
 
                     b.ToTable("LocationHistory");
+                });
+
+            modelBuilder.Entity("BinaryStars.Application.Databases.DatabaseModels.Messaging.MessageHistoryDbModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SenderDeviceId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TargetDeviceId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "SentAt");
+
+                    b.HasIndex("UserId", "SenderDeviceId", "TargetDeviceId", "SentAt");
+
+                    b.ToTable("MessageHistory");
                 });
 
             modelBuilder.Entity("BinaryStars.Application.Databases.DatabaseModels.Notes.NoteDbModel", b =>
@@ -539,6 +579,15 @@ namespace BinaryStars.Application.Databases.Migrations
                 });
 
             modelBuilder.Entity("BinaryStars.Application.Databases.DatabaseModels.Locations.LocationHistoryDbModel", b =>
+                {
+                    b.HasOne("BinaryStars.Application.Databases.DatabaseModels.Accounts.UserDbModel", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BinaryStars.Application.Databases.DatabaseModels.Messaging.MessageHistoryDbModel", b =>
                 {
                     b.HasOne("BinaryStars.Application.Databases.DatabaseModels.Accounts.UserDbModel", null)
                         .WithMany()

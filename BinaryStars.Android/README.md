@@ -53,6 +53,30 @@ The app requires the following permissions for full functionality:
 - **Google Auth**: Uses `credentials` and `googleid` libraries. Client ID is configured in `build.gradle.kts`.
 - **Microsoft Auth**: Configured via `msal_config.json` in assets and `AndroidManifest.xml` (msauth scheme).
 
+## Deployment Scenarios
+
+### 1. Local PC + Android Emulator
+*   **API Host:** `10.0.2.2` (Special alias for your PC from the emulator).
+*   **Command:** 
+    ```bash
+    ./gradlew installDebug -PapiHost=10.0.2.2
+    ```
+
+### 2. Local PC + Physical Device (Same Network)
+*   **API Host:** Your PC's LAN IP (e.g., `192.168.1.50`).
+*   **Command:** 
+    ```bash
+    ./gradlew installDeviceDebug -PapiHost=192.168.1.50
+    ```
+
+### 3. Raspberry Pi Host (Home Server)
+*   **API Host:** Your Pi's LAN IP (e.g., `192.168.160.198`).
+*   **Command:** 
+    ```bash
+    ./gradlew installDeviceDebug -PapiHost=192.168.160.198
+    ```
+    *Tip: Use the automation script at the root: `./scripts/pi-manage.sh android`*
+
 ## Local Development
 
 1.  Open the `BinaryStars.Android` folder in Android Studio.

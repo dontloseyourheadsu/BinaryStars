@@ -101,9 +101,6 @@ namespace BinaryStars.Application.Databases.Migrations
                     b.Property<int?>("CpuLoadPercent")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("MemoryLoadPercent")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("HasPendingNotificationSync")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -129,6 +126,9 @@ namespace BinaryStars.Application.Databases.Migrations
 
                     b.Property<DateTimeOffset>("LastSeen")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MemoryLoadPercent")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()

@@ -54,7 +54,8 @@ public class LocationsController : ControllerBase
     public async Task<IActionResult> CreateLocation([FromBody] LocationUpdateRequest request, CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var result = await _writeService.AddLocationAsync(userId, request, cancellationToken, persistToHistory: true);
+        var utcRequest = request with { RecordedAt = request.RecordedAt.ToUniversalTime() };
+        var result = await _writeService.AddLocationAsync(userId, utcRequest, cancellationToken, persistToHistory: true);
 
         if (result.IsSuccess)
         {
@@ -65,7 +66,7 @@ public class LocationsController : ControllerBase
                 request.Latitude,
                 request.Longitude,
                 request.AccuracyMeters,
-                request.RecordedAt,
+                utcRequest.RecordedAt,
                 DateTimeOffset.UtcNow);
 
             _liveLocationCache.Upsert(locationEvent);
@@ -86,7 +87,8 @@ public class LocationsController : ControllerBase
     public async Task<IActionResult> CreateLiveLocation([FromBody] LocationUpdateRequest request, CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var result = await _writeService.AddLocationAsync(userId, request, cancellationToken, persistToHistory: false);
+        var utcRequest = request with { RecordedAt = request.RecordedAt.ToUniversalTime() };
+        var result = await _writeService.AddLocationAsync(userId, utcRequest, cancellationToken, persistToHistory: false);
 
         if (result.IsSuccess)
         {
@@ -97,7 +99,7 @@ public class LocationsController : ControllerBase
                 request.Latitude,
                 request.Longitude,
                 request.AccuracyMeters,
-                request.RecordedAt,
+                utcRequest.RecordedAt,
                 DateTimeOffset.UtcNow);
 
             _liveLocationCache.Upsert(locationEvent);

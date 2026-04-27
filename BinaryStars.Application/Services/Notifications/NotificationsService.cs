@@ -190,7 +190,7 @@ public class NotificationsService : INotificationsReadService, INotificationsWri
         model.Title = NormalizeTitle(request.Title);
         model.Body = NormalizeBody(request.Body);
         model.IsEnabled = request.IsEnabled;
-        model.ScheduledForUtc = request.ScheduledForUtc;
+        model.ScheduledForUtc = request.ScheduledForUtc?.ToUniversalTime();
         model.RepeatMinutes = request.RepeatMinutes;
         model.UpdatedAt = DateTimeOffset.UtcNow;
 

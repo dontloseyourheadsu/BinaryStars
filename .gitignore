@@ -126,3 +126,6 @@ UpgradeLog*.htm
 
 
 bin\Debug
+# Pi Deployment
+.env.pi
+.env.pi.local

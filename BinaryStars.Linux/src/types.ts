@@ -64,6 +64,7 @@ export interface NotificationSchedule {
   repeatMinutes: number | null;
   createdAt: string;
   updatedAt: string;
+  lastNotifiedAtMs?: number;
 }
 
 export interface NotificationsPullResponse {

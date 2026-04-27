@@ -17,6 +17,9 @@ using BinaryStars.Api.Middleware;
 var builder = WebApplication.CreateBuilder(args);
 const string CorsPolicyName = "BinaryStarsClient";
 
+// Fix for "timestamp with timezone only offset of 0 is supported" in PostgreSQL
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 // Configure Kestrel to allow large file uploads (or handle unlimited request bodies)
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {

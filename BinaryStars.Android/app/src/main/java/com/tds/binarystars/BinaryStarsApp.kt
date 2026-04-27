@@ -8,6 +8,7 @@ import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.storage.FileTransferStorage
 import com.tds.binarystars.storage.LocationCacheStorage
 import com.tds.binarystars.storage.NotesStorage
+import com.tds.binarystars.storage.NotificationScheduleStorage
 import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.background.DeviceSyncForegroundService
 import com.tds.binarystars.location.LocationUpdateScheduler

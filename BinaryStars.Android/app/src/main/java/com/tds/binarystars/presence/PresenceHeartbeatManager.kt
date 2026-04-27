@@ -42,34 +42,11 @@ object PresenceHeartbeatManager {
 
                 try {
                     val response = ApiClient.apiService.sendDeviceHeartbeat(deviceId)
-                    if (response.isSuccessful) {
-                        val deviceDto = response.body()
-                        if (deviceDto?.hasPendingNotificationSync == true) {
-                            Log.i(LOG_TAG, "Heartbeat reports pending notification sync: deviceId=$deviceId")
-                            val pullResp = ApiClient.apiService.pullNotifications(deviceId)
-                            if (pullResp.isSuccessful) {
-                                val pullBody = pullResp.body()
-                                val notifications = pullBody?.notifications ?: emptyList()
-                                val hasPending = pullBody?.hasPendingNotificationSync == true
-                                Log.i(LOG_TAG, "Pulled notifications: deviceId=$deviceId count=${notifications.size}")
-                                notifications.forEach { msg ->
-                                    NotificationUtils.showNotification(appContext, msg.title, msg.body)
-                                }
-                                if (notifications.isEmpty() && hasPending) {
-                                    Log.w(LOG_TAG, "Skipping notification ack because pull was empty but pending flag is still true: deviceId=$deviceId")
-                                } else {
-                                    ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId))
-                                    Log.i(LOG_TAG, "Notification sync ack sent: deviceId=$deviceId")
-                                }
-                            } else {
-                                Log.w(LOG_TAG, "Notification pull failed: status=${pullResp.code()} deviceId=$deviceId")
-                            }
-                        }
-                    } else {
+                    if (!response.isSuccessful) {
                         Log.w(LOG_TAG, "Heartbeat failed: status=${response.code()} deviceId=$deviceId")
                     }
                 } catch (e: Exception) {
-                    Log.w(LOG_TAG, "Heartbeat sync exception: deviceId=$deviceId error=${e.message}")
+                    Log.w(LOG_TAG, "Heartbeat exception: deviceId=$deviceId error=${e.message}")
                 }
                 delay(HEARTBEAT_INTERVAL_MS)
             }

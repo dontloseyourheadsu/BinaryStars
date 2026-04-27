@@ -1,154 +1,198 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_light">
+    android:orientation="vertical"
+    android:background="@color/carbon_bg_app">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_height="56dp"
+        android:background="@color/carbon_bg_panel"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Send Notification"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:textColor="@color/black"
-        android:layout_marginBottom="16dp"/>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/black"
-        android:text="Target Device"/>
-
-    <Spinner
-        android:id="@+id/spinnerTargetDevice"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginBottom="16dp"/>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/black"
-        android:text="Notification Title"/>
-
-    <EditText
-        android:id="@+id/etNotificationTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Title"
-        android:inputType="text"
-        android:layout_marginBottom="8dp"/>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/black"
-        android:text="Notification Body"/>
-
-    <EditText
-        android:id="@+id/etNotificationBody"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Message"
-        android:lines="4"
-        android:gravity="top|start"
-        android:inputType="textMultiLine"
-        android:layout_marginBottom="16dp"/>
-
-        <Button
-            android:id="@+id/btnSendNotification"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Send Now"/>
+        <ImageView
+            android:id="@+id/ivMenu"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_menu"
+            app:tint="@color/carbon_text_main"
+            android:contentDescription="Menu" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Schedule"
-            android:textColor="@color/black"
-            android:textSize="18sp"
+            android:layout_marginStart="12dp"
+            android:text="Notifications"
+            android:textColor="@color/carbon_text_main"
+            android:textSize="20sp"
             android:textStyle="bold" />
+    </LinearLayout>
 
-        <CheckBox
-            android:id="@+id/cbScheduleEnabled"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checked="true"
-            android:text="Enabled"
-            android:textColor="@color/black" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="One-time schedule"
-            android:textColor="@color/black" />
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <Button
-                android:id="@+id/btnPickScheduledAt"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Pick date/time" />
-
-            <Button
-                android:id="@+id/btnClearScheduledAt"
+            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="Clear" />
+                android:text="Send Notification"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_main"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/carbon_text_main"
+                android:text="Target Device"/>
+
+            <Spinner
+                android:id="@+id/spinnerTargetDevice"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/carbon_text_main"
+                android:text="Notification Title"/>
+
+            <EditText
+                android:id="@+id/etNotificationTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Title"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted"
+                android:inputType="text"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/carbon_text_main"
+                android:text="Notification Body"/>
+
+            <EditText
+                android:id="@+id/etNotificationBody"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Message"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted"
+                android:lines="4"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:layout_marginBottom="16dp"/>
+
+            <Button
+                android:id="@+id/btnSendNotification"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Send Now"
+                android:backgroundTint="@color/primary_purple"
+                android:textColor="@android:color/white"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="Schedule"
+                android:textColor="@color/carbon_text_main"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <CheckBox
+                android:id="@+id/cbScheduleEnabled"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="Enabled"
+                android:buttonTint="@color/primary_purple"
+                android:textColor="@color/carbon_text_main" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="One-time schedule"
+                android:textColor="@color/carbon_text_main" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnPickScheduledAt"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Pick date/time" />
+
+                <Button
+                    android:id="@+id/btnClearScheduledAt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Clear" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvScheduledAt"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Not set"
+                android:textColor="@color/carbon_text_main" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Or repeat every (minutes)"
+                android:textColor="@color/carbon_text_main" />
+
+            <EditText
+                android:id="@+id/etRepeatMinutes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="e.g. 15"
+                android:textColor="@color/carbon_text_main"
+                android:textColorHint="@color/carbon_text_muted"
+                android:inputType="number"
+                android:maxLines="1"
+                android:minHeight="48dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Choose one-time OR repeat interval"
+                android:textColor="@color/carbon_text_main" />
+
+            <Button
+                android:id="@+id/btnSaveNotificationSchedule"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Save Schedule"
+                android:backgroundTint="@color/primary_purple"
+                android:textColor="@android:color/white"/>
+
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvScheduledAt"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="Not set"
-            android:textColor="@color/black" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Or repeat every (minutes)"
-            android:textColor="@color/black" />
-
-        <EditText
-            android:id="@+id/etRepeatMinutes"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="e.g. 15"
-            android:inputType="number"
-            android:maxLines="1"
-            android:minHeight="48dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Choose one-time OR repeat interval"
-            android:textColor="@color/black" />
-
-        <Button
-            android:id="@+id/btnSaveNotificationSchedule"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Save Schedule" />
-
-    </LinearLayout>
-
-</ScrollView>
+    </ScrollView>
+</LinearLayout>

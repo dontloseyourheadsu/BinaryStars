@@ -1,0 +1,6 @@
+#!/bin/bash
+mkdir -p ~/.ssh
+echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDjUvRxaelR1sFWtfx6sUcIJrTZzuXPYavl+tWrdqavVGw4u0cihsKkSfmXpFipyWx7TiRTiqqvhqj7rbHzr71+kDPw9UU3nvwpRkUecK3nwNI4g88QiKS5oU24KskjkeIwhHgA8gd+sKsWc4rDMOUmqnJv32xUUqVvzBwLqDzCI4Yc/i0LXoQO3Jjx5EkUENmLrEj9po5q1XJVtuPF59fkCdK5PLZNp5w7t8+hkhW0sJQkc8abK0tUDFISY1YptupYKW5wAeOZQIPbwpYQBLxxgK11g5gUT1E/XJs3HwZ+aGlH1DbgZtT0zEYArIx8KycVqiPnKu05eJgsyN2qY8PSfdiFNT8SoJMYV1C3fu8BmoeSOCg3mnl0G6BC+/H26mMT/9s8Ic4pRLWUrJckU3CY6lTlaFeTsuYwOGkYSTpwUHE5+YF+ybvFz5c5RJ7Rh2iavAhfi54/UaGpR+P6u5dKq7DPB2wHf1KGqIVlbZXdL5B+YFHaQUR73Lp2vttznUs= dontloseyourheadsu@fedora" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+chmod 700 ~/.ssh
+echo "SSH key added successfully."
