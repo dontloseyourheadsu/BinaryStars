@@ -13,6 +13,24 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp">
+
+        <ImageView
+            android:id="@+id/ivMenu"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_menu"
+            app:tint="@color/carbon_text_main"
+            android:contentDescription="Menu" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="Map"
+            android:textColor="@color/carbon_text_main"
+            android:textSize="20sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
@@ -66,7 +84,9 @@
                         <Switch
                             android:id="@+id/switchLocationUpdates"
                             android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            android:thumbTint="@color/primary_purple"
+                            android:trackTint="@color/accent_purple" />
                     </LinearLayout>
 
                     <TextView
