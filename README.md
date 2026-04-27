@@ -178,6 +178,50 @@ To enable Bluetooth server functionality on Linux, your Bluetooth daemon must ru
 - **Chat Service:** RFCOMM Channel 1 (SPP). Handles JSON-framed messages.
 - **Transfer Service:** RFCOMM Channel 2. Handles encrypted file byte streams with resume support.
 
+## 🚀 Raspberry Pi Automation
+
+A management script is provided to handle the full lifecycle of your Pi-based home server.
+
+1.  **Setup:** Copy `.env.pi.example` to `.env.pi` and fill in your Pi's IP and credentials.
+2.  **Usage:** `./scripts/pi-manage.sh <command>`
+
+### Available Commands
+
+| Command | Description |
+| :--- | :--- |
+| **all** | **Full Lifecycle:** Runs `sync`, `up`, and `android` sequentially for a one-click setup. |
+| **discover** | **Network Scan:** Searches your local subnet for the Pi by looking for the open API port (5004). |
+| **sync** | **File Transfer:** Uses `rsync` to upload source code, excluding build artifacts and node_modules. |
+| **up** | **Start Services:** Connects via SSH to start Docker containers (API, Kafka, DB) on the Pi. |
+| **down** | **Stop Services:** Connects via SSH to stop and remove all BinaryStars containers. |
+| **logs** | **Live Logs:** Streams real-time output from the API container on the Pi for debugging. |
+| **android** | **Mobile Deploy:** Builds and installs the APK on your device, pointing it to the Pi IP. |
+| **linux** | **Desktop Client:** Launches the Linux app locally, configured to connect to the Pi API. |
+
+## 🛠 Troubleshooting
+
+### 1. Database Migrations (relation "AspNetUsers" does not exist)
+If the API fails to start with this error, it's likely due to out-of-order migrations. 
+*   **Fix:** Delete the `Migrations` folder in `BinaryStars.Application` and run:
+    ```bash
+    dotnet ef migrations add InitialCreate --project BinaryStars.Application --startup-project BinaryStars.Api --context ApplicationDbContext -o Databases/Migrations
+    ```
+
+### 2. Kafka Connection Refused / Auth Failures on Pi
+The default Kafka setup uses TLS+SASL, which can be sensitive on local ARM64 environments.
+*   **Solution:** The Pi deployment is pre-configured in `docker-compose.yaml` to use `PLAINTEXT` on port 9092 for internal/external traffic to maximize reliability.
+*   **Verification:** `docker exec binarystars-binarystars-kafka-1 nc -z localhost 9092`
+
+### 3. Android Device Not Found
+If `./scripts/pi-manage.sh android` fails with "No connected devices":
+*   Ensure **USB Debugging** is on.
+*   Check if the device is connected via **ADB-over-WiFi** (common on modern Android). Run `adb devices` to verify.
+
+### 4. Raspberry Pi Discovery
+If you can't find your Pi's IP:
+*   Run `./scripts/pi-manage.sh discover` to scan your local subnet for the API port.
+*   Alternatively, check your phone's hotspot "Connected Devices" list.
+
 ## Secrets And Configuration
 
 - Do not commit real secrets or private keys.
