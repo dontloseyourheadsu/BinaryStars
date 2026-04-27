@@ -10,8 +10,10 @@ services:
         environment:
         - ASPNETCORE_URLS=http://+:8080
         - ASPNETCORE_ENVIRONMENT=Development
-        - Kafka__BootstrapServers=binarystars.kafka:9093
-        - Kafka__ScramBootstrapServers=binarystars.kafka:9093
+        - Kafka__BootstrapServers=binarystars-kafka:9092
+        - Kafka__ScramBootstrapServers=binarystars-kafka:9092
+        - Kafka__Security__UseTls=false
+        - Kafka__Security__UseSasl=false
         - ConnectionStrings__DefaultConnection=Host=binarystars-db;Database=binarystars;Username=admin;Password=abc123=0
         - Hangfire__ConnectionString=Host=binarystars-hangfire;Database=binarystars_hangfire;Username=admin;Password=abc123=0
         depends_on:
@@ -80,62 +82,30 @@ services:
     binarystars-kafka:
         image: confluentinc/cp-kafka:7.6.1
         ports:
-        - "9094:9094"
-        - "9095:9095"
+        - "9092:9092"
         environment:
         - KAFKA_PROCESS_ROLES=broker,controller
         - KAFKA_NODE_ID=1
         - KAFKA_KRAFT_CLUSTER_ID=q1Sh2bIQo2Z6tQ0yF0l9AA
         - CLUSTER_ID=q1Sh2bIQo2Z6tQ0yF0l9AA
-        - KAFKA_CONTROLLER_QUORUM_VOTERS=1@binarystars-kafka:9092
+        - KAFKA_CONTROLLER_QUORUM_VOTERS=1@binarystars-kafka:9093
         - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
-        - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:SASL_SSL,EXTERNAL:SASL_SSL,OAUTH:SASL_SSL,CONTROLLER:PLAINTEXT
-        - KAFKA_LISTENERS=CONTROLLER://:9092,INTERNAL://:9093,EXTERNAL://:9094,OAUTH://:9095
-        - KAFKA_ADVERTISED_LISTENERS=INTERNAL://binarystars.kafka:9093,EXTERNAL://localhost:9094,OAUTH://localhost:9095
+        - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+        - KAFKA_LISTENERS=INTERNAL://:9092,EXTERNAL://:19092,CONTROLLER://:9093
+        - KAFKA_ADVERTISED_LISTENERS=INTERNAL://binarystars-kafka:9092,EXTERNAL://localhost:19092
         - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
-        - KAFKA_SASL_ENABLED_MECHANISMS=SCRAM-SHA-512,OAUTHBEARER
-        - KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL=SCRAM-SHA-512
-        - KAFKA_LISTENER_NAME_INTERNAL_SASL_ENABLED_MECHANISMS=SCRAM-SHA-512
-        - KAFKA_LISTENER_NAME_EXTERNAL_SASL_ENABLED_MECHANISMS=SCRAM-SHA-512
-        - KAFKA_LISTENER_NAME_OAUTH_SASL_ENABLED_MECHANISMS=OAUTHBEARER
-        - KAFKA_LISTENER_NAME_INTERNAL_SCRAM_SHA_512_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username="broker" password="broker-secret";
-        - KAFKA_LISTENER_NAME_EXTERNAL_SCRAM_SHA_512_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username="broker" password="broker-secret";
-        - KAFKA_LISTENER_NAME_OAUTH_OAUTHBEARER_SASL_JAAS_CONFIG=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required unsecuredLoginStringClaim_sub="broker";
-        - KAFKA_LISTENER_NAME_OAUTH_SASL_SERVER_CALLBACK_HANDLER_CLASS=org.apache.kafka.common.security.oauthbearer.internals.unsecured.OAuthBearerUnsecuredValidatorCallbackHandler
-        - KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_jaas.conf
-        - KAFKA_LISTENER_NAME_INTERNAL_SSL_KEYSTORE_TYPE=PKCS12
-        - KAFKA_LISTENER_NAME_INTERNAL_SSL_KEYSTORE_LOCATION=/etc/kafka/secrets/broker.p12
-        - KAFKA_LISTENER_NAME_INTERNAL_SSL_KEYSTORE_PASSWORD=brokerpass
-        - KAFKA_LISTENER_NAME_INTERNAL_SSL_TRUSTSTORE_TYPE=PEM
-        - KAFKA_LISTENER_NAME_INTERNAL_SSL_TRUSTSTORE_LOCATION=/etc/kafka/secrets/ca.pem
-        - KAFKA_LISTENER_NAME_INTERNAL_SSL_CLIENT_AUTH=required
-        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_KEYSTORE_TYPE=PKCS12
-        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_KEYSTORE_LOCATION=/etc/kafka/secrets/broker.p12
-        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_KEYSTORE_PASSWORD=brokerpass
-        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_TRUSTSTORE_TYPE=PEM
-        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_TRUSTSTORE_LOCATION=/etc/kafka/secrets/ca.pem
-        - KAFKA_LISTENER_NAME_EXTERNAL_SSL_CLIENT_AUTH=required
-        - KAFKA_LISTENER_NAME_OAUTH_SSL_KEYSTORE_TYPE=PKCS12
-        - KAFKA_LISTENER_NAME_OAUTH_SSL_KEYSTORE_LOCATION=/etc/kafka/secrets/broker.p12
-        - KAFKA_LISTENER_NAME_OAUTH_SSL_KEYSTORE_PASSWORD=brokerpass
-        - KAFKA_LISTENER_NAME_OAUTH_SSL_TRUSTSTORE_TYPE=PEM
-        - KAFKA_LISTENER_NAME_OAUTH_SSL_TRUSTSTORE_LOCATION=/etc/kafka/secrets/ca.pem
-        - KAFKA_LISTENER_NAME_OAUTH_SSL_CLIENT_AUTH=required
-        - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
         - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
         - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
         - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-        volumes:
-        - ./kafka/secrets:/etc/kafka/secrets
-        - kafka-data:/var/lib/kafka/data
         healthcheck:
-            test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/9093'"]
+            test: ["CMD-SHELL", "nc -z localhost 9092"]
             interval: 10s
             timeout: 5s
             retries: 10
         networks:
             binarystars-network:
                 aliases:
+                - binarystars-kafka
                 - binarystars.kafka
 
 volumes:
