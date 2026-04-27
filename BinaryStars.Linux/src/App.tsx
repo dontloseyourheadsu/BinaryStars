@@ -765,7 +765,17 @@ function App() {
         schedules: payload.schedules.length,
         hasPendingNotificationSync: payload.hasPendingNotificationSync,
       });
-      setNotificationSchedules(payload.schedules);
+
+      setNotificationSchedules((prev) => {
+        const prevMap = new Map(prev.map((s) => [s.id, s]));
+        return payload.schedules.map((next) => {
+          const existing = prevMap.get(next.id);
+          return {
+            ...next,
+            lastNotifiedAtMs: existing?.lastNotifiedAtMs ?? 0,
+          };
+        });
+      });
 
       if (payload.notifications.length > 0) {
         setNotificationHistory((prev) => {
@@ -838,6 +848,51 @@ function App() {
       notificationSyncInFlightRef.current = false;
     }
   }, [isAuthed, myDeviceId, online]);
+
+  useEffect(() => {
+    if (!isAuthed) {
+      return;
+    }
+
+    const checkLocalSchedules = (): void => {
+      const now = Date.now();
+      setNotificationSchedules((prev) => {
+        let changed = false;
+        const next = prev.map((schedule) => {
+          if (!schedule.isEnabled) {
+            return schedule;
+          }
+
+          let shouldNotify = false;
+          if (schedule.repeatMinutes != null && schedule.repeatMinutes > 0) {
+            const intervalMs = schedule.repeatMinutes * 60 * 1000;
+            if (now - (schedule.lastNotifiedAtMs ?? 0) >= intervalMs) {
+              shouldNotify = true;
+            }
+          } else if (schedule.scheduledForUtc != null) {
+            const scheduledTime = Date.parse(schedule.scheduledForUtc);
+            if (now >= scheduledTime && !schedule.lastNotifiedAtMs) {
+              shouldNotify = true;
+            }
+          }
+
+          if (shouldNotify) {
+            changed = true;
+            void invoke("show_notification", { title: schedule.title, body: schedule.body });
+            return { ...schedule, lastNotifiedAtMs: now };
+          }
+
+          return schedule;
+        });
+
+        return changed ? next : prev;
+      });
+    };
+
+    checkLocalSchedules();
+    const timer = window.setInterval(checkLocalSchedules, 60_000);
+    return () => window.clearInterval(timer);
+  }, [isAuthed]);
 
   const initSession = async (): Promise<void> => {
     const canUseNetwork = typeof navigator === "undefined" || navigator.onLine;

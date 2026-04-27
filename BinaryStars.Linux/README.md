@@ -65,6 +65,21 @@ sequenceDiagram
     API-->>A: WebSocket: action_result
 ```
 
+## Deployment Scenarios
+
+### 1. Local PC API
+*   **Command:** 
+    ```bash
+    VITE_API_BASE_URL=http://localhost:5004/api npm run tauri dev
+    ```
+
+### 2. Raspberry Pi Host (Home Server)
+*   **Command:** 
+    ```bash
+    VITE_API_BASE_URL=http://<PI_IP>:5004/api npm run tauri dev
+    ```
+    *Tip: Use the automation script at the root: `./scripts/pi-manage.sh linux`*
+
 ## Local Development
 
 ### Prerequisites

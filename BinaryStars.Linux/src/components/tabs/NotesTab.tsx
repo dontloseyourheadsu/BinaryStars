@@ -103,23 +103,25 @@ export default function NotesTab({
         </label>
         <label>
           Content
-          <div className="md-toolbar">
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("**")}><b>B</b></button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("*")}><i>I</i></button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("__")}>U</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("~~")}>S</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("# ", "")}>H1</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("## ", "")}>H2</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("### ", "")}>H3</button>
-            <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("- item\n")}>•</button>
-            <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("1. item\n")}>1.</button>
-            <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("- [ ] task\n")}>☑</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("```\n", "\n```")}>{"{ }"}</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("`")}>`</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("> ", "")}>❝</button>
-            <button className="editor-icon" type="button" onClick={() => onWrapSelection("[", "](url)")}>🔗</button>
-            <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("\n---\n")}>—</button>
-          </div>
+          {isMarkdown(noteType) && (
+            <div className="md-toolbar">
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("**")}><b>B</b></button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("*")}><i>I</i></button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("<u>", "</u>")}><u>U</u></button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("~~")}>S</button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("# ", "")}>H1</button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("## ", "")}>H2</button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("### ", "")}>H3</button>
+              <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("- item\n")}>•</button>
+              <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("1. item\n")}>1.</button>
+              <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("- [ ] task\n")}>☑</button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("```\n", "\n```")}>{"{ }"}</button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("`")}>`</button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("> ", "")}>❝</button>
+              <button className="editor-icon" type="button" onClick={() => onWrapSelection("[", "](url)")}>🔗</button>
+              <button className="editor-icon" type="button" onClick={() => onInsertAtSelection("\n---\n")}>—</button>
+            </div>
+          )}
           <textarea ref={noteContentRef} onChange={(event) => setNoteContent(event.target.value)} rows={10} value={noteContent} />
         </label>
         <div className="split-row">

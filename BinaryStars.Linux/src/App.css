@@ -110,6 +110,8 @@ button {
   color: var(--text-main);
   padding: 10px 12px;
   font: inherit;
+  max-width: 100%;
+  min-width: 0;
 }
 
 button {
@@ -660,12 +662,28 @@ textarea {
   overflow: auto;
   overflow-wrap: anywhere;
   word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .markdown-preview pre {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+.markdown-preview u {
+  text-decoration: underline;
+}
+
+.markdown-preview em,
+.markdown-preview i {
+  font-style: italic;
+}
+
+.markdown-preview strong,
+.markdown-preview b {
+  font-weight: bold;
 }
 
 @media (max-width: 1024px) {
