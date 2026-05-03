@@ -23,6 +23,18 @@
             android:textSize="14sp" />
 
         <ImageButton
+            android:id="@+id/btnDownloadMessage"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_save"
+            android:contentDescription="Save"
+            android:scaleType="centerInside"
+            android:tint="@color/carbon_text_muted"
+            android:visibility="gone" />
+
+        <ImageButton
             android:id="@+id/btnCopyMessage"
             android:layout_width="24dp"
             android:layout_height="24dp"

@@ -211,9 +211,17 @@ object BluetoothChatManager {
             scope.launch {
                 try {
                     val bytes = android.util.Base64.decode(base64Data, android.util.Base64.NO_WRAP)
-                    val file = java.io.File(context.getExternalFilesDir(null), fileName)
+                    // Use consistent internal storage path
+                    val dir = java.io.File(context.filesDir, "transfers/received")
+                    if (!dir.exists()) dir.mkdirs()
+                    
+                    val timestamp = System.currentTimeMillis()
+                    val file = java.io.File(dir, "bt_${timestamp}_$fileName")
                     java.io.FileOutputStream(file).use { it.write(bytes) }
-                    BluetoothChatManager.addLocalMessage(senderId, "Received file: $fileName", false)
+                    
+                    L.i(TAG, "File saved internally: ${file.absolutePath}")
+                    // Special prefix for UI to recognize file messages
+                    BluetoothChatManager.addLocalMessage(senderId, "BT_FILE|$fileName|${file.absolutePath}", false)
                 } catch (e: Exception) {
                     L.e(TAG, "File save error: ${e.message}")
                 }

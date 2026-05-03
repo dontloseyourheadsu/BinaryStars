@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.*
 
-class BluetoothTabFragment : Fragment() {
+class BluetoothTabFragment : Fragment(), MessagingMessagesAdapter.OnMessageActionListener {
 
     private lateinit var viewConnection: LinearLayout
     private lateinit var viewChat: LinearLayout
@@ -82,7 +82,7 @@ class BluetoothTabFragment : Fragment() {
         btnDisconnect = view.findViewById(R.id.btnDisconnect)
         pbConnecting = view.findViewById(R.id.pbConnecting)
 
-        messagesAdapter = MessagingMessagesAdapter(messages)
+        messagesAdapter = MessagingMessagesAdapter(messages, this)
         rvMessages.layoutManager = LinearLayoutManager(requireContext())
         rvMessages.adapter = messagesAdapter
 
@@ -92,6 +92,92 @@ class BluetoothTabFragment : Fragment() {
 
         checkPermissions()
         observeMessages()
+    }
+
+    override fun onSaveFile(fileName: String, localPath: String) {
+        moveFileToDownloads(fileName, localPath)
+    }
+
+    private fun moveFileToDownloads(fileName: String, path: String) {
+        val sourceFile = java.io.File(path)
+        if (!sourceFile.exists()) {
+            L.e("BluetoothTab", "Source file not found at $path")
+            Toast.makeText(requireContext(), "Source file not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                pbConnecting.visibility = View.VISIBLE
+                val success = withContext(Dispatchers.IO) {
+                    val finalFileName = if (fileName.contains(".")) {
+                        val base = fileName.substringBeforeLast(".")
+                        val ext = fileName.substringAfterLast(".")
+                        "${base}_${System.currentTimeMillis()}.$ext"
+                    } else {
+                        "${fileName}_${System.currentTimeMillis()}"
+                    }
+
+                    val contentType = context?.contentResolver?.getType(Uri.fromFile(sourceFile)) ?: "application/octet-stream"
+
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, finalFileName)
+                        put(MediaStore.MediaColumns.MIME_TYPE, contentType)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                            put(MediaStore.MediaColumns.IS_PENDING, 1)
+                        }
+                    }
+
+                    val resolver = requireContext().contentResolver
+                    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                    } else {
+                        MediaStore.Files.getContentUri("external")
+                    }
+
+                    val uri = resolver.insert(collection, contentValues)
+                    
+                    if (uri != null) {
+                        try {
+                            resolver.openOutputStream(uri)?.use { output ->
+                                java.io.FileInputStream(sourceFile).use { input ->
+                                    input.copyTo(output)
+                                }
+                            }
+
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                contentValues.clear()
+                                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                                resolver.update(uri, contentValues, null, null)
+                            }
+                            
+                            android.media.MediaScannerConnection.scanFile(requireContext(), arrayOf(uri.path), null, null)
+                            L.i("BluetoothTab", "Successfully moved $fileName to Downloads as $finalFileName")
+                            true
+                        } catch (e: Exception) {
+                            L.e("BluetoothTab", "Failed to write to MediaStore URI", e)
+                            resolver.delete(uri, null, null)
+                            false
+                        }
+                    } else {
+                        L.e("BluetoothTab", "Failed to create MediaStore entry")
+                        false
+                    }
+                }
+
+                if (success) {
+                    Toast.makeText(requireContext(), "Saved to Downloads", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(requireContext(), "Failed to save file", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                L.e("BluetoothTab", "Save exception", e)
+                Toast.makeText(requireContext(), "Save error: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                pbConnecting.visibility = View.GONE
+            }
+        }
     }
 
     private fun checkPermissions() {
