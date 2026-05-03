@@ -71,6 +71,18 @@ export async function getBluetoothConnectedDeviceNames(): Promise<string[]> {
   }
 }
 
+export async function getActiveBluetoothPeers(): Promise<Record<string, any>> {
+  if (!isTauriRuntime()) {
+    return {};
+  }
+
+  try {
+    return await invoke<Record<string, any>>("get_active_bluetooth_peers");
+  } catch {
+    return {};
+  }
+}
+
 export async function getBluetoothDevices(): Promise<LinuxBluetoothDevice[]> {
   if (!isTauriRuntime()) {
     return [];
@@ -85,18 +97,80 @@ export async function getBluetoothDevices(): Promise<LinuxBluetoothDevice[]> {
 
 export async function sendFileViaBluetooth(
   deviceAddress: string,
+  senderDeviceId: string,
+  senderDeviceName: string,
+  targetDeviceId: string,
+  targetDeviceName: string,
   fileName: string,
   contentBase64: string,
 ): Promise<void> {
   if (!isTauriRuntime()) {
-    throw new Error("Bluetooth file transfer is supported only in the Linux desktop app runtime");
+    throw new Error("Bluetooth transfers are supported only in the Linux desktop app runtime");
   }
 
-  await invoke<void>("send_file_via_bluetooth", {
+  return await invoke<void>("send_file_via_bluetooth", {
     deviceAddress,
+    senderDeviceId,
+    senderDeviceName,
+    targetDeviceId,
+    targetDeviceName,
     fileName,
     contentBase64,
   });
+}
+
+
+export async function sendChatMessageViaBluetooth(
+  deviceAddress: string,
+  senderDeviceId: string,
+  senderDeviceName: string,
+  targetDeviceId: string,
+  targetDeviceName: string,
+  body: string,
+): Promise<any> {
+  if (!isTauriRuntime()) {
+    throw new Error("Bluetooth messaging is supported only in the Linux desktop app runtime");
+  }
+
+  return await invoke<any>("send_chat_message_via_bluetooth", {
+    deviceAddress,
+    senderDeviceId,
+    senderDeviceName,
+    targetDeviceId,
+    targetDeviceName,
+    body,
+  });
+}
+
+export async function scanBluetoothDevices(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return await invoke("scan_bluetooth_devices");
+}
+
+export async function verifyBluetoothIdentity(
+  deviceAddress: string,
+  senderDeviceId: string,
+  senderDeviceName: string,
+  expectedTargetDeviceId: string,
+): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return await invoke("verify_bluetooth_identity", {
+    deviceAddress,
+    senderDeviceId,
+    senderDeviceName,
+    expectedTargetDeviceId,
+  });
+}
+
+export interface CompatibilityReport {
+  sdptoolInstalled: boolean;
+  bluezCompatMode: boolean;
+  canOpenSocket: boolean;
+}
+
+export async function checkBluetoothCompatibility(): Promise<CompatibilityReport> {
+  if (!isTauriRuntime()) return { sdptoolInstalled: false, bluezCompatMode: false, canOpenSocket: false };
+  return await invoke("check_bluetooth_compatibility");
 }
 
 export async function isWifiConnected(): Promise<boolean> {
@@ -141,8 +215,7 @@ export async function performLocalAction(
     | "list_installed_apps"
     | "list_running_apps"
     | "launch_app"
-    | "close_app"
-    | "get_clipboard_history",
+    | "close_app",
   payloadJson?: string | null,
 ): Promise<string> {
   if (!isTauriRuntime()) {

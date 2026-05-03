@@ -16,6 +16,12 @@ export function formatSize(sizeBytes: number): string {
 }
 
 export function statusLabel(status: FileTransferStatus, isSender: boolean): string {
+  if (status === "Queued") {
+    return isSender ? "Queued for upload" : "Waiting for sender";
+  }
+  if (status === "Uploading") {
+    return isSender ? "Uploading..." : "Sender is uploading...";
+  }
   if (status === "Available") {
     return isSender ? "Waiting for download" : "Ready to download";
   }
