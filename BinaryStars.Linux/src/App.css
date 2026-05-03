@@ -79,6 +79,7 @@ body {
 
 .md-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 6px 0;
 }
@@ -98,12 +99,12 @@ label {
   gap: 6px;
   font-size: 14px;
   color: var(--text-muted);
+  min-width: 0;
 }
 
 input,
 select,
-textarea,
-button {
+textarea {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-panel);
@@ -111,14 +112,25 @@ button {
   padding: 10px 12px;
   font: inherit;
   max-width: 100%;
-  min-width: 0;
+  box-sizing: border-box;
 }
 
 button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text-main);
+  padding: 10px 16px;
+  font: inherit;
   cursor: pointer;
   background: var(--primary-purple);
   border-color: transparent;
   color: #fff;
+  transition: opacity 0.2s;
+}
+
+button:hover {
+  opacity: 0.9;
 }
 
 button.ghost,
@@ -126,6 +138,16 @@ button.ghost,
   background: transparent;
   border-color: var(--border);
   color: var(--text-main);
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: white;
+}
+
+button.secondary:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .text-btn {
@@ -342,6 +364,20 @@ button.ghost,
   padding: 24px;
 }
 
+.bluetooth-status-strip {
+  background: var(--primary-purple);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px var(--shadow);
+}
+
 .no-connection-title {
   margin: 0;
   font-size: 18px;
@@ -362,6 +398,14 @@ button.ghost,
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panel input,
+.panel select,
+.panel textarea {
+  width: 100%;
 }
 
 .device-detail-grid {
@@ -509,6 +553,27 @@ textarea {
   flex: 0 0 auto;
 }
 
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.actions-row h3 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.actions-row select {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.actions-row button {
+  flex: 0 0 auto;
+}
+
 .chip-row {
   display: flex;
   gap: 8px;
@@ -620,12 +685,87 @@ textarea {
   width: 22px;
   height: 22px;
   min-width: 22px;
+  max-width: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  flex: 0 0 22px;
   border-radius: 6px;
   border: 2px solid var(--text-muted);
   background: var(--bg-panel);
   position: relative;
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.message-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  margin-bottom: 8px;
+  position: relative;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.message-bubble.incoming {
+  align-self: flex-start;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  border-bottom-left-radius: 4px;
+}
+
+.message-bubble.outgoing {
+  align-self: flex-end;
+  background: var(--primary-purple);
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.message-bubble .message-time {
+  font-size: 11px;
+  opacity: 0.7;
+  align-self: flex-end;
+}
+
+.message-bubble .copy-msg-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.2s;
+  cursor: pointer;
+  z-index: 2;
+  color: var(--text-muted);
+}
+
+.message-bubble:hover .copy-msg-btn {
+  opacity: 1;
+}
+
+.message-bubble.outgoing .copy-msg-btn {
+  left: -8px;
+  right: auto;
+}
+
+.messages-container {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 4px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .theme-checkbox:hover {
@@ -664,6 +804,7 @@ textarea {
   word-break: break-word;
   max-width: 100%;
   min-width: 0;
+  box-sizing: border-box; /* Include padding in width */
 }
 
 .markdown-preview pre {
@@ -743,3 +884,7 @@ textarea {
     display: inline-block;
   }
 }
+
+
+
+
