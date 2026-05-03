@@ -235,9 +235,6 @@ public class FileTransfersService : IFileTransfersReadService, IFileTransfersWri
         if (targetDevice == null || targetDevice.UserId != userId)
             return Result<FileTransferDetailResponse>.Failure(FileTransferErrors.TransferNotOwnedByUser);
 
-        if (!targetDevice.IsOnline)
-            return Result<FileTransferDetailResponse>.Failure(FileTransferErrors.TransferNotOwnedByUser);
-
         var now = DateTimeOffset.UtcNow;
         var transfer = new FileTransferDbModel
         {
@@ -303,7 +300,7 @@ public class FileTransfersService : IFileTransfersReadService, IFileTransfersWri
     public async Task<Result<List<FileTransferSummaryResponse>>> GetTransfersByUserAsync(Guid userId, CancellationToken cancellationToken)
     {
         var transfers = await _repository.GetByUserAsync(userId, cancellationToken);
-        var responses = transfers.Select(t => ToSummaryResponse(t, t.SenderUserId == userId)).ToList();
+        var responses = transfers.Select(t => ToSummaryResponse(t, false)).ToList();
         return Result<List<FileTransferSummaryResponse>>.Success(responses);
     }
 
@@ -315,7 +312,7 @@ public class FileTransfersService : IFileTransfersReadService, IFileTransfersWri
             return Result<List<FileTransferSummaryResponse>>.Failure(FileTransferErrors.TransferNotOwnedByUser);
 
         var transfers = await _repository.GetPendingByTargetDeviceIdAsync(deviceId, cancellationToken);
-        var responses = transfers.Select(t => ToSummaryResponse(t, t.SenderUserId == userId)).ToList();
+        var responses = transfers.Select(t => ToSummaryResponse(t, false)).ToList();
         return Result<List<FileTransferSummaryResponse>>.Success(responses);
     }
 

@@ -381,9 +381,6 @@ public class MessagingWebSocketHandler
         if (string.Equals(actionType, "close_app", StringComparison.OrdinalIgnoreCase))
             return "close_app";
 
-        if (string.Equals(actionType, "get_clipboard_history", StringComparison.OrdinalIgnoreCase))
-            return "get_clipboard_history";
-
         if (string.Equals(actionType, "shutdown", StringComparison.OrdinalIgnoreCase))
             return "shutdown";
 

@@ -148,15 +148,24 @@ public class MessagingController : ControllerBase
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         if (string.IsNullOrWhiteSpace(request.Body) || request.Body.Length > MaxMessageLength)
+        {
+            _logger.LogWarning("SendMessage 400: Invalid body. Length={Length}", request.Body?.Length ?? 0);
             return BadRequest(new[] { "Message body must be between 1 and 500 characters." });
+        }
 
         var senderDevice = await _deviceRepository.GetByIdAsync(request.SenderDeviceId, cancellationToken);
         var targetDevice = await _deviceRepository.GetByIdAsync(request.TargetDeviceId, cancellationToken);
         if (senderDevice == null || targetDevice == null)
-            return BadRequest(new[] { "Invalid device." });
+        {
+            _logger.LogWarning("SendMessage 400: Invalid device. Sender={SenderId}, Target={TargetId}", request.SenderDeviceId, request.TargetDeviceId);
+            return BadRequest(new[] { $"Invalid device. (Sender found: {senderDevice != null}, Target found: {targetDevice != null})" });
+        }
 
         if (senderDevice.UserId != userId || targetDevice.UserId != userId)
+        {
+            _logger.LogWarning("SendMessage 403: User {UserId} does not own devices {SenderId} or {TargetId}", userId, request.SenderDeviceId, request.TargetDeviceId);
             return Forbid();
+        }
 
         var sentAt = (request.SentAt ?? DateTimeOffset.UtcNow).ToUniversalTime();
         var message = new MessagingMessage(
