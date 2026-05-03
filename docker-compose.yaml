@@ -7,6 +7,7 @@ services:
         - "5004:8080"
         volumes:
         - ./kafka/secrets:/app/kafka/secrets:ro
+        - transfer-data:/app/transfers
         environment:
         - ASPNETCORE_URLS=http://+:8080
         - ASPNETCORE_ENVIRONMENT=Development
@@ -112,6 +113,7 @@ volumes:
     db-data:
     hangfire-data:
     kafka-data:
+    transfer-data:
 
 networks:
     binarystars-network:

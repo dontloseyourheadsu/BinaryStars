@@ -34,10 +34,10 @@ sudo apt install wmctrl copyq bluetooth-sendto network-manager geoclue-2.0 libdb
 
 ## Bluetooth Support
 
-The Linux app supports **client-side Bluetooth sending** to Android targets.
+The Linux app features a native RFCOMM server allowing it to act as both a **Sender** and a **Receiver**.
 
-- **Sender Mode**: Can discover nearby devices and send files via `bluetooth-sendto`.
-- **Receiver Mode**: Currently not supported in the Linux app runtime. Use Android as the primary P2P host.
+- **Bidirectional P2P:** Chat and transfer files between Linux-Linux and Linux-Android.
+- **Implementation:** Uses a raw `libc` socket server on RFCOMM Channel 1 and 2.
 
 ### Configuration (BlueZ)
 

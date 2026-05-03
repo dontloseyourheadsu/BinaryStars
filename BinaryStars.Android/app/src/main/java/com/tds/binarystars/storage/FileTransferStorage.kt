@@ -10,7 +10,7 @@ import android.database.sqlite.SQLiteOpenHelper
  */
 object FileTransferStorage {
     private const val DB_NAME = "binarystars_transfers.db"
-    private const val DB_VERSION = 1
+    private const val DB_VERSION = 2
 
     private const val TABLE_TRANSFERS = "transfers"
     private const val COLUMN_ID = "transfer_id"
@@ -25,6 +25,7 @@ object FileTransferStorage {
     private const val COLUMN_CREATED_AT = "created_at"
     private const val COLUMN_EXPIRES_AT = "expires_at"
     private const val COLUMN_IS_SENDER = "is_sender"
+    private const val COLUMN_LOCAL_PATH = "local_path"
 
     private var dbHelper: TransfersDbHelper? = null
 
@@ -54,9 +55,25 @@ object FileTransferStorage {
         val db = dbHelper?.writableDatabase ?: return
         db.beginTransaction()
         try {
+            // Keep local paths for existing transfers to ensure they aren't lost on sync
+            val existingPaths = mutableMapOf<String, String?>()
+            val cursor = db.query(TABLE_TRANSFERS, arrayOf(COLUMN_ID, COLUMN_LOCAL_PATH), null, null, null, null, null)
+            cursor.use {
+                while (it.moveToNext()) {
+                    val id = it.getString(0)
+                    val path = it.getString(1)
+                    existingPaths[id] = path
+                }
+            }
+
             db.delete(TABLE_TRANSFERS, null, null)
             transfers.forEach { transfer ->
-                upsertTransferInternal(db, transfer)
+                val finalTransfer = if (transfer.localPath == null) {
+                    transfer.copy(localPath = existingPaths[transfer.id])
+                } else {
+                    transfer
+                }
+                upsertTransferInternal(db, finalTransfer)
             }
             db.setTransactionSuccessful()
         } finally {
@@ -68,6 +85,13 @@ object FileTransferStorage {
     fun upsertTransfer(transfer: LocalFileTransfer) {
         val db = dbHelper?.writableDatabase ?: return
         upsertTransferInternal(db, transfer)
+    }
+
+    /** Updates the local path for a transfer. */
+    fun updateLocalPath(transferId: String, path: String?) {
+        val db = dbHelper?.writableDatabase ?: return
+        val cv = ContentValues().apply { put(COLUMN_LOCAL_PATH, path) }
+        db.update(TABLE_TRANSFERS, cv, "$COLUMN_ID = ?", arrayOf(transferId))
     }
 
     /** Returns cached transfers ordered by creation time. */
@@ -87,7 +111,8 @@ object FileTransferStorage {
                 COLUMN_STATUS,
                 COLUMN_CREATED_AT,
                 COLUMN_EXPIRES_AT,
-                COLUMN_IS_SENDER
+                COLUMN_IS_SENDER,
+                COLUMN_LOCAL_PATH
             ),
             null,
             null,
@@ -112,7 +137,8 @@ object FileTransferStorage {
                         status = c.getString(8),
                         createdAt = c.getString(9),
                         expiresAt = c.getString(10),
-                        isSender = c.getInt(11) == 1
+                        isSender = c.getInt(11) == 1,
+                        localPath = if (c.isNull(12)) null else c.getString(12)
                     )
                 )
             }
@@ -134,6 +160,7 @@ object FileTransferStorage {
             put(COLUMN_CREATED_AT, transfer.createdAt)
             put(COLUMN_EXPIRES_AT, transfer.expiresAt)
             put(COLUMN_IS_SENDER, if (transfer.isSender) 1 else 0)
+            put(COLUMN_LOCAL_PATH, transfer.localPath)
         }
         db.insertWithOnConflict(TABLE_TRANSFERS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
@@ -153,12 +180,15 @@ object FileTransferStorage {
                     "$COLUMN_STATUS TEXT NOT NULL, " +
                     "$COLUMN_CREATED_AT TEXT NOT NULL, " +
                     "$COLUMN_EXPIRES_AT TEXT NOT NULL, " +
-                    "$COLUMN_IS_SENDER INTEGER NOT NULL)"
+                    "$COLUMN_IS_SENDER INTEGER NOT NULL, " +
+                    "$COLUMN_LOCAL_PATH TEXT)"
             )
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            // No-op for now
+            if (oldVersion < 2) {
+                db.execSQL("ALTER TABLE $TABLE_TRANSFERS ADD COLUMN $COLUMN_LOCAL_PATH TEXT")
+            }
         }
     }
 }
@@ -178,5 +208,6 @@ data class LocalFileTransfer(
     val status: String,
     val createdAt: String,
     val expiresAt: String,
-    val isSender: Boolean
+    val isSender: Boolean,
+    val localPath: String? = null
 )

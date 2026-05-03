@@ -15,11 +15,6 @@ type Props = {
   onUnlinkDevice: (deviceId: string) => void;
   formatRam: (device: Device) => string;
   formatBattery: (device: Device) => string;
-  clipboardHistory: string[];
-  clipboardHistoryLoading: boolean;
-  clipboardHistoryMessage: string;
-  onRefreshClipboardHistory: () => void;
-  onCopyClipboardHistoryEntry: (value: string) => void;
 };
 
 export default function DevicesTab({
@@ -37,11 +32,6 @@ export default function DevicesTab({
   onUnlinkDevice,
   formatRam,
   formatBattery,
-  clipboardHistory,
-  clipboardHistoryLoading,
-  clipboardHistoryMessage,
-  onRefreshClipboardHistory,
-  onCopyClipboardHistoryEntry,
 }: Props) {
   if (selectedDevice) {
     const canUnlinkSelectedDevice = !selectedDevice.isOnline || !selectedDevice.isAvailable;
@@ -99,40 +89,6 @@ export default function DevicesTab({
           </div>
 
           <p className="muted">Last seen {new Date(selectedDevice.lastSeen).toLocaleString()}</p>
-
-          <p className="section-label">Clipboard History</p>
-          {selectedDevice.type === "Android" && (
-            <p className="muted">
-              Clipboard history for Android targets is not available due OS-level clipboard access restrictions.
-            </p>
-          )}
-
-          {selectedDevice.type === "Linux" && !selectedDevice.isOnline && (
-            <p className="muted">Target device must be online to fetch clipboard history.</p>
-          )}
-
-          {selectedDevice.type === "Linux" && selectedDevice.isOnline && (
-            <>
-              <button className="ghost" onClick={onRefreshClipboardHistory} type="button" disabled={clipboardHistoryLoading}>
-                {clipboardHistoryLoading ? "Refreshing…" : "Refresh Clipboard History"}
-              </button>
-
-              <p className="muted">
-                Shows up to 20 recent text entries when history providers are available; otherwise falls back to current clipboard text.
-              </p>
-
-              {clipboardHistoryMessage && <p className="muted">{clipboardHistoryMessage}</p>}
-
-              <div className="list compact">
-                {clipboardHistory.map((entry, index) => (
-                  <article className="row-card static" key={`${index}-${entry.slice(0, 24)}`}>
-                    <span className="clipboard-entry">{entry}</span>
-                    <button onClick={() => onCopyClipboardHistoryEntry(entry)} type="button">Copy</button>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
 
           <button onClick={() => onOpenChat(selectedDevice.id)} type="button">
             Open Chat

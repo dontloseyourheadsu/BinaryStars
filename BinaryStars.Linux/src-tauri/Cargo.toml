@@ -33,6 +33,12 @@ url = "2"
 urlencoding = "2"
 webbrowser = "1"
 zbus = { version = "5", default-features = true }
-bluetooth-serial-port = "0.6.0"
+libc = "0.2"
+uuid = { version = "1.7", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 freedesktop-desktop-entry = "0.5"
 shlex = "1"
+tokio = { version = "1", features = ["full"] }
+bluer = { version = "0.17", features = ["bluetoothd", "rfcomm"] }
+futures = "0.3"
+dirs = "5"

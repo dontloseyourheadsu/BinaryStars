@@ -8,9 +8,10 @@ type Props = {
   logFilePath?: string | null;
   onSetThemeMode: (value: ThemeMode) => void;
   onSignOut: () => void;
+  onRunDiagnostics: () => void;
 };
 
-export default function SettingsTab({ profile, devices, themeMode, logFilePath, onSetThemeMode, onSignOut }: Props) {
+export default function SettingsTab({ profile, devices, themeMode, logFilePath, onSetThemeMode, onSignOut, onRunDiagnostics }: Props) {
   const copyLogPath = async (): Promise<void> => {
     if (!logFilePath) {
       return;
@@ -49,7 +50,11 @@ export default function SettingsTab({ profile, devices, themeMode, logFilePath, 
         </label>
         <p className="section-label">Debug Logs</p>
         <p className="muted">{logFilePath ?? "Log path unavailable in this runtime."}</p>
-        <button type="button" onClick={() => void copyLogPath()} disabled={!logFilePath}>Copy Log Path</button>
+        <div className="chip-row">
+          <button type="button" onClick={() => void copyLogPath()} disabled={!logFilePath}>Copy Log Path</button>
+          <button type="button" onClick={onRunDiagnostics} className="ghost">Run Bluetooth Diagnostics</button>
+        </div>
+
         <h3>Connected devices ({devices.length})</h3>
         <div className="list compact">
           {devices.map((device) => (

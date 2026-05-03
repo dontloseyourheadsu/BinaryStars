@@ -349,6 +349,7 @@ export const api = {
     });
   },
   async clearTransfers(deviceId: string, scope: "all" | "sent" | "received"): Promise<number> {
+    console.log(`[API] clearTransfers: deviceId=${deviceId}, scope=${scope}`);
     const response = await http.post<{ deleted: number }>("/files/transfers/clear", {
       deviceId,
       scope,

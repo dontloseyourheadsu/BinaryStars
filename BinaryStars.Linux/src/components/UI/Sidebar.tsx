@@ -48,6 +48,16 @@ const iconMap: Record<string, ReactNode> = {
       <path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 1 0 12 8.5Zm8.3 2.6-1.7-.3a6.8 6.8 0 0 0-.6-1.5l1-1.4-1.4-1.4-1.4 1a6.8 6.8 0 0 0-1.5-.6l-.3-1.7h-2l-.3 1.7a6.8 6.8 0 0 0-1.5.6l-1.4-1-1.4 1.4 1 1.4a6.8 6.8 0 0 0-.6 1.5l-1.7.3v2l1.7.3a6.8 6.8 0 0 0 .6 1.5l-1 1.4 1.4 1.4 1.4-1a6.8 6.8 0 0 0 1.5.6l.3 1.7h2l.3-1.7a6.8 6.8 0 0 0 1.5-.6l1.4 1 1.4-1.4-1-1.4a6.8 6.8 0 0 0 .6-1.5l1.7-.3v-2Z" fill="currentColor" />
     </svg>
   ),
+  Logs: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-7-5ZM6 19V5h6v4h5v10H6Zm2-3h8v2H8v-2Zm0-4h8v2H8v-2Zm0-4h3v2H8V8Z" fill="currentColor" />
+    </svg>
+  ),
+  Bluetooth: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M17.71 7.71L12 2h-1v7.59L6.41 5L5 6.41 10.59 12L5 17.59 6.41 19L11 14.41V22h1l5.71-5.71L12.41 12l5.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.29L13 18.17v-3.76l1.88 1.88z" fill="currentColor" />
+    </svg>
+  ),
 };
 
 export default function Sidebar({ tabs, activeTab, onSelect, drawerOpen }: Props) {

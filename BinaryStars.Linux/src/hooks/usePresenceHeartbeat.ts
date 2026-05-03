@@ -27,7 +27,7 @@ export function usePresenceHeartbeat(
     void runHeartbeat();
     const timer = window.setInterval(() => {
       void runHeartbeat();
-    }, 10_000);
+    }, 5_000);
 
     return () => window.clearInterval(timer);
   }, [isAuthed, deviceId, onHeartbeat]);

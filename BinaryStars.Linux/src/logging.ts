@@ -115,3 +115,15 @@ export async function getNativeLogFilePath(): Promise<string | null> {
     return null;
   }
 }
+
+export async function readRecentLogs(lines: number): Promise<string[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  try {
+    return await invoke<string[]>("read_recent_logs", { lines });
+  } catch {
+    return [];
+  }
+}

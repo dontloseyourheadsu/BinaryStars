@@ -80,7 +80,10 @@ case "${1:-}" in
     linux)
         echo "Starting Linux app pointing to $PI_IP..."
         cd BinaryStars.Linux
-        VITE_API_BASE_URL="http://$PI_IP:$API_PORT/api" npm run tauri dev
+        export VITE_API_BASE_URL="http://$PI_IP:$API_PORT/api"
+        # Using -- -- to pass args to the underlying command if needed, 
+        # but for Vite/Tauri, env must be set before.
+        npm run tauri dev
         ;;
 
     all)

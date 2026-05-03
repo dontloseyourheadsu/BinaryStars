@@ -22,6 +22,13 @@ const LOCATION_ENABLED_KEY = "binarystars.location.enabled";
 const LOCATION_INTERVAL_KEY = "binarystars.location.minutes";
 const LOCATION_LOCAL_HISTORY_KEY = "binarystars.location.localHistory";
 const LOCATION_PENDING_UPLOADS_KEY = "binarystars.location.pendingUploads";
+const BLUETOOTH_ID_MAP_KEY = "binarystars.bluetooth.idmap";
+
+export interface BluetoothIdentityMapping {
+  deviceId: string;
+  macAddress: string;
+  lastVerifiedAt: string;
+}
 
 export interface LocalLocationPoint {
   id: string;
@@ -159,6 +166,12 @@ export const cacheStore = {
     const next = readJson<PendingLocationUpload[]>(LOCATION_PENDING_UPLOADS_KEY, [])
       .filter((entry) => entry.deviceId !== deviceId || !idSet.has(entry.id));
     writeJson(LOCATION_PENDING_UPLOADS_KEY, next);
+  },
+  getBluetoothIdMap(): Record<string, BluetoothIdentityMapping> {
+    return readJson<Record<string, BluetoothIdentityMapping>>(BLUETOOTH_ID_MAP_KEY, {});
+  },
+  setBluetoothIdMap(map: Record<string, BluetoothIdentityMapping>): void {
+    writeJson(BLUETOOTH_ID_MAP_KEY, map);
   },
 };
 

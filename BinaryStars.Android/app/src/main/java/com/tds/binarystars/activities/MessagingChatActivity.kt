@@ -1,10 +1,5 @@
 package com.tds.binarystars.activities
 
-import android.annotation.SuppressLint
-import android.Manifest
-import android.bluetooth.BluetoothAdapter
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
@@ -15,10 +10,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -27,8 +18,6 @@ import com.tds.binarystars.adapter.MessagingMessagesAdapter
 import com.tds.binarystars.api.ApiClient
 import com.tds.binarystars.api.ClearConversationRequestDto
 import com.tds.binarystars.api.SendMessageRequestDto
-import com.tds.binarystars.bluetooth.BluetoothChatListener
-import com.tds.binarystars.bluetooth.BluetoothChatManager
 import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.model.ChatMessage
@@ -38,14 +27,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
-import kotlinx.coroutines.isActive
 
-class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, BluetoothChatListener {
+class MessagingChatActivity : AppCompatActivity(), MessagingEventListener {
     companion object {
         const val EXTRA_DEVICE_ID = "device_id"
         const val EXTRA_DEVICE_NAME = "device_name"
         private const val PAGE_SIZE = 50
-        private const val MAX_MESSAGE_LENGTH = 500
     }
 
     private lateinit var recyclerView: RecyclerView
@@ -55,7 +42,6 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
     private lateinit var backButton: ImageView
     private lateinit var clearButton: Button
     private lateinit var titleView: TextView
-    private lateinit var bluetoothToggle: SwitchCompat
 
     private val messages = mutableListOf<ChatMessage>()
     private var deviceId: String = ""
@@ -63,35 +49,7 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
     private var isLoading = false
     private var hasMore = true
     private var oldestTimestamp: Long? = null
-    private var bluetoothAvailable = false
-    private var bluetoothConnected = false
-    private var bluetoothConnecting = false
-    private var bluetoothEnabled = false
-    private var suppressBluetoothToggle = false
 
-    private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
-        bluetoothAvailable = devices.keys.contains(deviceName)
-        updateBluetoothUi()
-    }
-
-    private val bluetoothPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        val granted = result.values.any { it }
-        if (granted) {
-            startBluetoothFeatures()
-        }
-    }
-
-    private val enableBluetoothLauncher = registerForActivityResult(StartActivityForResult()) {
-        if (BluetoothChatManager.isEnabled()) {
-            startBluetoothFeatures()
-        }
-    }
-
-    /**
-     * Initializes chat UI, loads history, and wires message actions.
-     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_messaging_chat)
@@ -105,72 +63,24 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
         backButton = findViewById(R.id.btnBackChat)
         clearButton = findViewById(R.id.btnClearChat)
         titleView = findViewById(R.id.tvChatTitle)
-        bluetoothToggle = findViewById(R.id.switchChatBluetooth)
 
         titleView.text = deviceName
-
-        val selfDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        val selfDeviceName = BluetoothAdapter.getDefaultAdapter()?.name ?: "Android"
-        BluetoothChatManager.setSelf(selfDeviceId, selfDeviceName)
+        findViewById<View>(R.id.switchChatBluetooth).visibility = View.GONE
 
         adapter = MessagingMessagesAdapter(messages)
         val layoutManager = LinearLayoutManager(this)
         recyclerView.layoutManager = layoutManager
         recyclerView.adapter = adapter
 
-        sendButton.setOnClickListener {
-            sendMessage()
-        }
-
-        backButton.setOnClickListener {
-            finish()
-        }
-
-        bluetoothToggle.setOnCheckedChangeListener { _, isChecked ->
-            if (suppressBluetoothToggle) return@setOnCheckedChangeListener
-            if (!bluetoothAvailable && isChecked) {
-                suppressBluetoothToggle = true
-                bluetoothToggle.isChecked = false
-                suppressBluetoothToggle = false
-                return@setOnCheckedChangeListener
-            }
-
-            bluetoothEnabled = isChecked
-            BluetoothChatManager.setChatEnabled(deviceId, bluetoothEnabled)
-            if (!bluetoothEnabled) {
-                BluetoothChatManager.disconnect(deviceId)
-                bluetoothConnected = false
-                bluetoothConnecting = false
-                updateBluetoothUi()
-                return@setOnCheckedChangeListener
-            }
-
-            lifecycleScope.launch {
-                bluetoothConnecting = true
-                updateBluetoothUi()
-                val connected = withContext(Dispatchers.IO) {
-                    BluetoothChatManager.connectToDevice(deviceId, deviceName)
-                }
-                bluetoothConnected = connected
-                bluetoothConnecting = false
-                if (!connected && bluetoothEnabled) {
-                    Toast.makeText(this@MessagingChatActivity, "Bluetooth not accepted", Toast.LENGTH_SHORT).show()
-                }
-                updateBluetoothUi()
-            }
-        }
-
-        clearButton.setOnClickListener {
-            confirmClearChat()
-        }
+        sendButton.setOnClickListener { sendMessage() }
+        backButton.setOnClickListener { finish() }
+        clearButton.setOnClickListener { confirmClearChat() }
 
         recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 if (dy < 0) {
                     val firstVisible = layoutManager.findFirstVisibleItemPosition()
-                    if (firstVisible == 0 && !isLoading && hasMore) {
-                        loadMore()
-                    }
+                    if (firstVisible == 0 && !isLoading && hasMore) loadMore()
                 }
             }
         })
@@ -178,356 +88,90 @@ class MessagingChatActivity : AppCompatActivity(), MessagingEventListener, Bluet
         loadInitial()
     }
 
-    /**
-     * Registers websocket listeners for chat updates.
-     */
     override fun onResume() {
         super.onResume()
         MessagingSocketManager.addListener(this)
-        BluetoothChatManager.addListener(this)
-        startPolling()
     }
 
-    /**
-     * Unregisters websocket listeners.
-     */
     override fun onPause() {
         super.onPause()
         MessagingSocketManager.removeListener(this)
-        BluetoothChatManager.removeListener(this)
-        stopPolling()
     }
 
-    private var pollingJob: kotlinx.coroutines.Job? = null
-
-    private fun startPolling() {
-        if (pollingJob != null) return
-        pollingJob = lifecycleScope.launch {
-            while (isActive) {
-                kotlinx.coroutines.delay(3000)
-                loadLatestSilently()
-            }
-        }
-    }
-
-    private fun stopPolling() {
-        pollingJob?.cancel()
-        pollingJob = null
-    }
-
-    /**
-     * Reloads the latest messages silently for polling without disrupting scroll.
-     */
-    private suspend fun loadLatestSilently() {
-        val loaded = try {
-            if (NetworkUtils.isOnline(this@MessagingChatActivity)) {
-                fetchHistoryFromApi(PAGE_SIZE)
-            } else {
-                ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
-            }
-        } catch (e: Exception) {
-            emptyList<ChatMessage>()
-        }
-
-        if (loaded.isEmpty() && messages.isEmpty()) {
-            return
-        }
-
-        val currentLast = messages.lastOrNull()
-        val newLast = loaded.lastOrNull()
-
-        if (messages.size != loaded.size || currentLast?.id != newLast?.id) {
-            val shouldScroll = !recyclerView.canScrollVertically(1)
-            adapter.replaceAll(loaded)
-            oldestTimestamp = loaded.firstOrNull()?.sentAt
-            hasMore = loaded.size == PAGE_SIZE
-            if (shouldScroll && loaded.isNotEmpty()) {
-                recyclerView.scrollToPosition(messages.lastIndex)
-            }
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        ensureBluetoothReady()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        BluetoothChatManager.setChatEnabled(deviceId, false)
-        BluetoothChatManager.disconnect(deviceId)
-        stopBluetoothFeatures()
-    }
-
-    /**
-     * Refreshes the chat when new messages arrive.
-     */
-    override fun onChatUpdated(deviceId: String) {
-        if (deviceId != this.deviceId) return
-        loadLatest()
-    }
-
-    /**
-     * Closes the chat if the device was removed.
-     */
-    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {
-        if (isSelf || deviceId == this.deviceId) {
-            finish()
-        }
-    }
-
-    override fun onConnectionStateChanged(isConnected: Boolean) {
-        // No-op for now
-    }
-
-    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
-        // Chat screen does not need direct presence rendering right now.
-    }
-
-    override fun onBluetoothConnectionChanged(deviceId: String, isConnected: Boolean, isConnecting: Boolean) {
-        if (deviceId != this.deviceId) return
-        bluetoothConnected = isConnected
-        bluetoothConnecting = isConnecting
-        updateBluetoothUi()
-    }
-
-    /**
-     * Loads the initial page of chat history.
-     */
     private fun loadInitial() {
-        lifecycleScope.launch {
-            val loaded = if (NetworkUtils.isOnline(this@MessagingChatActivity)) {
-                fetchHistoryFromApi(PAGE_SIZE)
-            } else {
-                ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
-            }
-
-            messages.clear()
-            messages.addAll(loaded)
-            adapter.notifyDataSetChanged()
-
-            oldestTimestamp = loaded.firstOrNull()?.sentAt
-            hasMore = loaded.size == PAGE_SIZE
-            if (loaded.isNotEmpty()) {
-                recyclerView.scrollToPosition(messages.lastIndex)
-            }
-        }
-    }
-
-    /**
-     * Reloads the latest messages from storage.
-     */
-    private fun loadLatest() {
-        lifecycleScope.launch {
-            val loaded = if (NetworkUtils.isOnline(this@MessagingChatActivity)) {
-                fetchHistoryFromApi(PAGE_SIZE)
-            } else {
-                ChatStorage.getMessages(deviceId, null, PAGE_SIZE)
-            }
-
-            adapter.replaceAll(loaded)
-            oldestTimestamp = loaded.firstOrNull()?.sentAt
-            hasMore = loaded.size == PAGE_SIZE
-            if (loaded.isNotEmpty()) {
-                recyclerView.scrollToPosition(messages.lastIndex)
-            }
-        }
-    }
-
-    /**
-     * Loads older messages when the user scrolls to the top.
-     */
-    private fun loadMore() {
-        if (NetworkUtils.isOnline(this)) {
-            hasMore = false
-            return
-        }
-
-        if (oldestTimestamp == null) return
         isLoading = true
-        val older = ChatStorage.getMessages(deviceId, oldestTimestamp, PAGE_SIZE)
-        if (older.isEmpty()) {
-            hasMore = false
-        } else {
-            oldestTimestamp = older.firstOrNull()?.sentAt
-            adapter.prepend(older)
+        lifecycleScope.launch {
+            val cached = withContext(Dispatchers.IO) { ChatStorage.getMessages(deviceId, null, PAGE_SIZE) }
+            messages.clear(); messages.addAll(cached); adapter.notifyDataSetChanged()
+            if (messages.isNotEmpty()) { oldestTimestamp = messages.first().sentAt; recyclerView.scrollToPosition(messages.lastIndex) }
+            hasMore = cached.size >= PAGE_SIZE; isLoading = false
+            refreshFromCloud()
         }
-        isLoading = false
     }
 
-    @SuppressLint("HardwareIds")
-    /**
-     * Sends a new message using websocket or REST fallback.
-     */
+    private fun loadMore() {
+        if (isLoading || !hasMore) return
+        isLoading = true
+        lifecycleScope.launch {
+            val cached = withContext(Dispatchers.IO) { ChatStorage.getMessages(deviceId, oldestTimestamp, PAGE_SIZE) }
+            if (cached.isNotEmpty()) {
+                messages.addAll(0, cached); adapter.notifyItemRangeInserted(0, cached.size)
+                oldestTimestamp = cached.first().sentAt
+            }
+            hasMore = cached.size >= PAGE_SIZE; isLoading = false
+        }
+    }
+
+    private suspend fun refreshFromCloud() {
+        if (!NetworkUtils.isOnline(this)) return
+        try {
+            val selfId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+            val response = withContext(Dispatchers.IO) { ApiClient.apiService.getMessageHistory(selfId, deviceId) }
+            if (response.isSuccessful) {
+                val cloudMessages = response.body()?.map { dto ->
+                    ChatMessage(id = dto.id, deviceId = deviceId, senderDeviceId = dto.senderDeviceId, body = dto.body,
+                        sentAt = OffsetDateTime.parse(dto.sentAt).toInstant().toEpochMilli(), isOutgoing = dto.senderDeviceId == selfId)
+                } ?: emptyList()
+                withContext(Dispatchers.IO) { cloudMessages.forEach { ChatStorage.upsertMessage(it) } }
+                val updated = withContext(Dispatchers.IO) { ChatStorage.getMessages(deviceId, null, messages.size.coerceAtLeast(PAGE_SIZE)) }
+                messages.clear(); messages.addAll(updated); adapter.notifyDataSetChanged()
+                if (messages.isNotEmpty()) recyclerView.scrollToPosition(messages.lastIndex)
+            }
+        } catch (_: Exception) {}
+    }
+
     private fun sendMessage() {
         val body = input.text.toString().trim()
         if (body.isBlank()) return
-        if (body.length > MAX_MESSAGE_LENGTH) {
-            Toast.makeText(this, "Message too long (500 max)", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        if (!NetworkUtils.isOnline(this)) {
-            Toast.makeText(this, "No connection available", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val senderDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        val sentAt = OffsetDateTime.now().toString()
-        val request = SendMessageRequestDto(
-            senderDeviceId = senderDeviceId,
-            targetDeviceId = deviceId,
-            body = body,
-            sentAt = sentAt
-        )
-
+        if (!NetworkUtils.isOnline(this)) { Toast.makeText(this, "Offline", Toast.LENGTH_SHORT).show(); return }
         lifecycleScope.launch {
-            val response = withContext(Dispatchers.IO) { ApiClient.apiService.sendMessage(request) }
-            if (response.isSuccessful && response.body() != null) {
-                val dto = response.body()!!
-                val localMessage = ChatMessage(
-                    id = dto.id,
-                    deviceId = deviceId,
-                    senderDeviceId = senderDeviceId,
-                    body = dto.body,
-                    sentAt = OffsetDateTime.parse(dto.sentAt).toInstant().toEpochMilli(),
-                    isOutgoing = true
-                )
-                ChatStorage.upsertMessage(localMessage)
-                adapter.append(localMessage)
-                recyclerView.scrollToPosition(messages.lastIndex)
-                input.setText("")
-            } else {
-                Toast.makeText(this@MessagingChatActivity, "Failed to send message", Toast.LENGTH_SHORT).show()
-            }
+            val selfId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+            val request = SendMessageRequestDto(selfId, deviceId, body, OffsetDateTime.now().toString())
+            try {
+                if (ApiClient.apiService.sendMessage(request).isSuccessful) { input.setText(""); refreshFromCloud() }
+            } catch (_: Exception) {}
         }
     }
 
-    /**
-     * Confirms and clears the local chat history.
-     */
     private fun confirmClearChat() {
-        AlertDialog.Builder(this)
-            .setTitle("Clear chat")
-            .setMessage("This will clear conversation history for both devices.")
-            .setPositiveButton("Clear") { _, _ ->
-                if (!NetworkUtils.isOnline(this)) {
-                    Toast.makeText(this, "No connection available", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                val senderDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-                lifecycleScope.launch {
-                    val response = withContext(Dispatchers.IO) {
-                        ApiClient.apiService.clearConversation(
-                            ClearConversationRequestDto(
-                                deviceId = senderDeviceId,
-                                targetDeviceId = deviceId
-                            )
-                        )
-                    }
-
-                    if (response.isSuccessful) {
-                        ChatStorage.clearChat(deviceId)
-                        loadInitial()
-                    } else {
-                        Toast.makeText(this@MessagingChatActivity, "Failed to clear conversation", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        AlertDialog.Builder(this).setTitle("Clear Chat").setMessage("Delete all?").setPositiveButton("Clear") { _, _ -> clearChat() }.setNegativeButton("Cancel", null).show()
     }
 
-    private suspend fun fetchHistoryFromApi(limit: Int): List<ChatMessage> {
-        val senderDeviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        val response = withContext(Dispatchers.IO) {
-            ApiClient.apiService.getMessageHistory(senderDeviceId, deviceId, limit)
-        }
-
-        if (!response.isSuccessful) {
-            return ChatStorage.getMessages(deviceId, null, limit)
-        }
-
-        val mapped = response.body().orEmpty().map { dto ->
-            ChatMessage(
-                id = dto.id,
-                deviceId = if (dto.senderDeviceId.equals(senderDeviceId, true)) dto.targetDeviceId else dto.senderDeviceId,
-                senderDeviceId = dto.senderDeviceId,
-                body = dto.body,
-                sentAt = OffsetDateTime.parse(dto.sentAt).toInstant().toEpochMilli(),
-                isOutgoing = dto.senderDeviceId.equals(senderDeviceId, true)
-            )
-        }
-
-        mapped.forEach { message -> ChatStorage.upsertMessage(message) }
-        return mapped
-    }
-
-    private fun updateBluetoothUi() {
-        bluetoothToggle.visibility = if (bluetoothAvailable) View.VISIBLE else View.GONE
-        bluetoothToggle.isEnabled = !bluetoothConnecting
-
-        if (!bluetoothAvailable && bluetoothEnabled) {
-            suppressBluetoothToggle = true
-            bluetoothToggle.isChecked = false
-            suppressBluetoothToggle = false
-            bluetoothEnabled = false
-            BluetoothChatManager.setChatEnabled(deviceId, false)
-            BluetoothChatManager.disconnect(deviceId)
-        }
-
-        sendButton.isEnabled = !bluetoothEnabled || bluetoothConnected
-        bluetoothToggle.text = when {
-            bluetoothConnecting -> "Bluetooth (connecting)"
-            bluetoothEnabled && bluetoothConnected -> "Bluetooth (connected)"
-            else -> "Bluetooth"
+    private fun clearChat() {
+        lifecycleScope.launch {
+            try {
+                val selfId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                ApiClient.apiService.clearConversation(ClearConversationRequestDto(selfId, deviceId))
+                withContext(Dispatchers.IO) { ChatStorage.clearChat(deviceId) }
+                messages.clear(); adapter.notifyDataSetChanged()
+            } catch (_: Exception) {}
         }
     }
 
-    private fun ensureBluetoothReady() {
-        if (!BluetoothChatManager.isSupported()) {
-            bluetoothAvailable = false
-            updateBluetoothUi()
-            return
-        }
-        if (!hasBluetoothPermissions()) {
-            requestBluetoothPermissions()
-            return
-        }
-        if (!BluetoothChatManager.isEnabled()) {
-            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-            return
-        }
-        startBluetoothFeatures()
-    }
-
-    private fun startBluetoothFeatures() {
-        BluetoothChatManager.acquireDiscovery(this, bluetoothDiscoveryListener)
-        BluetoothChatManager.acquireServer()
-    }
-
-    private fun stopBluetoothFeatures() {
-        BluetoothChatManager.releaseDiscovery(this, bluetoothDiscoveryListener)
-        BluetoothChatManager.releaseServer()
-    }
-
-    private fun hasBluetoothPermissions(): Boolean {
-        val permissions = requiredBluetoothPermissions()
-        return permissions.all { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    private fun requestBluetoothPermissions() {
-        bluetoothPermissionLauncher.launch(requiredBluetoothPermissions())
-    }
-
-    private fun requiredBluetoothPermissions(): Array<String> {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-    }
+    override fun onChatUpdated(deviceId: String) { if (deviceId == this.deviceId) lifecycleScope.launch { refreshFromCloud() } }
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) { if (deviceId == this.deviceId) finish() }
+    override fun onConnectionStateChanged(isConnected: Boolean) {}
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {}
+    override fun onLocationUpdated(event: com.tds.binarystars.api.LocationUpdateEventDto) {}
+    override fun onActionResult(result: com.tds.binarystars.api.DeviceActionResultDto) {}
 }

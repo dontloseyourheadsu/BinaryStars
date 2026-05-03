@@ -32,13 +32,15 @@ graph TD
 
 ## Bluetooth P2P Support
 
-The Android app implements two RFCOMM-based services for peer-to-peer communication:
+The Android app implements bidirectional RFCOMM-based services:
 
-1.  **Chat Service** (UUID: `a64f3f3b-5ad0-4b65-9b8f-585a45c7e9c4`):
-    - Uses JSON framing over Channel 1.
-    - Compatible with `BinaryStars.Linux`.
-2.  **Transfer Service** (UUID: `2b3d7e64-6d7b-4ad4-9d92-4b4c4b8d0d4c`):
-    - Handles large file byte streams with resume/restart support on Channel 2.
+1.  **Handshake & Info Service**:
+    - Standardized JSON framing.
+    - Automatically swaps `DeviceInfo` (Battery, CPU, IP) upon connection.
+    - Fully compatible with `BinaryStars.Linux` receiver mode.
+2.  **Chat & Transfer Service**:
+    - **Chat Service** (UUID: `a64f3f3b-5ad0-4b65-9b8f-585a45c7e9c4`): RFCOMM Channel 1.
+    - **Transfer Service** (UUID: `2b3d7e64-6d7b-4ad4-9d92-4b4c4b8d0d4c`): RFCOMM Channel 2. Supports large streams and resume.
 
 ## Prerequisites & Setup
 

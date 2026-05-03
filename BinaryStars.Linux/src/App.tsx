@@ -1,21 +1,23 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "leaflet";
+import { AxiosError } from "axios";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "./App.css";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { api, tokenStore } from "./api";
 import { getDeviceId, getDeviceName, setDeviceName } from "./device";
 import {
-  getBluetoothDevices,
   getElevationStatus,
   getNativeLocation,
   getLocalDeviceInfo,
   isTauriRuntime,
-  isWifiConnected,
   performLocalAction,
   sendFileViaBluetooth,
+  sendChatMessageViaBluetooth,
+  checkBluetoothCompatibility,
 } from "./tauriDeviceInfo";
 import { cacheStore, settingsStore } from "./storage";
 import type { LocalNotificationHistoryItem } from "./storage";
@@ -47,9 +49,13 @@ import NotificationsTab from "./components/tabs/NotificationsTab";
 import MapTab from "./components/tabs/MapTab";
 import ActionsTab from "./components/tabs/ActionsTab";
 import SettingsTab from "./components/tabs/SettingsTab";
+import BluetoothTab from "./components/tabs/BluetoothTab";
+import LogsTab from "./components/tabs/LogsTab";
 import { Tab, tabs } from "./components/tabs/types";
 import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
-import { getNativeLogFilePath, installInteractionLogging, logEvent } from "./logging";
+import { useBluetooth } from "./hooks/useBluetooth";
+import { useDevices } from "./hooks/useDevices";
+import { getNativeLogFilePath, installInteractionLogging, logEvent, readRecentLogs } from "./logging";
 
 type EffectiveTheme = "light" | "dark";
 type SnackbarLevel = "error" | "info" | "success" | "warning";
@@ -85,8 +91,110 @@ function App() {
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [activeTab, setActiveTab] = useState<Tab>("Devices");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logContent, setLogContent] = useState("");
 
-  const [devices, setDevices] = useState<Device[]>(cacheStore.getDevices());
+  const myDeviceId = getDeviceId();
+
+  const isConnectionIssueMessage = useCallback((message: string): boolean => {
+    const normalized = message.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    return (
+      normalized.includes("no connection available")
+      || normalized.includes("showing cached data")
+      || normalized.includes("network error")
+      || normalized.includes("failed to fetch")
+      || normalized.includes("timeout")
+      || normalized.includes("offline")
+    );
+  }, []);
+
+  const showSnackbar = useCallback((level: SnackbarLevel, message: string): void => {
+    const normalized = message.trim();
+    if (!normalized) {
+      setSnackbar(null);
+      return;
+    }
+
+    setSnackbar({
+      id: crypto.randomUUID(),
+      level,
+      message: normalized,
+    });
+  }, []);
+
+  const setError = useCallback((value: string): void => {
+    if (!value) {
+      setSnackbar(null);
+      return;
+    }
+
+    if (isConnectionIssueMessage(value)) {
+      // Connection state is already represented by the dedicated offline panel.
+      setSnackbar(null);
+      return;
+    }
+
+    showSnackbar("error", value);
+  }, [isConnectionIssueMessage, showSnackbar]);
+
+  const setInfo = useCallback((value: string): void => {
+    showSnackbar("info", value);
+  }, [showSnackbar]);
+
+  const setSuccess = useCallback((value: string): void => {
+    showSnackbar("success", value);
+  }, [showSnackbar]);
+
+  // Derived tabs based on connectivity
+  const filteredTabs = useMemo(() => {
+    if (online) return tabs.filter(t => t !== "Bluetooth");
+    return tabs;
+  }, [online]);
+
+  useEffect(() => {
+    if (online && activeTab === "Bluetooth") {
+      setInfo("Internet connection restored. Switching to online mode.");
+      setActiveTab("Devices");
+      void invoke("stop_bluetooth_server");
+    }
+  }, [online, activeTab, setInfo]);
+
+  // --- HOOKS REFACTOR ---
+  const {
+    bluetoothConnectedNames,
+    isBluetoothConnected,
+    isScanning,
+    scan,
+    findBestBluetoothAddress,
+    isDeviceBluetoothOnline
+  } = useBluetooth(isAuthed, myDeviceId, getDeviceName());
+
+  const handleDeviceError = useCallback((msg: string | null) => {
+    if (msg) {
+      setError(msg);
+    } else {
+      setSnackbar(null);
+    }
+  }, [setError]);
+
+  const {
+    devices,
+    setDevices,
+    localMemoryLoadPercent,
+    setLocalMemoryLoadPercent,
+    refreshDevices
+  } = useDevices(
+    isAuthed,
+    online,
+    myDeviceId,
+    isDeviceBluetoothOnline,
+    handleDeviceError
+  );
+  // ----------------------
+
   const [transfers, setTransfers] = useState<FileTransfer[]>(cacheStore.getTransfers());
   const [notes, setNotes] = useState<Note[]>(cacheStore.getNotes());
   const [messages, setMessages] = useState<ChatMessage[]>(cacheStore.getMessages());
@@ -108,11 +216,6 @@ function App() {
   const [pendingActionDeadlineAtMs, setPendingActionDeadlineAtMs] = useState<number | null>(null);
   const [pendingActionSecondsRemaining, setPendingActionSecondsRemaining] = useState<number | null>(null);
   const [pendingActionTimeoutMessage, setPendingActionTimeoutMessage] = useState("");
-  const [clipboardHistory, setClipboardHistory] = useState<string[]>([]);
-  const [clipboardHistoryLoading, setClipboardHistoryLoading] = useState(false);
-  const [clipboardHistoryMessage, setClipboardHistoryMessage] = useState("");
-  const [pendingClipboardRequestId, setPendingClipboardRequestId] = useState<string | null>(null);
-  const [clipboardTargetDeviceId, setClipboardTargetDeviceId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationBody, setNotificationBody] = useState("");
@@ -130,16 +233,15 @@ function App() {
   const [systemTheme, setSystemTheme] = useState<EffectiveTheme>(getSystemTheme());
   const [locationEnabled, setLocationEnabled] = useState(settingsStore.getLocationEnabled(false));
   const [locationMinutes, setLocationMinutes] = useState(settingsStore.getLocationMinutes(15));
-  const [wifiAvailable, setWifiAvailable] = useState(true);
+  const [wifiAvailable] = useState(true);
   const [isElevated, setIsElevated] = useState(false);
-  const [localMemoryLoadPercent, setLocalMemoryLoadPercent] = useState<number | null>(null);
   const [mapDetailOpen, setMapDetailOpen] = useState(false);
-  const [bluetoothConnectedNames, setBluetoothConnectedNames] = useState<string[]>([]);
   const [geoPermissionState, setGeoPermissionState] = useState<"granted" | "denied" | "prompt" | "unsupported" | "unknown" | "native">("unknown");
   const [lastGeoError, setLastGeoError] = useState("");
   const [lastLocationSampleAt, setLastLocationSampleAt] = useState<string | null>(null);
   const [lastLocationSource, setLastLocationSource] = useState<"native" | "geolocation" | null>(null);
   const [nativeLogFilePath, setNativeLogFilePath] = useState<string | null>(null);
+
   const isElevatedRuntime = isTauriRuntime() && isElevated;
 
   const normalizeNoteType = (value: unknown): "Plaintext" | "Markdown" => {
@@ -158,9 +260,7 @@ function App() {
   const selectedMapDeviceIdRef = useRef(selectedMapDeviceId);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const noteContentRef = useRef<HTMLTextAreaElement | null>(null);
-  const clipboardAutoFetchKeyRef = useRef<string>("");
   const notificationSyncInFlightRef = useRef(false);
-  const myDeviceId = getDeviceId();
 
   const getActionTimeoutMs = (actionType: string): number => {
     if (actionType === "list_installed_apps" || actionType === "launch_app") {
@@ -239,59 +339,6 @@ function App() {
       }
     })();
   }, []);
-
-  const isConnectionIssueMessage = (message: string): boolean => {
-    const normalized = message.trim().toLowerCase();
-    if (!normalized) {
-      return false;
-    }
-
-    return (
-      normalized.includes("no connection available")
-      || normalized.includes("showing cached data")
-      || normalized.includes("network error")
-      || normalized.includes("failed to fetch")
-      || normalized.includes("timeout")
-      || normalized.includes("offline")
-    );
-  };
-
-  const showSnackbar = (level: SnackbarLevel, message: string): void => {
-    const normalized = message.trim();
-    if (!normalized) {
-      setSnackbar(null);
-      return;
-    }
-
-    setSnackbar({
-      id: crypto.randomUUID(),
-      level,
-      message: normalized,
-    });
-  };
-
-  const setError = (value: string): void => {
-    if (!value) {
-      setSnackbar(null);
-      return;
-    }
-
-    if (isConnectionIssueMessage(value)) {
-      // Connection state is already represented by the dedicated offline panel.
-      setSnackbar(null);
-      return;
-    }
-
-    showSnackbar("error", value);
-  };
-
-  const setInfo = (value: string): void => {
-    showSnackbar("info", value);
-  };
-
-  const setSuccess = (value: string): void => {
-    showSnackbar("success", value);
-  };
 
   useEffect(() => {
     if (!snackbar) {
@@ -499,18 +546,6 @@ function App() {
   const refreshProfile = async (): Promise<void> => {
     const next = await api.getProfile();
     setProfile(next);
-  };
-
-  const refreshDevices = async (): Promise<void> => {
-    const next = await api.getDevices();
-    const bluetoothSet = new Set(bluetoothConnectedNames);
-    setDevices(next.map((device) => ({
-      ...device,
-      isBluetoothOnline: bluetoothSet.has(device.name),
-    })));
-    if (!selectedMapDeviceId && next.length > 0) {
-      setSelectedMapDeviceId(next[0].id);
-    }
   };
 
   const refreshNotes = async (): Promise<void> => {
@@ -970,55 +1005,94 @@ function App() {
       return;
     }
 
-    const refreshBluetoothPresence = async (): Promise<void> => {
-      const knownDevices = await getBluetoothDevices();
-      const names = knownDevices
-        .filter((entry) => entry.connected)
-        .map((entry) => entry.name);
-      setBluetoothConnectedNames(names);
-    };
-
-    void refreshBluetoothPresence();
-    const timer = window.setInterval(() => {
-      void refreshBluetoothPresence();
-    }, 12_000);
-
-    return () => window.clearInterval(timer);
-  }, [isAuthed]);
-
-  useEffect(() => {
-    if (!isAuthed) {
-      return;
-    }
-
-    const refreshWifiState = async (): Promise<void> => {
-      const connected = await isWifiConnected();
-      setWifiAvailable(connected);
-    };
-
-    void refreshWifiState();
-    const timer = window.setInterval(() => {
-      void refreshWifiState();
-    }, 12_000);
-
-    return () => window.clearInterval(timer);
-  }, [isAuthed]);
-
-  useEffect(() => {
-    const bluetoothSet = new Set(bluetoothConnectedNames);
-    setDevices((prev) => prev.map((device) => ({
-      ...device,
-      isBluetoothOnline: bluetoothSet.has(device.name),
-    })));
-  }, [bluetoothConnectedNames]);
-
-  useEffect(() => {
-    if (!isAuthed || !online) {
-      return;
-    }
-
     void flushPendingLocationUploads(myDeviceId);
   }, [isAuthed, online, myDeviceId]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+
+    let unlistenMsg: (() => void) | null = null;
+    let unlistenTrans: (() => void) | null = null;
+
+    const setupListeners = async () => {
+      unlistenMsg = await listen<any>("bluetooth-message", (event) => {
+        const payload = event.payload;
+        
+        // Trust on Receipt: Update MAC mapping if we don't have it or it changed
+        // The payload now includes senderDeviceId. We can use the event metadata to get the MAC.
+        if (payload.senderDeviceId && payload.remoteAddress) {
+          const idMap = cacheStore.getBluetoothIdMap();
+          if (idMap[payload.senderDeviceId]?.macAddress !== payload.remoteAddress) {
+            const nextMap = { ...idMap };
+            nextMap[payload.senderDeviceId] = {
+              deviceId: payload.senderDeviceId,
+              macAddress: payload.remoteAddress,
+              lastVerifiedAt: new Date().toISOString()
+            };
+            cacheStore.setBluetoothIdMap(nextMap);
+            logEvent("info", "ui.bluetooth", "identity-mapped-on-receipt", { deviceId: payload.senderDeviceId, mac: payload.remoteAddress });
+          }
+        }
+        
+        const msg: ChatMessage = {
+          id: payload.id,
+          deviceId: payload.senderDeviceId,
+          senderDeviceId: payload.senderDeviceId,
+          body: payload.body,
+          sentAt: Date.parse(payload.sentAt),
+          isOutgoing: false,
+        };
+        setMessages((prev) => upsertMessage(prev, msg));
+        setSnackbar({ id: crypto.randomUUID(), level: "info", message: `Bluetooth message from ${payload.senderDeviceId}` });
+      });
+
+      unlistenTrans = await listen<any>("bluetooth-transfer-complete", (event) => {
+        const payload = event.payload;
+
+        // Trust on Receipt for Transfers
+        if (payload.senderDeviceId && payload.remoteAddress) {
+          const idMap = cacheStore.getBluetoothIdMap();
+          if (idMap[payload.senderDeviceId]?.macAddress !== payload.remoteAddress) {
+            const nextMap = { ...idMap };
+            nextMap[payload.senderDeviceId] = {
+              deviceId: payload.senderDeviceId,
+              macAddress: payload.remoteAddress,
+              lastVerifiedAt: new Date().toISOString()
+            };
+            cacheStore.setBluetoothIdMap(nextMap);
+          }
+        }
+
+        setSnackbar({ 
+          id: crypto.randomUUID(), 
+          level: "success", 
+          message: `Bluetooth transfer complete: ${payload.fileName}` 
+        });
+        
+        // Add to local transfers history
+        const newTransfer: FileTransfer = {
+          id: payload.transferId,
+          fileName: payload.fileName,
+          contentType: payload.contentType,
+          sizeBytes: payload.originalSizeBytes,
+          status: "Available",
+          createdAt: payload.createdAt,
+          expiresAt: payload.expiresAt,
+          senderDeviceId: payload.senderDeviceId,
+          targetDeviceId: payload.targetDeviceId,
+          isSender: false,
+        };
+        setTransfers(prev => [newTransfer, ...prev]);
+      });
+    };
+
+    setupListeners();
+
+    return () => {
+      if (unlistenMsg) unlistenMsg();
+      if (unlistenTrans) unlistenTrans();
+    };
+  }, []);
 
   useEffect(() => {
     void refreshElevationStatus().catch((nextError) => {
@@ -1095,6 +1169,14 @@ function App() {
 
       socket.onopen = () => {
         logEvent("info", "ws", "connected", { deviceId: myDeviceId });
+      };
+
+      socket.onclose = () => {
+        logEvent("info", "ws", "disconnected", { deviceId: myDeviceId });
+      };
+
+      socket.onerror = (err) => {
+        logEvent("error", "ws", "error", { deviceId: myDeviceId, error: String(err) });
       };
 
       socket.onmessage = (event) => {
@@ -1370,67 +1452,6 @@ function App() {
   }, [devices, selectedDeviceDetailId]);
 
   useEffect(() => {
-    if (!selectedDeviceDetail) {
-      clipboardAutoFetchKeyRef.current = "";
-      setClipboardHistory([]);
-      setClipboardHistoryMessage("");
-      setClipboardHistoryLoading(false);
-      setPendingClipboardRequestId(null);
-      setClipboardTargetDeviceId(null);
-      return;
-    }
-
-    const key = `${selectedDeviceDetail.id}:${selectedDeviceDetail.type}:${selectedDeviceDetail.isOnline}`;
-    if (clipboardAutoFetchKeyRef.current === key) {
-      return;
-    }
-
-    clipboardAutoFetchKeyRef.current = key;
-
-    if (selectedDeviceDetail.type === "Android") {
-      setClipboardHistory([]);
-      setClipboardHistoryLoading(false);
-      setPendingClipboardRequestId(null);
-      setClipboardTargetDeviceId(null);
-      setClipboardHistoryMessage("Clipboard history for Android targets is not available due OS-level clipboard access restrictions.");
-      return;
-    }
-
-    if (!selectedDeviceDetail.isOnline) {
-      setClipboardHistory([]);
-      setClipboardHistoryLoading(false);
-      setPendingClipboardRequestId(null);
-      setClipboardTargetDeviceId(null);
-      setClipboardHistoryMessage("Target device must be online to fetch clipboard history.");
-      return;
-    }
-
-    const requestClipboardHistory = async (): Promise<void> => {
-      if (!isAuthed || !online) {
-        return;
-      }
-
-      const requestId = crypto.randomUUID();
-      setClipboardHistory([]);
-      setClipboardHistoryMessage("");
-      setClipboardHistoryLoading(true);
-      setPendingClipboardRequestId(requestId);
-      setClipboardTargetDeviceId(selectedDeviceDetail.id);
-
-      try {
-        await sendActionCommand("get_clipboard_history", null, requestId, selectedDeviceDetail.id);
-      } catch {
-        setClipboardHistoryLoading(false);
-        setPendingClipboardRequestId(null);
-        setClipboardTargetDeviceId(null);
-        setClipboardHistoryMessage("Failed to request clipboard history.");
-      }
-    };
-
-    void requestClipboardHistory();
-  }, [isAuthed, myDeviceId, online, selectedDeviceDetail]);
-
-  useEffect(() => {
     if (notificationTargetDeviceId && devices.some((entry) => entry.id === notificationTargetDeviceId)) {
       return;
     }
@@ -1518,15 +1539,9 @@ function App() {
         return;
       }
 
-      const bluetoothPeers = await getBluetoothDevices();
-      const matchedPeer = bluetoothPeers.find((entry) => {
-        const left = entry.name.trim().toLowerCase();
-        const right = targetDevice.name.trim().toLowerCase();
-        return entry.connected && left.length > 0 && left === right;
-      });
-
-      if (!matchedPeer?.address) {
-        setError("Unable to resolve Bluetooth target address. Reconnect the device and retry");
+      const bluetoothAddress = await findBestBluetoothAddress(targetDevice, myDeviceId, getDeviceName());
+      if (!bluetoothAddress) {
+        setError(`Unable to identify ${targetDevice.name} via Bluetooth. Ensure the device is connected and the app is running on the phone.`);
         return;
       }
 
@@ -1546,7 +1561,15 @@ function App() {
         reader.readAsDataURL(file);
       });
 
-      await sendFileViaBluetooth(matchedPeer.address, file.name, contentBase64);
+      await sendFileViaBluetooth(
+        bluetoothAddress,
+        myDeviceId,
+        getDeviceName(),
+        targetDevice.id,
+        targetDevice.name,
+        file.name,
+        contentBase64
+      );
       return;
     }
 
@@ -1596,6 +1619,7 @@ function App() {
 
     console.log(`[FileTransfer] Initiating download for transfer ID: ${transfer.id}, File: ${transfer.fileName}`);
     try {
+      setBusy(true);
       const blob = await api.downloadTransfer(transfer.id, myDeviceId);
       console.log(`[FileTransfer] Download successful, blob size: ${blob.size} bytes`);
       
@@ -1608,7 +1632,12 @@ function App() {
       await refreshTransfers();
     } catch (error) {
       console.error(`[FileTransfer] Error downloading transfer ID: ${transfer.id}`, error);
-      setError("Failed to download file");
+      const message = error instanceof AxiosError && Array.isArray(error.response?.data) 
+        ? error.response.data.join(", ") 
+        : "Failed to download file";
+      setError(message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -1618,8 +1647,19 @@ function App() {
     }
 
     console.log(`[FileTransfer] Rejecting transfer ID: ${transfer.id}`);
-    await api.rejectTransfer(transfer.id, myDeviceId);
-    await refreshTransfers();
+    try {
+      setBusy(true);
+      await api.rejectTransfer(transfer.id, myDeviceId);
+      await refreshTransfers();
+    } catch (error) {
+      console.error(`[FileTransfer] Error rejecting transfer ID: ${transfer.id}`, error);
+      const message = error instanceof AxiosError && Array.isArray(error.response?.data) 
+        ? error.response.data.join(", ") 
+        : "Failed to reject transfer";
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const clearTransfersByScope = async (scope: "sent" | "received"): Promise<void> => {
@@ -1627,8 +1667,19 @@ function App() {
       return;
     }
 
-    await api.clearTransfers(myDeviceId, scope);
-    await refreshTransfers();
+    try {
+      setBusy(true);
+      console.log(`[FileTransfer] Clearing transfers for scope: ${scope}, device: ${myDeviceId}`);
+      const deleted = await api.clearTransfers(myDeviceId, scope);
+      console.log(`[FileTransfer] Cleared ${deleted} transfers.`);
+      setSuccess(`Cleared ${deleted} transfers.`);
+      await refreshTransfers();
+    } catch (error) {
+      console.error(`[FileTransfer] Error clearing transfers for scope: ${scope}`, error);
+      setError("Failed to clear transfers");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const saveNote = async (): Promise<void> => {
@@ -1854,7 +1905,40 @@ function App() {
     }
 
     if (!targetDevice.isOnline) {
-      setError("Target device must be online");
+      if (targetDevice.isBluetoothOnline) {
+        try {
+          const bluetoothAddress = await findBestBluetoothAddress(targetDevice, myDeviceId, getDeviceName());
+          if (!bluetoothAddress) {
+            setError(`Unable to identify ${targetDevice.name} via Bluetooth. Ensure the device is connected and the app is running on the phone.`);
+            return;
+          }
+
+          const sent = await sendChatMessageViaBluetooth(
+            bluetoothAddress,
+            myDeviceId,
+            getDeviceName(),
+            selectedChatDeviceId,
+            targetDevice.name,
+            body
+          );
+          const storedMessage: ChatMessage = {
+            id: sent.id,
+            deviceId: selectedChatDeviceId,
+            senderDeviceId: sent.senderDeviceId,
+            body: sent.body,
+            sentAt: Date.parse(sent.sentAt),
+            isOutgoing: true,
+          };
+          setMessages((prev) => upsertMessage(prev, storedMessage));
+          setNewMessage("");
+          setSuccess("Message sent via Bluetooth");
+          return;
+        } catch (btError) {
+          setError("Failed to send message via Bluetooth");
+          return;
+        }
+      }
+      setError("Target device must be online or connected over Bluetooth");
       return;
     }
 
@@ -2084,56 +2168,7 @@ function App() {
       return;
     }
 
-    if (result.actionType === "get_clipboard_history") {
-      if (pendingClipboardRequestId && result.correlationId !== pendingClipboardRequestId) {
-        return;
-      }
-
-      if (clipboardTargetDeviceId && result.senderDeviceId !== clipboardTargetDeviceId) {
-        return;
-      }
-
-      if (result.status.toLowerCase() !== "success") {
-        setClipboardHistory([]);
-        setClipboardHistoryMessage(result.error ?? "Failed to fetch clipboard history from target device.");
-        setClipboardHistoryLoading(false);
-        setPendingClipboardRequestId(null);
-        setClipboardTargetDeviceId(null);
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(result.payloadJson ?? "[]") as unknown[];
-        const values = parsed
-          .map((entry) => {
-            if (typeof entry === "string") {
-              return entry;
-            }
-
-            if (entry && typeof entry === "object" && "content" in entry) {
-              const content = (entry as { content?: unknown }).content;
-              return typeof content === "string" ? content : "";
-            }
-
-            return "";
-          })
-          .map((entry) => entry.trim())
-          .filter((entry) => entry.length > 0);
-
-        setClipboardHistory(values);
-        setClipboardHistoryMessage(values.length === 0 ? "No clipboard history available." : "");
-      } catch {
-        setClipboardHistory([]);
-        setClipboardHistoryMessage("Failed to parse clipboard history payload.");
-      }
-
-      setClipboardHistoryLoading(false);
-      setPendingClipboardRequestId(null);
-      setClipboardTargetDeviceId(null);
-      return;
-    }
-
-    if (result.actionType === "list_installed_apps" && result.status.toLowerCase() === "partial") {
+    if (result.status.toLowerCase() === "partial") {
       if (pendingActionRequestId && result.correlationId !== pendingActionRequestId) {
         return;
       }
@@ -2227,10 +2262,6 @@ function App() {
       return null;
     }
 
-    if (actionType === "get_clipboard_history") {
-      return performLocalAction("get_clipboard_history");
-    }
-
     return null;
   };
 
@@ -2321,8 +2352,7 @@ function App() {
       | "list_installed_apps"
       | "list_running_apps"
       | "launch_app"
-      | "close_app"
-      | "get_clipboard_history",
+      | "close_app",
     payloadJson?: string | null,
     correlationId?: string | null,
     targetDeviceId?: string,
@@ -2430,58 +2460,6 @@ function App() {
     }
   };
 
-  const refreshClipboardHistory = async (): Promise<void> => {
-    if (!selectedDeviceDetail) {
-      return;
-    }
-
-    if (!isAuthed || !online) {
-      setClipboardHistoryMessage("No connection available");
-      return;
-    }
-
-    if (selectedDeviceDetail.type === "Android") {
-      setClipboardHistory([]);
-      setClipboardHistoryMessage("Clipboard history for Android targets is not available due OS-level clipboard access restrictions.");
-      return;
-    }
-
-    if (!selectedDeviceDetail.isOnline) {
-      setClipboardHistory([]);
-      setClipboardHistoryMessage("Target device must be online to fetch clipboard history.");
-      return;
-    }
-
-    const requestId = crypto.randomUUID();
-    setClipboardHistory([]);
-    setClipboardHistoryMessage("");
-    setClipboardHistoryLoading(true);
-    setPendingClipboardRequestId(requestId);
-    setClipboardTargetDeviceId(selectedDeviceDetail.id);
-
-    try {
-      const sent = await sendActionCommand("get_clipboard_history", null, requestId, selectedDeviceDetail.id);
-      if (!sent) {
-        setClipboardHistoryLoading(false);
-        setPendingClipboardRequestId(null);
-        setClipboardTargetDeviceId(null);
-        setClipboardHistoryMessage("Failed to request clipboard history.");
-      }
-    } catch {
-      setClipboardHistoryLoading(false);
-      setPendingClipboardRequestId(null);
-      setClipboardTargetDeviceId(null);
-      setClipboardHistoryMessage("Failed to request clipboard history.");
-    }
-  };
-
-  const copyClipboardHistoryEntry = async (value: string): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      setError("Failed to copy clipboard entry");
-    }
-  };
 
   const refreshElevationStatus = async (): Promise<void> => {
     if (!isTauriRuntime()) {
@@ -2491,6 +2469,41 @@ function App() {
 
     const status = await getElevationStatus();
     setIsElevated(status.is_root);
+  };
+
+  const handleRunDiagnostics = async (): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    
+    setBusy(true);
+    try {
+      const report = await checkBluetoothCompatibility();
+      logEvent("info", "ui.diagnostics", "bluetooth-compatibility", { report });
+      
+      if (report.sdptoolInstalled && report.bluezCompatMode && report.canOpenSocket) {
+        setSuccess("Bluetooth system configuration looks good! sdptool is available, --compat mode is active, and socket permissions are verified.");
+      } else {
+        const missing = [];
+        if (!report.sdptoolInstalled) missing.push("bluez-deprecated (sdptool)");
+        if (!report.bluezCompatMode) missing.push("bluetoothd --compat mode");
+        if (!report.canOpenSocket) missing.push("socket permissions (check AppArmor/Sudo)");
+        
+        setError(`System issues detected: Missing ${missing.join(", ")}. Bluetooth server may not be discoverable or functional.`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to run diagnostics");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRefreshLogs = async (): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      const logs = await readRecentLogs(200);
+      setLogContent(logs.join("\n"));
+    } catch (e) {
+      console.error("Failed to refresh logs", e);
+    }
   };
 
   const signOut = (): void => {
@@ -2508,11 +2521,6 @@ function App() {
     setRunningApps([]);
     clearPendingAction();
     setPendingActionTimeoutMessage("");
-    setClipboardHistory([]);
-    setClipboardHistoryLoading(false);
-    setClipboardHistoryMessage("");
-    setPendingClipboardRequestId(null);
-    setClipboardTargetDeviceId(null);
     setNotificationSchedules([]);
     setNotificationHistory([]);
     setHistory([]);
@@ -2520,59 +2528,6 @@ function App() {
   };
 
   const currentDevice = devices.find((entry) => entry.id === myDeviceId) ?? null;
-
-  useEffect(() => {
-    if (!isAuthed || !currentDevice || !online) {
-      return;
-    }
-
-    const runTelemetrySync = async (): Promise<void> => {
-      try {
-        const local = await getLocalDeviceInfo();
-        await api.updateTelemetry(myDeviceId, {
-          batteryLevel: local.battery_level ?? 100,
-          cpuLoadPercent: local.cpu_load_percent ?? 0,
-          memoryLoadPercent: local.memory_load_percent ?? null,
-          isOnline: true,
-          isAvailable: true,
-          isSynced: true,
-          wifiUploadSpeed: local.wifi_upload_speed,
-          wifiDownloadSpeed: local.wifi_download_speed,
-        });
-
-        setLocalMemoryLoadPercent(local.memory_load_percent ?? null);
-
-        setDevices((prev) => prev.map((device) => {
-          if (device.id !== myDeviceId) {
-            return device;
-          }
-
-          return {
-            ...device,
-            ipAddress: local.ip_address,
-            batteryLevel: local.battery_level ?? device.batteryLevel,
-            isOnline: true,
-            isAvailable: true,
-            isSynced: true,
-            cpuLoadPercent: local.cpu_load_percent ?? device.cpuLoadPercent,
-            memoryLoadPercent: local.memory_load_percent ?? device.memoryLoadPercent,
-            wifiUploadSpeed: local.wifi_upload_speed,
-            wifiDownloadSpeed: local.wifi_download_speed,
-            lastSeen: new Date().toISOString(),
-          };
-        }));
-      } catch {
-        // ignore telemetry sync failures to avoid breaking the UI
-      }
-    };
-
-    void runTelemetrySync();
-    const timer = window.setInterval(() => {
-      void runTelemetrySync();
-    }, 30_000);
-
-    return () => window.clearInterval(timer);
-  }, [isAuthed, currentDevice, myDeviceId, online]);
 
   useEffect(() => {
     if (!isAuthed || devices.length === 0) {
@@ -2657,7 +2612,7 @@ function App() {
           </div>
         )}
         <Sidebar
-          tabs={tabs}
+          tabs={filteredTabs}
           activeTab={activeTab}
           onSelect={(t) => {
             handleTabSelect(t as Tab);
@@ -2679,6 +2634,21 @@ function App() {
           </header>
 
         {!online && (
+          <div className="bluetooth-status-strip">
+            <span>{isBluetoothConnected ? "Bluetooth Online" : "Bluetooth Offline"}</span>
+            <button 
+              className="secondary" 
+              disabled={isScanning} 
+              onClick={() => void scan()} 
+              style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: '12px' }}
+              type="button"
+            >
+              {isScanning ? "Scanning..." : "Scan for Devices"}
+            </button>
+          </div>
+        )}
+
+        {!online && !isBluetoothConnected && (
           <section className="panel no-connection">
             <p className="no-connection-title">No connection available</p>
             <p className="muted">Using cached data where available. Online actions are temporarily disabled.</p>
@@ -2722,19 +2692,13 @@ function App() {
             onUnlinkDevice={(deviceId) => void unlinkDevice(deviceId)}
             formatRam={formatRam}
             formatBattery={formatBattery}
-            clipboardHistory={clipboardHistory}
-            clipboardHistoryLoading={clipboardHistoryLoading}
-            clipboardHistoryMessage={clipboardHistoryMessage}
-            onRefreshClipboardHistory={() => void refreshClipboardHistory()}
-            onCopyClipboardHistoryEntry={(value) => {
-              void copyClipboardHistoryEntry(value);
-            }}
-          />
+            />
+
         )}
 
         {activeTab === "Files" && (
           <FilesTab
-            devices={devices.map((entry) => ({ id: entry.id, name: entry.name, isOnline: entry.isOnline || entry.isBluetoothOnline === true }))}
+            devices={devices.map((entry) => ({ id: entry.id, name: entry.name, isOnline: entry.isOnline }))}
             myDeviceId={myDeviceId}
             selectedTargetDeviceId={selectedFileTargetDeviceId}
             onSelectTargetDevice={setSelectedFileTargetDeviceId}
@@ -2890,6 +2854,21 @@ function App() {
             logFilePath={nativeLogFilePath}
             onSetThemeMode={setThemeMode}
             onSignOut={signOut}
+            onRunDiagnostics={handleRunDiagnostics}
+          />
+        )}
+
+        {activeTab === "Logs" && (
+          <LogsTab 
+            logContent={logContent} 
+            onRefreshLogs={handleRefreshLogs}
+          />
+        )}
+
+        {activeTab === "Bluetooth" && (
+          <BluetoothTab
+            myDeviceId={myDeviceId}
+            allowedDeviceIds={devices.map(d => d.id)}
           />
         )}
       </section>

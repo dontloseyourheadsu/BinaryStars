@@ -18,7 +18,7 @@ public class FileTransferSettings
     /// <summary>
     /// Gets or sets the local temporary storage path for uploads.
     /// </summary>
-    public string TempPath { get; set; } = "/tmp/binarystars-transfers";
+    public string TempPath { get; set; } = "/app/transfers";
 
     /// <summary>
     /// Gets or sets the transfer expiration window in minutes.

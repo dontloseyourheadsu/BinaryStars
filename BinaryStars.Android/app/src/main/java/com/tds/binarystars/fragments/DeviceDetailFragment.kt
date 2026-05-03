@@ -48,10 +48,22 @@ import kotlin.math.roundToInt
 class DeviceDetailFragment : Fragment(), MessagingEventListener {
 
     private val gson = Gson()
-    private var pendingClipboardCorrelationId: String? = null
-    private var clipboardStatusView: TextView? = null
-    private var clipboardRefreshButton: Button? = null
-    private var clipboardListView: LinearLayout? = null
+    
+    private lateinit var deviceId: String
+    private lateinit var name: String
+    private lateinit var type: String
+    private lateinit var ipAddress: String
+    private var batteryLevel: Int = -1
+    private var isOnline: Boolean = false
+    private var isSynced: Boolean = false
+    private var isAvailable: Boolean = true
+    private var isBluetoothOnline: Boolean = false
+    private var fallbackCpuLoadPercent: Int? = null
+    private var fallbackMemoryLoadPercent: Int? = null
+    private lateinit var uploadSpeed: String
+    private lateinit var downloadSpeed: String
+    private var isAndroidDevice: Boolean = false
+    private var isCurrentDevice: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -64,36 +76,24 @@ class DeviceDetailFragment : Fragment(), MessagingEventListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val name = arguments?.getString(ARG_NAME).orEmpty()
-        val type = arguments?.getString(ARG_TYPE).orEmpty()
-        val ipAddress = arguments?.getString(ARG_IP_ADDRESS).orEmpty()
-        var batteryLevel = arguments?.getInt(ARG_BATTERY_LEVEL) ?: -1
-        var isOnline = arguments?.getBoolean(ARG_IS_ONLINE) ?: false
-        var isSynced = arguments?.getBoolean(ARG_IS_SYNCED) ?: false
-        var isAvailable = arguments?.getBoolean(ARG_IS_AVAILABLE) ?: true
-        var fallbackCpuLoadPercent = arguments?.getInt(ARG_CPU_LOAD_PERCENT)?.takeIf { it >= 0 }
-        var fallbackMemoryLoadPercent = arguments?.getInt(ARG_MEMORY_LOAD_PERCENT)?.takeIf { it >= 0 }
-        var uploadSpeed = arguments?.getString(ARG_UPLOAD_SPEED).orEmpty()
-        var downloadSpeed = arguments?.getString(ARG_DOWNLOAD_SPEED).orEmpty()
-        val isBluetoothOnline = arguments?.getBoolean(ARG_IS_BLUETOOTH_ONLINE) ?: false
-        val deviceId = arguments?.getString(ARG_DEVICE_ID).orEmpty()
-        val isAndroidDevice = type.equals("Android", ignoreCase = true)
-        val isCurrentDevice = deviceId == Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
+        deviceId = arguments?.getString(ARG_DEVICE_ID).orEmpty()
+        name = arguments?.getString(ARG_NAME).orEmpty()
+        type = arguments?.getString(ARG_TYPE).orEmpty()
+        ipAddress = arguments?.getString(ARG_IP_ADDRESS).orEmpty()
+        batteryLevel = arguments?.getInt(ARG_BATTERY_LEVEL) ?: -1
+        isOnline = arguments?.getBoolean(ARG_IS_ONLINE) ?: false
+        isSynced = arguments?.getBoolean(ARG_IS_SYNCED) ?: false
+        isAvailable = arguments?.getBoolean(ARG_IS_AVAILABLE) ?: true
+        fallbackCpuLoadPercent = arguments?.getInt(ARG_CPU_LOAD_PERCENT)?.takeIf { it >= 0 }
+        fallbackMemoryLoadPercent = arguments?.getInt(ARG_MEMORY_LOAD_PERCENT)?.takeIf { it >= 0 }
+        uploadSpeed = arguments?.getString(ARG_UPLOAD_SPEED).orEmpty()
+        downloadSpeed = arguments?.getString(ARG_DOWNLOAD_SPEED).orEmpty()
+        isBluetoothOnline = arguments?.getBoolean(ARG_IS_BLUETOOTH_ONLINE) ?: false
+        isAndroidDevice = type.equals("Android", ignoreCase = true)
+        isCurrentDevice = deviceId == Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
 
-        val tvCpu = view.findViewById<TextView>(R.id.tvCpu)
-        val tvRam = view.findViewById<TextView>(R.id.tvRam)
-        val tvUpSpeed = view.findViewById<TextView>(R.id.tvUpSpeed)
-        val tvDownSpeed = view.findViewById<TextView>(R.id.tvDownSpeed)
-        val tvConnection = view.findViewById<TextView>(R.id.tvUptime)
-        val tvBattery = view.findViewById<TextView>(R.id.tvBattery)
         val tvSubtitle = view.findViewById<TextView>(R.id.tvSubtitle)
         val toggleAvailability = view.findViewById<Switch>(R.id.toggleShare)
-        val tvClipboardHistoryStatus = view.findViewById<TextView>(R.id.tvClipboardHistoryStatus)
-        val btnRefreshClipboardHistory = view.findViewById<Button>(R.id.btnRefreshClipboardHistory)
-        val clipboardHistoryList = view.findViewById<LinearLayout>(R.id.clipboardHistoryList)
-        clipboardStatusView = tvClipboardHistoryStatus
-        clipboardRefreshButton = btnRefreshClipboardHistory
-        clipboardListView = clipboardHistoryList
         val btnUnlinkDevice = view.findViewById<Button>(R.id.btnUnlinkDevice)
 
         view.findViewById<TextView>(R.id.tvTitle).text = name.ifBlank { "Device Detail" }
@@ -124,14 +124,8 @@ class DeviceDetailFragment : Fragment(), MessagingEventListener {
         toggleAvailability.setOnCheckedChangeListener { _, checked ->
             if (isCurrentDevice) {
                 SettingsStorage.setDeviceTelemetryEnabled(checked)
-                tvConnection.text = if (!checked) "Unavailable" else if (isOnline) "Online" else "Offline"
+                updateUiState()
                 if (!checked) {
-                    tvCpu.text = "Not available"
-                    tvRam.text = "Not available"
-                    tvUpSpeed.text = "Not available"
-                    tvDownSpeed.text = "Not available"
-                    tvBattery.text = "Not available"
-
                     pushTelemetryUpdate(
                         deviceId = deviceId,
                         batteryLevel = 0,
@@ -143,30 +137,100 @@ class DeviceDetailFragment : Fragment(), MessagingEventListener {
                         wifiUploadSpeed = "Not available",
                         wifiDownloadSpeed = "Not available"
                     )
-                } else {
-                    populateDeviceStats(
-                        isCurrentDevice = true,
-                        deviceId = deviceId,
-                        isAndroidDevice = isAndroidDevice,
-                        fallbackCpuLoadPercent = fallbackCpuLoadPercent,
-                        fallbackMemoryLoadPercent = fallbackMemoryLoadPercent,
-                        fallbackBatteryLevel = batteryLevel,
-                        fallbackUploadSpeed = uploadSpeed,
-                        fallbackDownloadSpeed = downloadSpeed,
-                        isOnline = isOnline,
-                        isSynced = isSynced,
-                        telemetryEnabled = true,
-                        isBluetoothOnline = isBluetoothOnline,
-                        tvCpu = tvCpu,
-                        tvRam = tvRam,
-                        tvUpSpeed = tvUpSpeed,
-                        tvDownSpeed = tvDownSpeed,
-                        tvConnection = tvConnection,
-                        tvBattery = tvBattery
-                    )
                 }
             }
         }
+
+        updateUiState()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    if (!isCurrentDevice) {
+                        refreshDeviceDetails()
+                    } else {
+                        updateUiState()
+                    }
+                    delay(POLL_INTERVAL_MS)
+                }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        MessagingSocketManager.addListener(this)
+    }
+
+    override fun onStop() {
+        MessagingSocketManager.removeListener(this)
+        super.onStop()
+    }
+
+    override fun onActionResult(result: DeviceActionResultDto) {
+        if (result.targetDeviceId == deviceId || result.senderDeviceId == deviceId) {
+            viewLifecycleOwner.lifecycleScope.launch { refreshDeviceDetails() }
+        }
+    }
+
+    override fun onChatUpdated(deviceId: String) {}
+
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {
+        if (deviceId == this.deviceId) {
+            parentFragmentManager.popBackStack()
+        }
+    }
+
+    override fun onConnectionStateChanged(isConnected: Boolean) {
+        viewLifecycleOwner.lifecycleScope.launch { refreshDeviceDetails() }
+    }
+
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
+        if (deviceId == this.deviceId) {
+            this.isOnline = isOnline
+            viewLifecycleOwner.lifecycleScope.launch { refreshDeviceDetails() }
+        }
+    }
+
+    private suspend fun refreshDeviceDetails() {
+        if (!isCurrentDevice) {
+            try {
+                val response = ApiClient.apiService.getDevices()
+                if (response.isSuccessful) {
+                    val dto = response.body()?.firstOrNull { it.id == deviceId }
+                    if (dto != null) {
+                        batteryLevel = dto.batteryLevel
+                        isOnline = dto.isOnline
+                        isAvailable = dto.isAvailable
+                        isSynced = dto.isSynced
+                        fallbackCpuLoadPercent = dto.cpuLoadPercent
+                        fallbackMemoryLoadPercent = dto.memoryLoadPercent
+                        uploadSpeed = dto.wifiUploadSpeed
+                        downloadSpeed = dto.wifiDownloadSpeed
+
+                        val serverType = when (dto.type) {
+                            DeviceTypeDto.Linux -> "Linux"
+                            DeviceTypeDto.Android -> "Android"
+                        }
+                        view?.findViewById<TextView>(R.id.tvSubtitle)?.text = listOf(serverType, dto.ipAddress).joinToString(" • ")
+                        view?.findViewById<Button>(R.id.btnUnlinkDevice)?.visibility = if (!isOnline || !isAvailable) View.VISIBLE else View.GONE
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        updateUiState()
+    }
+
+    private fun updateUiState() {
+        val view = view ?: return
+        val tvCpu = view.findViewById<TextView>(R.id.tvCpu)
+        val tvRam = view.findViewById<TextView>(R.id.tvRam)
+        val tvUpSpeed = view.findViewById<TextView>(R.id.tvUpSpeed)
+        val tvDownSpeed = view.findViewById<TextView>(R.id.tvDownSpeed)
+        val tvConnection = view.findViewById<TextView>(R.id.tvUptime)
+        val tvBattery = view.findViewById<TextView>(R.id.tvBattery)
+
+        val telemetryEnabled = if (isCurrentDevice) SettingsStorage.isDeviceTelemetryEnabled(true) else isAvailable
 
         populateDeviceStats(
             isCurrentDevice = isCurrentDevice,
@@ -188,315 +252,6 @@ class DeviceDetailFragment : Fragment(), MessagingEventListener {
             tvConnection = tvConnection,
             tvBattery = tvBattery
         )
-
-        renderClipboardSupport(
-            isAndroidTarget = isAndroidDevice,
-            isTargetOnline = isOnline,
-            tvClipboardHistoryStatus = tvClipboardHistoryStatus,
-            btnRefreshClipboardHistory = btnRefreshClipboardHistory,
-            clipboardHistoryList = clipboardHistoryList
-        )
-
-        btnRefreshClipboardHistory.setOnClickListener {
-            requestClipboardHistory(
-                targetDeviceId = deviceId,
-                isAndroidTarget = isAndroidDevice,
-                isTargetOnline = isOnline,
-                tvClipboardHistoryStatus = tvClipboardHistoryStatus,
-                btnRefreshClipboardHistory = btnRefreshClipboardHistory,
-                clipboardHistoryList = clipboardHistoryList
-            )
-        }
-
-        if (!isAndroidDevice && isOnline) {
-            requestClipboardHistory(
-                targetDeviceId = deviceId,
-                isAndroidTarget = false,
-                isTargetOnline = true,
-                tvClipboardHistoryStatus = tvClipboardHistoryStatus,
-                btnRefreshClipboardHistory = btnRefreshClipboardHistory,
-                clipboardHistoryList = clipboardHistoryList
-            )
-        }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                while (isActive) {
-                    delay(POLL_INTERVAL_MS)
-
-                    if (!isCurrentDevice) {
-                        try {
-                            val response = ApiClient.apiService.getDevices()
-                            if (response.isSuccessful) {
-                                val dto = response.body()?.firstOrNull { it.id == deviceId }
-                                if (dto != null) {
-                                    batteryLevel = dto.batteryLevel
-                                    isOnline = dto.isOnline
-                                    isAvailable = dto.isAvailable
-                                    isSynced = dto.isSynced
-                                    fallbackCpuLoadPercent = dto.cpuLoadPercent
-                                    fallbackMemoryLoadPercent = dto.memoryLoadPercent
-                                    uploadSpeed = dto.wifiUploadSpeed
-                                    downloadSpeed = dto.wifiDownloadSpeed
-
-                                    val serverType = when (dto.type) {
-                                        DeviceTypeDto.Linux -> "Linux"
-                                        DeviceTypeDto.Android -> "Android"
-                                    }
-                                    tvSubtitle.text = listOf(serverType, dto.ipAddress).joinToString(" • ")
-                                    btnUnlinkDevice.visibility = if (!isOnline || !isAvailable) View.VISIBLE else View.GONE
-                                }
-                            }
-                        } catch (_: Exception) {
-                        }
-                    }
-
-                    val telemetryEnabled = if (isCurrentDevice) {
-                        SettingsStorage.isDeviceTelemetryEnabled(true)
-                    } else {
-                        isAvailable
-                    }
-
-                    populateDeviceStats(
-                        isCurrentDevice = isCurrentDevice,
-                        deviceId = deviceId,
-                        isAndroidDevice = isAndroidDevice,
-                        fallbackCpuLoadPercent = fallbackCpuLoadPercent,
-                        fallbackMemoryLoadPercent = fallbackMemoryLoadPercent,
-                        fallbackBatteryLevel = batteryLevel,
-                        fallbackUploadSpeed = uploadSpeed,
-                        fallbackDownloadSpeed = downloadSpeed,
-                        isOnline = isOnline,
-                        isSynced = isSynced,
-                        telemetryEnabled = telemetryEnabled,
-                        isBluetoothOnline = isBluetoothOnline,
-                        tvCpu = tvCpu,
-                        tvRam = tvRam,
-                        tvUpSpeed = tvUpSpeed,
-                        tvDownSpeed = tvDownSpeed,
-                        tvConnection = tvConnection,
-                        tvBattery = tvBattery
-                    )
-
-                    renderClipboardSupport(
-                        isAndroidTarget = isAndroidDevice,
-                        isTargetOnline = isOnline,
-                        tvClipboardHistoryStatus = tvClipboardHistoryStatus,
-                        btnRefreshClipboardHistory = btnRefreshClipboardHistory,
-                        clipboardHistoryList = clipboardHistoryList
-                    )
-
-                }
-            }
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        MessagingSocketManager.addListener(this)
-    }
-
-    override fun onStop() {
-        MessagingSocketManager.removeListener(this)
-        super.onStop()
-    }
-
-    override fun onDestroyView() {
-        clipboardStatusView = null
-        clipboardRefreshButton = null
-        clipboardListView = null
-        super.onDestroyView()
-    }
-
-    override fun onActionResult(result: DeviceActionResultDto) {
-        if (!isAdded) {
-            return
-        }
-
-        val expectedCorrelationId = pendingClipboardCorrelationId ?: return
-        if (!result.actionType.equals("get_clipboard_history", ignoreCase = true) || result.correlationId != expectedCorrelationId) {
-            return
-        }
-
-        val tvClipboardHistoryStatus = clipboardStatusView ?: return
-        val btnRefreshClipboardHistory = clipboardRefreshButton ?: return
-        val clipboardHistoryList = clipboardListView ?: return
-
-        pendingClipboardCorrelationId = null
-        btnRefreshClipboardHistory.isEnabled = true
-
-        if (!result.status.equals("success", ignoreCase = true)) {
-            tvClipboardHistoryStatus.text = result.error ?: "Failed to fetch clipboard history from target device."
-            clipboardHistoryList.removeAllViews()
-            return
-        }
-
-        val payload = result.payloadJson ?: "[]"
-        val listType = object : TypeToken<List<String>>() {}.type
-        val values: List<String> = try {
-            gson.fromJson<List<String>>(payload, listType)
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
-                ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
-        }
-
-        renderClipboardHistoryEntries(values, clipboardHistoryList)
-        tvClipboardHistoryStatus.text = if (values.isEmpty()) {
-            "No clipboard history available."
-        } else {
-            "${values.size} clipboard item(s) available (max 20)."
-        }
-    }
-
-    override fun onChatUpdated(deviceId: String) {}
-
-    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {}
-
-    override fun onConnectionStateChanged(isConnected: Boolean) {}
-
-    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {}
-
-    private fun renderClipboardSupport(
-        isAndroidTarget: Boolean,
-        isTargetOnline: Boolean,
-        tvClipboardHistoryStatus: TextView,
-        btnRefreshClipboardHistory: Button,
-        clipboardHistoryList: LinearLayout
-    ) {
-        if (isAndroidTarget) {
-            btnRefreshClipboardHistory.isEnabled = false
-            tvClipboardHistoryStatus.text =
-                "Clipboard history for Android targets is not available due OS-level clipboard access restrictions."
-            clipboardHistoryList.removeAllViews()
-            return
-        }
-
-        if (!isTargetOnline) {
-            btnRefreshClipboardHistory.isEnabled = false
-            tvClipboardHistoryStatus.text = "Target device must be online to fetch clipboard history."
-            clipboardHistoryList.removeAllViews()
-            return
-        }
-
-        btnRefreshClipboardHistory.isEnabled = true
-        if (pendingClipboardCorrelationId == null && tvClipboardHistoryStatus.text.isNullOrBlank()) {
-            tvClipboardHistoryStatus.text =
-                "Ready to fetch clipboard history (up to 20 entries; falls back to current clipboard when history providers are unavailable)."
-        }
-    }
-
-    private fun requestClipboardHistory(
-        targetDeviceId: String,
-        isAndroidTarget: Boolean,
-        isTargetOnline: Boolean,
-        tvClipboardHistoryStatus: TextView,
-        btnRefreshClipboardHistory: Button,
-        clipboardHistoryList: LinearLayout
-    ) {
-        if (isAndroidTarget) {
-            tvClipboardHistoryStatus.text =
-                "Clipboard history for Android targets is not available due OS-level clipboard access restrictions."
-            btnRefreshClipboardHistory.isEnabled = false
-            clipboardHistoryList.removeAllViews()
-            return
-        }
-
-        if (!isTargetOnline) {
-            tvClipboardHistoryStatus.text = "Target device must be online to fetch clipboard history."
-            btnRefreshClipboardHistory.isEnabled = false
-            clipboardHistoryList.removeAllViews()
-            return
-        }
-
-        if (!NetworkUtils.isOnline(requireContext())) {
-            tvClipboardHistoryStatus.text = "No connection available."
-            return
-        }
-
-        val senderId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
-        val correlationId = UUID.randomUUID().toString()
-        pendingClipboardCorrelationId = correlationId
-        tvClipboardHistoryStatus.text = "Requesting clipboard history…"
-        clipboardHistoryList.removeAllViews()
-        btnRefreshClipboardHistory.isEnabled = false
-
-        lifecycleScope.launch {
-            try {
-                val sent = MessagingSocketManager.sendAction(
-                    SendActionRequestDto(
-                        senderDeviceId = senderId,
-                        targetDeviceId = targetDeviceId,
-                        actionType = "get_clipboard_history",
-                        payloadJson = null,
-                        correlationId = correlationId
-                    )
-                )
-
-                if (!sent) {
-                    pendingClipboardCorrelationId = null
-                    tvClipboardHistoryStatus.text = "Realtime channel is not connected."
-                    btnRefreshClipboardHistory.isEnabled = true
-                } else {
-                    tvClipboardHistoryStatus.text = "Waiting for target device response…"
-                }
-            } catch (_: Exception) {
-                pendingClipboardCorrelationId = null
-                tvClipboardHistoryStatus.text = "Failed to request clipboard history."
-                btnRefreshClipboardHistory.isEnabled = true
-            }
-        }
-    }
-
-    private fun renderClipboardHistoryEntries(entries: List<String>, container: LinearLayout) {
-        container.removeAllViews()
-
-        entries.forEachIndexed { index, value ->
-            val row = LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    bottomMargin = 8
-                }
-            }
-
-            val textView = TextView(requireContext()).apply {
-                text = value
-                setTextColor(resources.getColor(R.color.carbon_text_main, null))
-                textSize = 13f
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    marginEnd = 12
-                }
-                setPadding(0, 8, 0, 8)
-                maxLines = 4
-            }
-
-            val copyButton = Button(requireContext()).apply {
-                text = "Copy"
-                isAllCaps = false
-                setOnClickListener {
-                    copyClipboardEntry(value)
-                }
-            }
-
-            row.addView(textView)
-            row.addView(copyButton)
-            container.addView(row)
-        }
-    }
-
-    private fun copyClipboardEntry(value: String) {
-        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        if (clipboard == null) {
-            Toast.makeText(requireContext(), "Clipboard service unavailable", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        clipboard.setPrimaryClip(ClipData.newPlainText("BinaryStars Clipboard", value))
-        Toast.makeText(requireContext(), "Copied", Toast.LENGTH_SHORT).show()
     }
 
     private fun populateDeviceStats(

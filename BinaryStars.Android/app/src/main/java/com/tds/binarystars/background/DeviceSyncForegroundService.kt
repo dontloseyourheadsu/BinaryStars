@@ -284,8 +284,8 @@ class DeviceSyncForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "binary_stars_sync"
         private const val NOTIFICATION_ID = 3001
-        private const val SYNC_INTERVAL_MS = 10_000L
-        private const val TELEMETRY_EVERY_N_TICKS = 3
+        private const val SYNC_INTERVAL_MS = 3_000L
+        private const val TELEMETRY_EVERY_N_TICKS = 2
 
         fun start(context: Context) {
             val intent = Intent(context, DeviceSyncForegroundService::class.java)

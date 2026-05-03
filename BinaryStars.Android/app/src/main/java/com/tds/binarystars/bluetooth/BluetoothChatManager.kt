@@ -1,434 +1,255 @@
 package com.tds.binarystars.bluetooth
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.Handler
-import android.os.Looper
-import com.google.gson.Gson
-import com.tds.binarystars.model.ChatMessage
-import com.tds.binarystars.storage.ChatStorage
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.time.OffsetDateTime
+import com.tds.binarystars.util.NativeLogging as L
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Manages Bluetooth discovery and RFCOMM messaging sessions.
+ * ISOLATED Bluetooth Manager (Last Hope - MVP Style).
  */
 object BluetoothChatManager {
-    private const val SERVICE_NAME = "BinaryStarsChat"
-    private val SERVICE_UUID = UUID.fromString("a64f3f3b-5ad0-4b65-9b8f-585a45c7e9c4")
-    private const val MAX_MESSAGE_LENGTH = 500
+    private const val TAG = "BinaryStarsBT"
+    private const val SPP_UUID = "00001101-0000-1000-8000-00805f9b34fb"
+    private const val SERVICE_NAME = "BinaryStarsSPP"
 
-    private val adapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    private val gson = Gson()
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private var selfDeviceId: String = ""
+    private val activeConnections = ConcurrentHashMap<String, BluetoothConnection>()
+    private val macToPeerId = ConcurrentHashMap<String, String>()
+    
+    private val _messages = MutableStateFlow<List<com.tds.binarystars.model.ChatMessage>>(emptyList())
+    val messages: StateFlow<List<com.tds.binarystars.model.ChatMessage>> = _messages
 
-    private val availableDevices = mutableMapOf<String, BluetoothDevice>()
-    private val discoveryListeners = CopyOnWriteArrayList<(Map<String, BluetoothDevice>) -> Unit>()
-    private var discoveryReceiver: BroadcastReceiver? = null
-    private var discoveryRefs = 0
+    private var serverJob: Job? = null
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var appContext: Context? = null
 
-    private var serverThread: Thread? = null
-    private var serverSocket: BluetoothServerSocket? = null
-    private var serverRefs = 0
-
-    private var selfDeviceId: String? = null
-    private var selfDeviceName: String? = null
-
-    private val listeners = CopyOnWriteArrayList<BluetoothChatListener>()
-    private val connections = mutableMapOf<String, ChatConnection>()
-    private val connectingDevices = mutableSetOf<String>()
-    private val allowedDevices = mutableSetOf<String>()
-
-    fun isSupported(): Boolean = adapter != null
-
-    fun isEnabled(): Boolean = adapter?.isEnabled == true
-
-    fun setSelf(deviceId: String, deviceName: String) {
-        selfDeviceId = deviceId
-        selfDeviceName = deviceName
+    fun init(context: Context) {
+        appContext = context.applicationContext
+        selfDeviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
     }
 
-    fun addListener(listener: BluetoothChatListener) {
-        listeners.add(listener)
+    fun clearSession() {
+        activeConnections.values.forEach { it.close() }
+        activeConnections.clear()
+        _messages.value = emptyList()
     }
 
-    fun removeListener(listener: BluetoothChatListener) {
-        listeners.remove(listener)
-    }
-
-    fun getAvailableDeviceNames(): Set<String> = availableDevices.keys
-
-    fun getAvailableDeviceByName(name: String): BluetoothDevice? = availableDevices[name]
-
-    fun acquireDiscovery(context: Context, listener: (Map<String, BluetoothDevice>) -> Unit) {
-        discoveryListeners.add(listener)
-        if (discoveryRefs == 0) {
-            startDiscovery(context)
+    @SuppressLint("MissingPermission")
+    suspend fun connect(device: BluetoothDevice): Boolean {
+        val macAddress = device.address
+        return withContext(Dispatchers.IO) {
+            try {
+                val socket = device.createRfcommSocketToServiceRecord(UUID.fromString(SPP_UUID))
+                socket.connect()
+                
+                val writer = socket.outputStream
+                val reader = BufferedReader(InputStreamReader(socket.inputStream))
+                
+                // Handshake (Same User Check)
+                writer.write("IDENTIFY|$selfDeviceId\n".toByteArray())
+                writer.flush()
+                
+                val line = withTimeoutOrNull(5000) { reader.readLine() }
+                
+                if (line?.startsWith("IDENTIFIED|") == true) {
+                    val peerId = line.split("|")[1]
+                    val accountDevices = com.tds.binarystars.storage.DeviceCacheStorage.getDevices()
+                    if (accountDevices.any { it.id == peerId }) {
+                        val connection = BluetoothConnection(socket, peerId, reader, writer)
+                        macToPeerId[macAddress] = peerId
+                        activeConnections[peerId] = connection
+                        connection.startReading()
+                        return@withContext true
+                    }
+                }
+                socket.close()
+                false
+            } catch (e: Exception) {
+                L.e(TAG, "Connect failed: ${e.message}")
+                false
+            }
         }
-        discoveryRefs++
     }
 
-    fun releaseDiscovery(context: Context, listener: (Map<String, BluetoothDevice>) -> Unit) {
-        discoveryListeners.remove(listener)
-        discoveryRefs = (discoveryRefs - 1).coerceAtLeast(0)
-        if (discoveryRefs == 0) {
-            stopDiscovery(context)
-        }
+    fun disconnect(deviceIdOrMac: String) {
+        val peerId = macToPeerId[deviceIdOrMac] ?: deviceIdOrMac
+        activeConnections[peerId]?.close()
+        activeConnections.remove(peerId)
+        macToPeerId.remove(deviceIdOrMac)
+        // Also remove reverse mapping if any
+        macToPeerId.values.removeIf { it == peerId }
     }
 
     fun acquireServer() {
-        serverRefs++
-        if (serverRefs == 1) {
-            startServer()
-        }
+        if (serverJob != null) return
+        serverJob = scope.launch { startServer() }
     }
 
     fun releaseServer() {
-        serverRefs = (serverRefs - 1).coerceAtLeast(0)
-        if (serverRefs == 0) {
-            stopServer()
-        }
+        serverJob?.cancel()
+        serverJob = null
     }
 
-    fun setChatEnabled(deviceId: String, enabled: Boolean) {
-        if (enabled) {
-            allowedDevices.add(deviceId)
-        } else {
-            allowedDevices.remove(deviceId)
-            disconnect(deviceId)
-        }
-    }
-
-    suspend fun connectToDevice(targetDeviceId: String, targetDeviceName: String): Boolean {
-        if (connections.containsKey(targetDeviceId)) {
-            notifyConnection(targetDeviceId, true, false)
-            return true
-        }
-
-        val bluetoothAdapter = adapter ?: return false
-        val device = availableDevices[targetDeviceName] ?: return false
-        val currentDeviceId = selfDeviceId ?: return false
-        val currentDeviceName = selfDeviceName ?: "Android"
-
-        setConnecting(targetDeviceId, true)
-
-        return try {
-            bluetoothAdapter.cancelDiscovery()
-            val socket = device.createRfcommSocketToServiceRecord(SERVICE_UUID)
-            socket.connect()
-
-            val input = DataInputStream(BufferedInputStream(socket.inputStream))
-            val output = DataOutputStream(BufferedOutputStream(socket.outputStream))
-
-            val request = ChatHandshakeRequest(
-                senderDeviceId = currentDeviceId,
-                senderDeviceName = currentDeviceName,
-                targetDeviceId = targetDeviceId
-            )
-            writeFrame(output, gson.toJson(request))
-
-            val responseText = readFrame(input) ?: ""
-            val response = gson.fromJson(responseText, ChatHandshakeResponse::class.java)
-            if (response.accepted != true) {
-                socket.close()
-                setConnecting(targetDeviceId, false)
-                notifyConnection(targetDeviceId, false, false)
-                return false
-            }
-
-            val connection = ChatConnection(
-                deviceId = targetDeviceId,
-                socket = socket,
-                input = input,
-                output = output,
-                cancelFlag = AtomicBoolean(false)
-            )
-            connections[targetDeviceId] = connection
-            startReader(connection)
-            setConnecting(targetDeviceId, false)
-            notifyConnection(targetDeviceId, true, false)
-            true
-        } catch (_: Exception) {
-            setConnecting(targetDeviceId, false)
-            notifyConnection(targetDeviceId, false, false)
-            false
-        }
-    }
-
-    fun disconnect(deviceId: String) {
-        val connection = connections.remove(deviceId) ?: return
-        connection.cancelFlag.set(true)
-        runCatching { connection.socket.close() }
-        notifyConnection(deviceId, false, false)
-    }
-
-    fun sendMessage(targetDeviceId: String, body: String, sentAt: String): Boolean {
-        if (body.length > MAX_MESSAGE_LENGTH) return false
-        val connection = connections[targetDeviceId] ?: return false
-        val currentDeviceId = selfDeviceId ?: return false
-
-        return try {
-            val payload = ChatMessagePayload(
-                id = UUID.randomUUID().toString(),
-                senderDeviceId = currentDeviceId,
-                targetDeviceId = targetDeviceId,
-                body = body,
-                sentAt = sentAt
-            )
-            synchronized(connection) {
-                writeFrame(connection.output, gson.toJson(payload))
-            }
-            true
-        } catch (_: Exception) {
-            disconnect(targetDeviceId)
-            false
-        }
-    }
-
-    private fun startDiscovery(context: Context) {
-        val bluetoothAdapter = adapter ?: return
-        if (discoveryReceiver != null) return
-
-        discoveryReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                when (intent.action) {
-                    BluetoothDevice.ACTION_FOUND -> {
-                        val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                        val deviceName = device?.name
-                        if (!deviceName.isNullOrBlank() && device != null) {
-                            availableDevices[deviceName] = device
-                            notifyDiscoveryUpdated()
-                        }
-                    }
-                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                        if (bluetoothAdapter.isEnabled) {
-                            bluetoothAdapter.startDiscovery()
-                        }
-                    }
-                }
-            }
-        }
-
-        val filter = IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_FOUND)
-            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-        }
-        context.registerReceiver(discoveryReceiver, filter)
-
-        availableDevices.clear()
-        bluetoothAdapter.cancelDiscovery()
-        bluetoothAdapter.startDiscovery()
-    }
-
-    private fun stopDiscovery(context: Context) {
-        val bluetoothAdapter = adapter ?: return
-        discoveryReceiver?.let {
-            context.unregisterReceiver(it)
-        }
-        discoveryReceiver = null
-        availableDevices.clear()
-        bluetoothAdapter.cancelDiscovery()
-    }
-
-    private fun startServer() {
-        val bluetoothAdapter = adapter ?: return
-        if (serverThread != null) return
-
-        serverThread = Thread {
-            try {
-                serverSocket = bluetoothAdapter.listenUsingRfcommWithServiceRecord(SERVICE_NAME, SERVICE_UUID)
-                while (!Thread.currentThread().isInterrupted) {
-                    val socket = serverSocket?.accept() ?: break
-                    handleIncomingSocket(socket)
-                }
-            } catch (_: Exception) {
-                // Server socket closed or failed.
-            } finally {
-                runCatching { serverSocket?.close() }
-                serverSocket = null
-            }
-        }.also { it.start() }
-    }
-
-    private fun stopServer() {
-        serverThread?.interrupt()
-        serverThread = null
-        runCatching { serverSocket?.close() }
-        serverSocket = null
-    }
-
-    private fun handleIncomingSocket(socket: BluetoothSocket) {
-        val currentDeviceId = selfDeviceId
-        if (currentDeviceId.isNullOrBlank()) {
-            runCatching { socket.close() }
-            return
-        }
-
+    @SuppressLint("MissingPermission")
+    private suspend fun startServer() {
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+        var serverSocket: BluetoothServerSocket? = null
         try {
-            val input = DataInputStream(BufferedInputStream(socket.inputStream))
-            val output = DataOutputStream(BufferedOutputStream(socket.outputStream))
-            val requestText = readFrame(input) ?: ""
-            val request = gson.fromJson(requestText, ChatHandshakeRequest::class.java)
-
-            val allowed = request.targetDeviceId == currentDeviceId && allowedDevices.contains(request.senderDeviceId)
-            val response = ChatHandshakeResponse(accepted = allowed)
-            writeFrame(output, gson.toJson(response))
-
-            if (!allowed) {
-                socket.close()
-                return
-            }
-
-            val connection = ChatConnection(
-                deviceId = request.senderDeviceId,
-                socket = socket,
-                input = input,
-                output = output,
-                cancelFlag = AtomicBoolean(false)
-            )
-            connections[request.senderDeviceId] = connection
-            startReader(connection)
-            notifyConnection(request.senderDeviceId, true, false)
-        } catch (_: Exception) {
-            runCatching { socket.close() }
-        }
-    }
-
-    private fun startReader(connection: ChatConnection) {
-        connection.readerThread = Thread {
-            while (!connection.cancelFlag.get()) {
-                val payloadText = readFrame(connection.input) ?: break
-                val payload = gson.fromJson(payloadText, ChatMessagePayload::class.java)
-                if (payload.type != "message") {
-                    continue
+            serverSocket = adapter.listenUsingRfcommWithServiceRecord(SERVICE_NAME, UUID.fromString(SPP_UUID))
+            while (coroutineContext.isActive) {
+                val socket = serverSocket.accept() ?: continue
+                scope.launch {
+                    val writer = socket.outputStream
+                    val reader = BufferedReader(InputStreamReader(socket.inputStream))
+                    
+                    val line = withTimeoutOrNull(5000) { reader.readLine() }
+                    if (line?.startsWith("IDENTIFY|") == true) {
+                        val peerId = line.split("|")[1]
+                        val accountDevices = com.tds.binarystars.storage.DeviceCacheStorage.getDevices()
+                        if (accountDevices.any { it.id == peerId }) {
+                            writer.write("IDENTIFIED|$selfDeviceId\n".toByteArray())
+                            writer.flush()
+                            val connection = BluetoothConnection(socket, peerId, reader, writer)
+                            val macAddress = socket.remoteDevice.address
+                            macToPeerId[macAddress] = peerId
+                            activeConnections[peerId] = connection
+                            connection.startReading()
+                        } else {
+                            socket.close()
+                        }
+                    } else {
+                        socket.close()
+                    }
                 }
-                storeIncomingMessage(payload)
             }
-            disconnect(connection.deviceId)
-        }.also { it.start() }
+        } catch (e: Exception) {
+            L.e(TAG, "Server error: ${e.message}")
+        } finally {
+            try { serverSocket?.close() } catch (_: Exception) {}
+        }
     }
 
-    private fun storeIncomingMessage(payload: ChatMessagePayload) {
-        val currentDeviceId = selfDeviceId ?: return
-        val chatDeviceId = if (payload.senderDeviceId.equals(currentDeviceId, true)) {
-            payload.targetDeviceId
-        } else {
-            payload.senderDeviceId
-        }
+    fun sendMessage(deviceIdOrMac: String, content: String): Boolean {
+        val peerId = macToPeerId[deviceIdOrMac] ?: deviceIdOrMac
+        val sanitized = content.replace("\n", " ")
+        val success = activeConnections[peerId]?.send(sanitized) ?: false
+        if (success) addLocalMessage(peerId, sanitized, true)
+        return success
+    }
 
-        val chatMessage = ChatMessage(
-            id = payload.id,
-            deviceId = chatDeviceId,
-            senderDeviceId = payload.senderDeviceId,
-            body = payload.body,
-            sentAt = parseSentAt(payload.sentAt),
-            isOutgoing = payload.senderDeviceId.equals(currentDeviceId, true)
+    fun sendFile(deviceIdOrMac: String, fileName: String, base64Data: String): Boolean {
+        val peerId = macToPeerId[deviceIdOrMac] ?: deviceIdOrMac
+        val success = activeConnections[peerId]?.send("FILE|$fileName|$base64Data") ?: false
+        if (success) addLocalMessage(peerId, "Sent file: $fileName", true)
+        return success
+    }
+
+    internal fun addLocalMessage(deviceId: String, body: String, isOutgoing: Boolean) {
+        val msg = com.tds.binarystars.model.ChatMessage(
+            id = UUID.randomUUID().toString(),
+            deviceId = deviceId,
+            senderDeviceId = if (isOutgoing) selfDeviceId else deviceId,
+            body = body,
+            sentAt = System.currentTimeMillis(),
+            isOutgoing = isOutgoing
         )
-
-        ChatStorage.upsertMessage(chatMessage)
-        notifyChatUpdated(chatDeviceId)
+        _messages.value = _messages.value + msg
     }
 
-    private fun parseSentAt(sentAt: String): Long {
-        return try {
-            OffsetDateTime.parse(sentAt).toInstant().toEpochMilli()
-        } catch (_: Exception) {
-            System.currentTimeMillis()
+    fun removeMessage(id: String) {
+        _messages.value = _messages.value.filter { it.id != id }
+    }
+
+    private class BluetoothConnection(
+        private val socket: android.bluetooth.BluetoothSocket, 
+        val peerId: String,
+        private val reader: java.io.BufferedReader,
+        private val writer: java.io.OutputStream
+    ) {
+        private var isClosed = false
+
+        fun startReading() {
+            scope.launch {
+                try {
+                    while (!isClosed) {
+                        val line = reader.readLine() ?: break
+                        handleLine(line)
+                    }
+                } catch (e: Exception) {
+                    L.e(TAG, "Read error: ${e.message}")
+                } finally {
+                    close()
+                }
+            }
+        }
+
+        private fun handleLine(line: String) {
+            if (line.startsWith("FILE|")) {
+                val parts = line.split("|", limit = 3)
+                if (parts.size >= 3) {
+                    saveReceivedFile(peerId, parts[1], parts[2])
+                }
+            } else {
+                BluetoothChatManager.addLocalMessage(peerId, line, false)
+            }
+        }
+
+        private fun saveReceivedFile(senderId: String, fileName: String, base64Data: String) {
+            val context = appContext ?: return
+            scope.launch {
+                try {
+                    val bytes = android.util.Base64.decode(base64Data, android.util.Base64.NO_WRAP)
+                    // Use consistent internal storage path
+                    val dir = java.io.File(context.filesDir, "transfers/received")
+                    if (!dir.exists()) dir.mkdirs()
+                    
+                    val timestamp = System.currentTimeMillis()
+                    val file = java.io.File(dir, "bt_${timestamp}_$fileName")
+                    java.io.FileOutputStream(file).use { it.write(bytes) }
+                    
+                    L.i(TAG, "File saved internally: ${file.absolutePath}")
+                    // Special prefix for UI to recognize file messages
+                    BluetoothChatManager.addLocalMessage(senderId, "BT_FILE|$fileName|${file.absolutePath}", false)
+                } catch (e: Exception) {
+                    L.e(TAG, "File save error: ${e.message}")
+                }
+            }
+        }
+
+        fun send(content: String): Boolean {
+            return try {
+                // Content is already sanitized for newlines by callers
+                writer.write((content + "\n").toByteArray())
+                writer.flush()
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        fun close() {
+            if (isClosed) return
+            isClosed = true
+            try { socket.close() } catch (_: Exception) {}
+            // Notify manager to remove from maps without calling close() again
+            BluetoothChatManager.onConnectionClosed(peerId)
         }
     }
 
-    private fun setConnecting(deviceId: String, connecting: Boolean) {
-        if (connecting) {
-            connectingDevices.add(deviceId)
-        } else {
-            connectingDevices.remove(deviceId)
-        }
-        notifyConnection(deviceId, connections.containsKey(deviceId), connectingDevices.contains(deviceId))
+    internal fun onConnectionClosed(peerId: String) {
+        activeConnections.remove(peerId)
+        macToPeerId.values.removeIf { it == peerId }
     }
-
-    private fun notifyDiscoveryUpdated() {
-        val snapshot = availableDevices.toMap()
-        mainHandler.post {
-            discoveryListeners.forEach { it(snapshot) }
-        }
-    }
-
-    private fun notifyConnection(deviceId: String, isConnected: Boolean, isConnecting: Boolean) {
-        mainHandler.post {
-            listeners.forEach { it.onBluetoothConnectionChanged(deviceId, isConnected, isConnecting) }
-        }
-    }
-
-    private fun notifyChatUpdated(deviceId: String) {
-        mainHandler.post {
-            listeners.forEach { it.onChatUpdated(deviceId) }
-        }
-    }
-
-    private fun readFrame(input: DataInputStream): String? {
-        return try {
-            val length = input.readInt()
-            if (length <= 0) return null
-            val buffer = ByteArray(length)
-            input.readFully(buffer)
-            String(buffer, Charsets.UTF_8)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun writeFrame(output: DataOutputStream, payload: String) {
-        val bytes = payload.toByteArray(Charsets.UTF_8)
-        output.writeInt(bytes.size)
-        output.write(bytes)
-        output.flush()
-    }
-
-    private data class ChatConnection(
-        val deviceId: String,
-        val socket: BluetoothSocket,
-        val input: DataInputStream,
-        val output: DataOutputStream,
-        val cancelFlag: AtomicBoolean,
-        var readerThread: Thread? = null
-    )
-
-    private data class ChatHandshakeRequest(
-        val type: String = "chat_request",
-        val senderDeviceId: String,
-        val senderDeviceName: String,
-        val targetDeviceId: String
-    )
-
-    private data class ChatHandshakeResponse(
-        val type: String = "chat_response",
-        val accepted: Boolean,
-        val reason: String? = null
-    )
-
-    private data class ChatMessagePayload(
-        val type: String = "message",
-        val id: String,
-        val senderDeviceId: String,
-        val targetDeviceId: String,
-        val body: String,
-        val sentAt: String
-    )
-}
-
-interface BluetoothChatListener {
-    fun onChatUpdated(deviceId: String)
-    fun onBluetoothConnectionChanged(deviceId: String, isConnected: Boolean, isConnecting: Boolean)
 }

@@ -20,8 +20,17 @@ class StreamingRequestBody(
 
     /** Streams the input into the sink without buffering the whole file. */
     override fun writeTo(sink: BufferedSink) {
-        inputStream.source().use { source ->
+        val source = inputStream.source()
+        try {
             sink.writeAll(source)
+        } catch (e: Exception) {
+            android.util.Log.e("StreamingRequestBody", "Error writing to sink", e)
+            throw e
+        } finally {
+            // We do NOT close the source here because OkHttp might retry.
+            // Caller is responsible for closing the inputStream if it's not a retryable request.
+            // However, most InputStreams can't be reset, so retry will fail anyway.
+            // At least we won't crash here.
         }
     }
 }

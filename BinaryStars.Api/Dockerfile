@@ -29,4 +29,7 @@ RUN dotnet publish "./BinaryStars.Api.csproj" -c $BUILD_CONFIGURATION -o /app/pu
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+USER root
+RUN mkdir -p /app/transfers/store && chown -R app:app /app/transfers
+USER app
 ENTRYPOINT ["dotnet", "BinaryStars.Api.dll"]

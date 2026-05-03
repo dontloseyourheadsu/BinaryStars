@@ -13,6 +13,7 @@ import com.tds.binarystars.storage.SettingsStorage
 import com.tds.binarystars.background.DeviceSyncForegroundService
 import com.tds.binarystars.location.LocationUpdateScheduler
 import com.tds.binarystars.location.LiveLocationService
+import com.tds.binarystars.util.NativeLogging
 import org.maplibre.android.MapLibre
 
 class BinaryStarsApp : Application() {
@@ -21,6 +22,7 @@ class BinaryStarsApp : Application() {
      */
     override fun onCreate() {
         super.onCreate()
+        NativeLogging.init(this)
         AuthTokenStore.init(this)
         SettingsStorage.init(this)
         ChatStorage.init(this)
@@ -28,6 +30,7 @@ class BinaryStarsApp : Application() {
         FileTransferStorage.init(this)
         DeviceCacheStorage.init(this)
         LocationCacheStorage.init(this)
+        com.tds.binarystars.bluetooth.BluetoothChatManager.init(this)
         MapLibre.getInstance(this)
 
         if (AuthTokenStore.hasStoredSession()) {
