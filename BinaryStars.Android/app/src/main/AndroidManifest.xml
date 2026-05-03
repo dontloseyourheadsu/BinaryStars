@@ -112,7 +112,7 @@
                 <data
                     android:scheme="msauth"
                     android:host="com.tds.binarystars"
-                    android:path="/2XawGBdoSapB0wimZIe+p7ZGJuY=" />
+                    android:path="" />
             </intent-filter>
         </activity>
 
