@@ -27,6 +27,7 @@ class MessagingMessagesAdapter(
     abstract class MessageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val body: TextView = view.findViewById(R.id.tvMessageBody)
         val time: TextView = view.findViewById(R.id.tvMessageTime)
+        val btnCopy: View = view.findViewById(R.id.btnCopyMessage)
     }
 
     class InViewHolder(view: View) : MessageViewHolder(view)
@@ -46,6 +47,14 @@ class MessagingMessagesAdapter(
         val item = items[position]
         holder.body.text = item.body
         holder.time.text = formatTime(item.sentAt)
+        holder.btnCopy.setOnClickListener {
+            val context = it.context
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Message", item.body))
+                android.widget.Toast.makeText(context, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun getItemCount() = items.size

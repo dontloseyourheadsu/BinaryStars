@@ -17,7 +17,7 @@ object ApiClient {
     }
     
     private val client = OkHttpClient.Builder()
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.HEADERS })
         .addInterceptor { chain ->
             val token = AuthTokenStore.getStoredToken()
             val request = if (!token.isNullOrBlank()) {

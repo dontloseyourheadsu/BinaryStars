@@ -1,40 +1,31 @@
 package com.tds.binarystars.fragments
 
 import android.annotation.SuppressLint
-import android.Manifest
-import android.bluetooth.BluetoothAdapter
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.ProgressBar
-import android.widget.TextView
-import android.widget.ImageView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
-import androidx.core.content.ContextCompat
 import com.tds.binarystars.R
+import com.tds.binarystars.MainActivity
 import com.tds.binarystars.activities.MessagingChatActivity
 import com.tds.binarystars.adapter.ChatListItem
 import com.tds.binarystars.adapter.MessagingChatsAdapter
 import com.tds.binarystars.api.ApiClient
-import com.tds.binarystars.bluetooth.BluetoothChatListener
-import com.tds.binarystars.bluetooth.BluetoothChatManager
+import com.tds.binarystars.api.DeviceActionResultDto
+import com.tds.binarystars.api.LocationUpdateEventDto
 import com.tds.binarystars.messaging.MessagingEventListener
 import com.tds.binarystars.messaging.MessagingSocketManager
 import com.tds.binarystars.storage.ChatStorage
-import com.tds.binarystars.MainActivity
+import com.tds.binarystars.storage.DeviceCacheStorage
 import com.tds.binarystars.util.NetworkUtils
 import com.tds.binarystars.model.ChatSummary
 import kotlinx.coroutines.Dispatchers
@@ -43,386 +34,121 @@ import kotlinx.coroutines.withContext
 import android.os.SystemClock
 import java.time.OffsetDateTime
 
-class MessagingFragment : Fragment(), MessagingEventListener, BluetoothChatListener {
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var emptyState: TextView
-    private lateinit var progressBar: ProgressBar
-    private lateinit var newChatButton: Button
+class MessagingFragment : Fragment(), MessagingEventListener {
+    private lateinit var rvChats: RecyclerView
+    private lateinit var tvMessagingEmptyState: TextView
+    private lateinit var pbMessagingLoading: ProgressBar
+    private lateinit var btnNewChat: Button
     private lateinit var adapter: MessagingChatsAdapter
-    private lateinit var contentView: View
-    private lateinit var noConnectionView: View
-    private lateinit var retryButton: Button
+    private lateinit var viewContent: View
+    private lateinit var viewNoConnection: View
+    private lateinit var btnRetry: Button
     private val items = mutableListOf<ChatListItem>()
-    private var bluetoothAvailableDevices: Set<String> = emptySet()
-    private var lastNameLookup: Map<String, String> = emptyMap()
     private var isLoadingChats = false
-    private var pendingChatReload = false
     private var lastRemoteLoadAtMs = 0L
     private companion object {
         private const val TABLET_MIN_WIDTH_DP = 600
         private const val MIN_REMOTE_LOAD_INTERVAL_MS = 1500L
     }
 
-    private fun isTabletLayout(): Boolean {
-        return resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
-    }
+    private fun isTabletLayout(): Boolean = resources.configuration.smallestScreenWidthDp >= TABLET_MIN_WIDTH_DP
 
-    private val bluetoothDiscoveryListener: (Map<String, android.bluetooth.BluetoothDevice>) -> Unit = { devices ->
-        val discovered = devices.keys
-        if (discovered != bluetoothAvailableDevices) {
-            bluetoothAvailableDevices = discovered
-            newChatButton.isEnabled = NetworkUtils.isOnline(requireContext())
-            viewLifecycleOwner.lifecycleScope.launch {
-                refreshFromCache()
-            }
-        }
-    }
-
-    private val bluetoothPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        val granted = result.values.any { it }
-        if (granted) {
-            startBluetoothFeatures()
-        }
-    }
-
-    private val enableBluetoothLauncher = registerForActivityResult(StartActivityForResult()) {
-        if (BluetoothChatManager.isEnabled()) {
-            startBluetoothFeatures()
-        }
-    }
-
-    /**
-     * Inflates the messaging list UI.
-     */
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_messaging, container, false)
     }
 
-    /**
-     * Initializes UI, adapters, and loads chat summaries.
-     */
+    @SuppressLint("HardwareIds")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener { (activity as? MainActivity)?.openDrawer() }
+        rvChats = view.findViewById(R.id.rvChats)
+        tvMessagingEmptyState = view.findViewById(R.id.tvMessagingEmptyState)
+        pbMessagingLoading = view.findViewById(R.id.pbMessagingLoading)
+        btnNewChat = view.findViewById(R.id.btnNewChat)
+        viewContent = view.findViewById(R.id.viewContent)
+        viewNoConnection = view.findViewById(R.id.viewNoConnection)
+        btnRetry = view.findViewById(R.id.btnRetry)
 
-        view.findViewById<ImageView>(R.id.ivMenu)?.setOnClickListener {
-            (activity as? MainActivity)?.openDrawer()
-        }
-
-        recyclerView = view.findViewById(R.id.rvChats)
-        emptyState = view.findViewById(R.id.tvMessagingEmptyState)
-        progressBar = view.findViewById(R.id.pbMessagingLoading)
-        newChatButton = view.findViewById(R.id.btnNewChat)
-        contentView = view.findViewById(R.id.viewContent)
-        noConnectionView = view.findViewById(R.id.viewNoConnection)
-        retryButton = view.findViewById(R.id.btnRetry)
-
-        adapter = MessagingChatsAdapter(items) { item ->
-            openChat(item.deviceId, item.deviceName)
-        }
-
-        recyclerView.layoutManager = if (isTabletLayout()) {
-            GridLayoutManager(requireContext(), 2)
-        } else {
-            LinearLayoutManager(requireContext())
-        }
-        recyclerView.adapter = adapter
-
-        newChatButton.setOnClickListener {
-            pickDeviceToChat()
-        }
-
-        retryButton.setOnClickListener {
-            loadChats()
-        }
-
-        val selfDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
-        val selfDeviceName = BluetoothAdapter.getDefaultAdapter()?.name ?: "Android"
-        BluetoothChatManager.setSelf(selfDeviceId, selfDeviceName)
-
+        adapter = MessagingChatsAdapter(items) { item -> openChat(item.deviceId, item.deviceName) }
+        rvChats.layoutManager = if (isTabletLayout()) GridLayoutManager(requireContext(), 2) else LinearLayoutManager(requireContext())
+        rvChats.adapter = adapter
+        btnNewChat.setOnClickListener { pickDeviceToChat() }
+        btnRetry.setOnClickListener { loadChats() }
         loadChats()
     }
 
-    /**
-     * Registers websocket listeners and refreshes chats.
-     */
     override fun onResume() {
         super.onResume()
         MessagingSocketManager.addListener(this)
-        BluetoothChatManager.addListener(this)
         loadChats()
     }
 
-    /**
-     * Unregisters websocket listeners.
-     */
     override fun onPause() {
         super.onPause()
         MessagingSocketManager.removeListener(this)
-        BluetoothChatManager.removeListener(this)
     }
 
-    override fun onStart() {
-        super.onStart()
-        ensureBluetoothReady()
-    }
+    override fun onChatUpdated(deviceId: String) { loadChats(allowRemote = false) }
+    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) { loadChats(allowRemote = false) }
+    override fun onConnectionStateChanged(isConnected: Boolean) { loadChats(allowRemote = false) }
+    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) { loadChats(allowRemote = false) }
+    override fun onLocationUpdated(event: LocationUpdateEventDto) {}
+    override fun onActionResult(result: DeviceActionResultDto) {}
 
-    override fun onStop() {
-        super.onStop()
-        stopBluetoothFeatures()
-    }
-
-    override fun onChatUpdated(deviceId: String) {
-        loadChats(allowRemote = false)
-    }
-
-    override fun onDeviceRemoved(deviceId: String, isSelf: Boolean) {
-        loadChats()
-    }
-
-    override fun onConnectionStateChanged(isConnected: Boolean) {
-        // No-op for now
-    }
-
-    override fun onDevicePresenceChanged(deviceId: String, isOnline: Boolean, lastSeen: String) {
-        // Presence can be high-frequency. Refresh from cache to avoid API spam.
-        loadChats(allowRemote = false)
-    }
-
-    override fun onBluetoothConnectionChanged(deviceId: String, isConnected: Boolean, isConnecting: Boolean) {
-        // No-op for now
-    }
-
-    /**
-     * Loads cached chats and applies device name lookups when online.
-     */
     private fun loadChats(allowRemote: Boolean = true) {
-        if (isLoadingChats) {
-            pendingChatReload = true
-            return
-        }
-
+        if (isLoadingChats) return
         viewLifecycleOwner.lifecycleScope.launch {
             isLoadingChats = true
-            progressBar.visibility = View.VISIBLE
-            val summaries = withContext(Dispatchers.IO) { ChatStorage.getChats() }
+            pbMessagingLoading.visibility = View.VISIBLE
             val isOnline = NetworkUtils.isOnline(requireContext())
-            if (!isOnline) {
-                progressBar.visibility = View.GONE
-                newChatButton.isEnabled = false
-                updateItems(summaries, lastNameLookup)
-                if (items.isEmpty()) {
-                    setNoConnection(true)
-                } else {
-                    setNoConnection(false)
-                }
-                isLoadingChats = false
-                if (pendingChatReload) {
-                    pendingChatReload = false
-                    loadChats(allowRemote = false)
-                }
-                return@launch
-            }
+            if (!isOnline) { pbMessagingLoading.visibility = View.GONE; refreshFromCache(); return@launch }
 
             try {
-                newChatButton.isEnabled = true
                 val now = SystemClock.elapsedRealtime()
-                val shouldDoRemoteLoad = allowRemote && (now - lastRemoteLoadAtMs >= MIN_REMOTE_LOAD_INTERVAL_MS)
-                if (!shouldDoRemoteLoad) {
-                    progressBar.visibility = View.GONE
-                    updateItems(summaries, lastNameLookup)
-                    setNoConnection(false)
-                    return@launch
-                }
-
-                lastRemoteLoadAtMs = now
-                val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
-                val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
-                val chatsResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getMessagingChats(currentDeviceId) }
-                progressBar.visibility = View.GONE
-
-                val accountDevices = if (devicesResponse.isSuccessful) {
-                    devicesResponse.body().orEmpty().filter { it.id != currentDeviceId }
-                } else {
-                    emptyList()
-                }
-
-                val nameLookup = accountDevices.associateBy({ it.id }, { it.name })
-
-                lastNameLookup = nameLookup
-
-                if (chatsResponse.isSuccessful) {
-                    val chatMessages = chatsResponse.body().orEmpty().map {
-                        ChatSummary(
-                            deviceId = it.deviceId,
-                            lastMessage = it.lastMessage,
-                            lastSentAt = parseSentAt(it.lastSentAt)
-                        )
+                if (allowRemote && (now - lastRemoteLoadAtMs >= MIN_REMOTE_LOAD_INTERVAL_MS)) {
+                    lastRemoteLoadAtMs = now
+                    val resp = withContext(Dispatchers.IO) { ApiClient.apiService.getMessagingChats(getCurrentDeviceId()) }
+                    if (resp.isSuccessful) {
+                        val remote = resp.body().orEmpty().map { ChatSummary(it.deviceId, it.lastMessage, OffsetDateTime.parse(it.lastSentAt).toInstant().toEpochMilli()) }
+                        withContext(Dispatchers.IO) { remote.forEach { ChatStorage.upsertChatSummary(it) } }
                     }
-
-                    withContext(Dispatchers.IO) {
-                        chatMessages.forEach { ChatStorage.upsertChatSummary(it) }
-                    }
-
-                    updateItems(chatMessages, nameLookup)
-                } else {
-                    updateItems(summaries, nameLookup)
                 }
-
-                setNoConnection(false)
+                refreshFromCache()
             } catch (_: Exception) {
-                progressBar.visibility = View.GONE
-                newChatButton.isEnabled = false
-                updateItems(summaries, lastNameLookup)
-                setNoConnection(items.isEmpty())
+                refreshFromCache()
             } finally {
                 isLoadingChats = false
-                if (pendingChatReload) {
-                    pendingChatReload = false
-                    loadChats(allowRemote = false)
-                }
+                pbMessagingLoading.visibility = View.GONE
             }
-        }
-    }
-
-    private fun parseSentAt(sentAt: String): Long {
-        return try {
-            OffsetDateTime.parse(sentAt).toInstant().toEpochMilli()
-        } catch (_: Exception) {
-            System.currentTimeMillis()
         }
     }
 
     private suspend fun refreshFromCache() {
         val summaries = withContext(Dispatchers.IO) { ChatStorage.getChats() }
-        updateItems(summaries, lastNameLookup)
-    }
-
-    /**
-     * Updates the adapter items from cached chat summaries.
-     */
-    private fun updateItems(summaries: List<ChatSummary>, nameLookup: Map<String, String>) {
+        val accountDevices = withContext(Dispatchers.IO) { DeviceCacheStorage.getDevices() }
+        val lookup = accountDevices.associateBy({ it.id }, { it.name })
         items.clear()
-        summaries.forEach { summary ->
-            val name = nameLookup[summary.deviceId] ?: summary.deviceId
-            val bluetoothAvailable = bluetoothAvailableDevices.contains(name)
-            items.add(
-                ChatListItem(
-                    deviceId = summary.deviceId,
-                    deviceName = name,
-                    lastMessage = summary.lastMessage,
-                    lastSentAt = summary.lastSentAt,
-                    isBluetoothAvailable = bluetoothAvailable
-                )
-            )
-        }
+        summaries.forEach { s -> items.add(ChatListItem(s.deviceId, lookup[s.deviceId] ?: s.deviceId, s.lastMessage, s.lastSentAt, false)) }
         adapter.notifyDataSetChanged()
-        emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        tvMessagingEmptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        setNoConnection(items.isEmpty() && !NetworkUtils.isOnline(requireContext()))
     }
 
-    /**
-     * Toggles offline state UI panels.
-     */
-    private fun setNoConnection(show: Boolean) {
-        noConnectionView.visibility = if (show) View.VISIBLE else View.GONE
-        contentView.visibility = if (show) View.GONE else View.VISIBLE
-    }
+    private fun setNoConnection(v: Boolean) { viewNoConnection.visibility = if (v) View.VISIBLE else View.GONE; viewContent.visibility = if (v) View.GONE else View.VISIBLE }
 
-    private fun ensureBluetoothReady() {
-        if (!BluetoothChatManager.isSupported()) return
-        if (!hasBluetoothPermissions()) {
-            requestBluetoothPermissions()
-            return
-        }
-        if (!BluetoothChatManager.isEnabled()) {
-            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-            return
-        }
-        startBluetoothFeatures()
-    }
-
-    private fun startBluetoothFeatures() {
-        BluetoothChatManager.acquireDiscovery(requireContext(), bluetoothDiscoveryListener)
-        BluetoothChatManager.acquireServer()
-    }
-
-    private fun stopBluetoothFeatures() {
-        BluetoothChatManager.releaseDiscovery(requireContext(), bluetoothDiscoveryListener)
-        BluetoothChatManager.releaseServer()
-    }
-
-    private fun hasBluetoothPermissions(): Boolean {
-        val permissions = requiredBluetoothPermissions()
-        return permissions.all { permission ->
-            ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    private fun requestBluetoothPermissions() {
-        bluetoothPermissionLauncher.launch(requiredBluetoothPermissions())
-    }
-
-    private fun requiredBluetoothPermissions(): Array<String> {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-    }
-
-    @SuppressLint("HardwareIds")
-    /**
-     * Prompts the user to select a device and opens a chat.
-     */
     private fun pickDeviceToChat() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val currentDeviceId = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
-            val availableDevices = if (NetworkUtils.isOnline(requireContext())) {
-                try {
-                    val devicesResponse = withContext(Dispatchers.IO) { ApiClient.apiService.getDevices() }
-                    devicesResponse.body().orEmpty()
-                        .filter { it.id != currentDeviceId }
-                        .map { CachedChatDevice(it.id, it.name) }
-                } catch (_: Exception) {
-                    emptyList()
-                }
-            } else {
-                emptyList()
-            }
-
-            if (availableDevices.isEmpty()) {
-                Toast.makeText(requireContext(), "No devices available", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-
-            val names = availableDevices.map { it.name }.toTypedArray()
-            AlertDialog.Builder(requireContext())
-                .setTitle("Start chat")
-                .setItems(names) { _, index ->
-                    val device = availableDevices[index]
-                    openChat(device.id, device.name)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+            val devices = withContext(Dispatchers.IO) { DeviceCacheStorage.getDevices() }.filter { it.id != getCurrentDeviceId() }
+            if (devices.isEmpty()) return@launch
+            val names = devices.map { it.name }.toTypedArray()
+            AlertDialog.Builder(requireContext()).setTitle("Start chat").setItems(names) { _, i -> openChat(devices[i].id, devices[i].name) }.show()
         }
     }
 
-    private data class CachedChatDevice(
-        val id: String,
-        val name: String
-    )
-
-    /**
-     * Opens the messaging chat activity for the selected device.
-     */
-    private fun openChat(deviceId: String, deviceName: String) {
-        val intent = Intent(requireContext(), MessagingChatActivity::class.java)
-        intent.putExtra(MessagingChatActivity.EXTRA_DEVICE_ID, deviceId)
-        intent.putExtra(MessagingChatActivity.EXTRA_DEVICE_NAME, deviceName)
+    private fun openChat(id: String, name: String) {
+        val intent = Intent(requireContext(), MessagingChatActivity::class.java).apply { putExtra(MessagingChatActivity.EXTRA_DEVICE_ID, id); putExtra(MessagingChatActivity.EXTRA_DEVICE_NAME, name) }
         startActivity(intent)
     }
+
+    private fun getCurrentDeviceId(): String = Settings.Secure.getString(requireContext().contentResolver, Settings.Secure.ANDROID_ID)
 }
