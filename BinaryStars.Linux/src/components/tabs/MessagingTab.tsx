@@ -35,7 +35,7 @@ export default function MessagingTab({
   return (
     <section className="panel-grid">
       <div className={`panel messaging-list ${selectedChatDeviceId ? "hide-on-mobile" : ""}`}>
-        <div className="split-row">
+        <div className="actions-row">
           <h3>Chats</h3>
           <select
             aria-label="Chat target"
@@ -43,58 +43,74 @@ export default function MessagingTab({
             title="Chat target"
             value={selectedChatDeviceId}
           >
-            <option value="">Choose device</option>
+            <option value="">Choose target</option>
             {chatTargets.map((device) => (
               <option key={device.id} value={device.id}>
-                {device.name}
+                {device.name} ({device.id})
               </option>
             ))}
           </select>
-          <button
-            onClick={() => {
-              if (chatTargets.length > 0) {
-                const fallback = selectedChatDeviceId || chatTargets[0].id;
-                onSelectChat(fallback);
-              }
-            }}
-            type="button"
-          >
-            New
-          </button>
         </div>
+
+        {chatSummaries.length === 0 && <p className="empty-state">No conversations yet.</p>}
         <div className="list">
-          {chatSummaries.length === 0 && <p className="empty-state">No chats yet. Start one to send a message.</p>}
           {chatSummaries.map((summary) => (
             <button
-              className={`row-card ${summary.deviceId === selectedChatDeviceId ? "active" : ""}`}
+              className={`row-card ${selectedChatDeviceId === summary.deviceId ? "active" : ""}`}
               key={summary.deviceId}
               onClick={() => onSelectChat(summary.deviceId)}
               type="button"
             >
-              <strong>{summary.name}</strong>
-              <span className="muted">{summary.lastMessage.body}</span>
+              <div className="item-head">
+                <strong>{devices.find((d) => d.id === summary.deviceId)?.name ?? summary.deviceId}</strong>
+                <span className="muted">{new Date(summary.lastMessage.sentAt).toLocaleTimeString()}</span>
+              </div>
+              <p className="muted text-truncate">{summary.lastMessage.body}</p>
             </button>
           ))}
         </div>
       </div>
-      <div className={`panel messaging-chat ${selectedChatDeviceId ? "show-on-mobile" : "hide-chat-on-mobile"}`}>
-        <div className="split-row">
-          <button className="ghost mobile-only" onClick={onBackToChats} type="button">Back</button>
-          <h3>{chatDevice ? chatDevice.name : "Select a chat"}</h3>
-          <button className="ghost" onClick={onClearCurrentChat} type="button">Clear Chat</button>
+
+      <div className={`panel chat-view ${!selectedChatDeviceId ? "hide-on-mobile" : ""}`}>
+        <div className="chat-header">
+          <button className="icon-btn back-btn" onClick={onBackToChats} type="button">
+            ←
+          </button>
+          <div className="chat-info">
+            <strong>{chatDevice?.name ?? "Select a chat"}</strong>
+            {chatDevice && <span className="muted">{chatDevice.isOnline ? "Online" : "Offline"}</span>}
+          </div>
+          {selectedChatDeviceId && (
+            <button className="text-btn danger" onClick={onClearCurrentChat} type="button">
+              Clear
+            </button>
+          )}
         </div>
-        <div className="chat-box">
-          {chatMessages.map((message) => (
-            <div className={`bubble ${message.isOutgoing ? "out" : "in"}`} key={message.id}>
-              <p>{message.body}</p>
-              <small>{new Date(message.sentAt).toLocaleTimeString()}</small>
+
+        <div className="messages-container">
+          {!selectedChatDeviceId && <p className="empty-state">Select a device to start chatting</p>}
+          {selectedChatDeviceId && chatMessages.length === 0 && <p className="empty-state">No messages yet</p>}
+          {chatMessages.map((msg) => (
+            <div className={`message-bubble ${msg.isOutgoing ? "outgoing" : "incoming"}`} key={msg.id}>
+              <button 
+                className="copy-msg-btn" 
+                onClick={() => navigator.clipboard.writeText(msg.body)}
+                title="Copy message"
+                type="button"
+              >
+                📋
+              </button>
+              <p>{msg.body}</p>
+              <span className="message-time">{new Date(msg.sentAt).toLocaleTimeString()}</span>
             </div>
           ))}
         </div>
-        <div className="split-row">
-          <input
-            onChange={(event) => onSetNewMessage(event.target.value)}
-            placeholder="Write a message"
+
+        <div className="chat-input-row">
+          <textarea
+            disabled={!selectedChatDeviceId}
+            onChange={(e) => onSetNewMessage(e.target.value)}
+            placeholder="Type a message..."
             value={newMessage}
           />
           <button className="send-btn send-text" disabled={!selectedChatDeviceId || !newMessage.trim()} onClick={onSendChatMessage} type="button">

@@ -50,7 +50,7 @@ export default function FilesTab({
   return (
     <section className="panel-stack">
       <div className="panel">
-        <div className="split-row">
+        <div className="actions-row">
           <h3>File Transfers</h3>
           <select
             aria-label="Target device"
@@ -89,12 +89,12 @@ export default function FilesTab({
                 {formatSize(transfer.sizeBytes)} · {statusLabel(transfer.status, transfer.isSender)}
               </span>
               <div className="chip-row">
-                {!transfer.isSender && transfer.status === "Available" && (
+                {!transfer.isSender && (transfer.status === "Available" || transfer.status === "Queued" || transfer.status === "Uploading") && (
                   <button onClick={() => onDownloadTransfer(transfer)} type="button">
                     Download
                   </button>
                 )}
-                {!transfer.isSender && transfer.status === "Available" && (
+                {!transfer.isSender && (transfer.status === "Available" || transfer.status === "Queued" || transfer.status === "Uploading") && (
                   <button className="ghost" onClick={() => onRejectTransfer(transfer)} type="button">
                     Reject
                   </button>
