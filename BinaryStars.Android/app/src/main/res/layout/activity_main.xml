@@ -246,6 +246,58 @@
 
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/nav_logs"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:tag="nav_logs"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="System Logs"
+                android:textSize="16sp"
+                android:textColor="@color/carbon_text_main" />
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_note"
+                app:tint="@color/carbon_text_muted"
+                android:contentDescription="Logs" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/nav_bluetooth"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:tag="nav_bluetooth"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Bluetooth Isolation"
+                android:textSize="16sp"
+                android:textColor="@color/carbon_text_main" />
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_bluetooth"
+                app:tint="@color/carbon_text_muted"
+                android:contentDescription="Bluetooth" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
 </androidx.drawerlayout.widget.DrawerLayout>
