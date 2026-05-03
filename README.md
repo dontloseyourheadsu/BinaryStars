@@ -28,10 +28,11 @@ BinaryStars utilizes multiple communication protocols to balance reliability, re
 | **Authentication & Profile** | Primary | - | - | - |
 | **Device Registration** | Primary | - | - | - |
 | **Notes & History** | Primary | - | - | - |
-| **Real-time Messaging** | Fallback | **Primary** | Queue/Persistence | - |
+| **Real-time Messaging** | Fallback | **Primary** | Queue/Persistence | ✅ (Bidirectional) |
 | **Remote Actions** | Bridge | **Primary** | - | - |
 | **Live Location Updates** | - | **Primary** | - | - |
-| **File Transfers** | Metadata/Bridge | - | **Packet Stream** | **Android, Linux(S), Pi(S)** |
+| **File Transfers** | Metadata/Bridge | - | **Packet Stream** | ✅ (Bidirectional) |
+| **Telemetry** | Primary | **Primary** | - | - |
 | **Notifications** | Scheduling/Sync | - | **Queue/Push** | - |
 
 ### 2. Communication Flow
@@ -68,7 +69,8 @@ flowchart TD
     Linux -- "WS (Real-time Messaging, Actions)" <--> WS
 
     Android -- "RFCOMM (P2P Chat/File)" <--> Android
-    Linux -- "RFCOMM (P2P File)" --> Android
+    Linux -- "RFCOMM (P2P Chat/File)" <--> Android
+    Linux -- "RFCOMM (P2P Chat/File)" <--> Linux
 
     %% Internal API logic
 
@@ -140,21 +142,34 @@ sequenceDiagram
 
 ## Bluetooth P2P Transfers & Chat
 
-BinaryStars supports direct Bluetooth communication using RFCOMM.
-
-- **Android**: Full P2P support. Acts as both Sender and Receiver (Server) for chat and files.
-- **Linux / Raspberry Pi**: Client-only support. Can discover nearby devices and **send** files to Android targets using `bluetooth-sendto`.
+BinaryStars supports direct Bluetooth communication using RFCOMM with a standardized JSON-framed protocol.
 
 ```mermaid
 sequenceDiagram
-    participant S as Sender (Android/Linux)
-    participant R as Android Receiver
-    S->>S: Search for nearby devices
-    S->>R: Connect via RFCOMM
-    Note over S,R: Direct P2P Stream
-    S->>R: Send Encrypted File
-    R-->>S: Ack
+    participant D1 as Device A (Android/Linux)
+    participant D2 as Device B (Android/Linux)
+
+    Note over D1,D2: RFCOMM Channel 1 Established
+    
+    D1->>D2: ChatHandshakeRequest (ID, Name)
+    D2->>D1: ChatHandshakeResponse (Accepted)
+    
+    Note over D1,D2: Standardized Communication Ready
+
+    rect rgb(71, 19, 150)
+    Note right of D1: Messaging Flow
+    D1->>D2: BluetoothEnvelope: Message
+    end
+
+    rect rgb(177, 59, 255)
+    Note right of D1: File Transfer Flow
+    D1->>D2: BluetoothEnvelope: FileHeader
+    D1->>D2: Binary Byte Stream (RFCOMM 2)
+    end
 ```
+
+- **Full Bidirectional Support:** Any device can act as a sender or receiver.
+- **Offline Reliability:** Messaging and transfers work without the central API.
 
 ### Linux Configuration (BlueZ)
 
@@ -176,7 +191,7 @@ To enable Bluetooth server functionality on Linux, your Bluetooth daemon must ru
 ### Protocol Implementation
 
 - **Chat Service:** RFCOMM Channel 1 (SPP). Handles JSON-framed messages.
-- **Transfer Service:** RFCOMM Channel 2. Handles encrypted file byte streams with resume support.
+- **Transfer Service:** RFCOMM Channel 2. Handles file byte streams with resume support.
 
 ## 🚀 Raspberry Pi Automation
 
