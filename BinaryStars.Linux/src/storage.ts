@@ -20,7 +20,6 @@ const THEME_KEY = "binarystars.theme.mode";
 const LEGACY_THEME_DARK_KEY = "binarystars.theme.dark";
 const LOCATION_ENABLED_KEY = "binarystars.location.enabled";
 const LOCATION_INTERVAL_KEY = "binarystars.location.minutes";
-const LOCATION_LOCAL_HISTORY_KEY = "binarystars.location.localHistory";
 const LOCATION_PENDING_UPLOADS_KEY = "binarystars.location.pendingUploads";
 const BLUETOOTH_ID_MAP_KEY = "binarystars.bluetooth.idmap";
 
@@ -139,15 +138,11 @@ export const cacheStore = {
   setNotificationSchedules(schedules: NotificationSchedule[]): void {
     writeJson(NOTIFICATION_SCHEDULES_KEY, schedules);
   },
-  getLocalLocationHistory(deviceId: string): LocalLocationPoint[] {
-    const all = readJson<LocalLocationPoint[]>(LOCATION_LOCAL_HISTORY_KEY, []);
-    return all
-      .filter((entry) => entry.deviceId === deviceId)
-      .sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt));
+  getLocalLocationHistory(_deviceId: string): LocalLocationPoint[] {
+    return [];
   },
-  addLocalLocationPoint(point: LocalLocationPoint): void {
-    const next = [point, ...readJson<LocalLocationPoint[]>(LOCATION_LOCAL_HISTORY_KEY, [])].slice(0, 2_000);
-    writeJson(LOCATION_LOCAL_HISTORY_KEY, next);
+  addLocalLocationPoint(_point: LocalLocationPoint): void {
+    // No-op: Map history is only stored on the API now.
   },
   getPendingLocationUploads(deviceId: string): PendingLocationUpload[] {
     const all = readJson<PendingLocationUpload[]>(LOCATION_PENDING_UPLOADS_KEY, []);

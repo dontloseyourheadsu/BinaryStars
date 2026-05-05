@@ -222,7 +222,6 @@ function App() {
   const [notificationTargetDeviceId, setNotificationTargetDeviceId] = useState("");
   const [notificationScheduledFor, setNotificationScheduledFor] = useState("");
   const [notificationRepeatMinutes, setNotificationRepeatMinutes] = useState("");
-  const [notificationScheduleEnabled, setNotificationScheduleEnabled] = useState(true);
   const [editingNotificationScheduleId, setEditingNotificationScheduleId] = useState<string | null>(null);
   const [noteName, setNoteName] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -561,26 +560,6 @@ function App() {
     setTransfers(next);
   };
 
-  const toLocalLocationPoint = (payload: {
-    deviceId: string;
-    latitude: number;
-    longitude: number;
-    recordedAt: string;
-  }) => ({
-    id: crypto.randomUUID(),
-    deviceId: payload.deviceId,
-    title: "Local snapshot",
-    recordedAt: payload.recordedAt,
-    latitude: payload.latitude,
-    longitude: payload.longitude,
-  });
-
-  const mergeHistory = (remote: LocationPoint[], local: LocationPoint[]): LocationPoint[] => {
-    return [...remote, ...local]
-      .sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt))
-      .slice(0, 500);
-  };
-
   const applyLiveLocationUpdate = (payload: LocationUpdateEvent): void => {
     const currentPoint: LocationPoint = {
       id: `current-${payload.deviceId}`,
@@ -600,13 +579,13 @@ function App() {
     }
   };
 
-  const saveLocalLocationPoint = (payload: {
+  const saveLocalLocationPoint = (_payload: {
     deviceId: string;
     latitude: number;
     longitude: number;
     recordedAt: string;
   }): void => {
-    cacheStore.addLocalLocationPoint(toLocalLocationPoint(payload));
+    // No-op: Map history is only stored on the API now.
   };
 
   const queuePendingLocationUpload = (payload: {
@@ -756,22 +735,15 @@ function App() {
   };
 
   const refreshMapHistory = async (deviceId: string): Promise<void> => {
-    const local = cacheStore.getLocalLocationHistory(deviceId);
     if (!online) {
-      setHistory(local);
       return;
     }
 
     try {
       const remote = await api.getLocationHistory(deviceId);
-      if (deviceId === myDeviceId) {
-        setHistory(mergeHistory(remote, local));
-        return;
-      }
-
       setHistory(remote);
     } catch {
-      setHistory(local);
+      // no-op
     }
   };
 
@@ -1409,7 +1381,7 @@ function App() {
 
     const liveTimer = window.setInterval(() => {
       void runLive();
-    }, 15_000);
+    }, locationMinutes * 60_000);
     const persistedTimer = window.setInterval(() => {
       void runPersisted();
     }, locationMinutes * 60_000);
@@ -1973,7 +1945,6 @@ function App() {
     setNotificationBody("");
     setNotificationScheduledFor("");
     setNotificationRepeatMinutes("");
-    setNotificationScheduleEnabled(true);
   };
 
   const sendNotificationNow = async (): Promise<void> => {
@@ -2023,7 +1994,7 @@ function App() {
       targetDeviceId: notificationTargetDeviceId,
       title: notificationTitle.trim(),
       body: notificationBody.trim(),
-      isEnabled: notificationScheduleEnabled,
+      isEnabled: true,
       scheduledForUtc: hasScheduledFor ? new Date(notificationScheduledFor).toISOString() : null,
       repeatMinutes: hasRepeat ? Number.parseInt(notificationRepeatMinutes, 10) : null,
     };
@@ -2050,10 +2021,16 @@ function App() {
     setNotificationTargetDeviceId(schedule.targetDeviceId);
     setNotificationTitle(schedule.title);
     setNotificationBody(schedule.body);
-    setNotificationScheduleEnabled(schedule.isEnabled);
     setNotificationRepeatMinutes(schedule.repeatMinutes != null ? String(schedule.repeatMinutes) : "");
     setNotificationScheduledFor(
-      schedule.scheduledForUtc ? new Date(schedule.scheduledForUtc).toISOString().slice(0, 16) : "",
+      schedule.scheduledForUtc
+        ? (() => {
+            const date = new Date(schedule.scheduledForUtc);
+            const offset = date.getTimezoneOffset();
+            const localDate = new Date(date.getTime() - offset * 60 * 1000);
+            return localDate.toISOString().slice(0, 16);
+          })()
+        : "",
     );
   };
 
@@ -2761,7 +2738,6 @@ function App() {
             notificationBody={notificationBody}
             scheduledForUtc={notificationScheduledFor}
             repeatMinutes={notificationRepeatMinutes}
-            isScheduleEnabled={notificationScheduleEnabled}
             editingScheduleId={editingNotificationScheduleId}
             schedules={notificationSchedules}
             history={notificationHistory.filter((entry) => entry.targetDeviceId === myDeviceId)}
@@ -2770,7 +2746,6 @@ function App() {
             onSetNotificationBody={setNotificationBody}
             onSetScheduledForUtc={setNotificationScheduledFor}
             onSetRepeatMinutes={setNotificationRepeatMinutes}
-            onSetScheduleEnabled={setNotificationScheduleEnabled}
             onSendNow={() => void sendNotificationNow()}
             onSaveSchedule={() => void saveNotificationSchedule()}
             onEditSchedule={editNotificationSchedule}

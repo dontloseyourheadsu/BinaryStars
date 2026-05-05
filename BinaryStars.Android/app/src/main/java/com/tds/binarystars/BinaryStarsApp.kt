@@ -30,6 +30,7 @@ class BinaryStarsApp : Application() {
         FileTransferStorage.init(this)
         DeviceCacheStorage.init(this)
         LocationCacheStorage.init(this)
+        NotificationScheduleStorage.init(this)
         com.tds.binarystars.bluetooth.BluetoothChatManager.init(this)
         MapLibre.getInstance(this)
 

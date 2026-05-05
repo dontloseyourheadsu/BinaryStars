@@ -68,13 +68,6 @@ class LocationUpdateWorker(
             recordedAt = recordedAt
         )
 
-        LocationCacheStorage.saveLocalPoint(
-            deviceId = deviceId,
-            latitude = location.latitude,
-            longitude = location.longitude,
-            recordedAt = recordedAt
-        )
-
         if (!NetworkUtils.isOnline(applicationContext)) {
             LocationCacheStorage.enqueuePendingUpload(request)
             return Result.success()

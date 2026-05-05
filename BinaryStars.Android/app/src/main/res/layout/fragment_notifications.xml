@@ -24,13 +24,23 @@
             android:contentDescription="Menu" />
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
+            android:layout_weight="1"
             android:text="Notifications"
             android:textColor="@color/carbon_text_main"
             android:textSize="20sp"
             android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/ivRefresh"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_sync"
+            app:tint="@color/carbon_text_main"
+            android:contentDescription="Refresh" />
     </LinearLayout>
 
     <ScrollView
@@ -115,18 +125,10 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <CheckBox
-                android:id="@+id/cbScheduleEnabled"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="Enabled"
-                android:buttonTint="@color/primary_purple"
-                android:textColor="@color/carbon_text_main" />
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:text="One-time schedule"
                 android:textColor="@color/carbon_text_main" />
 
@@ -192,6 +194,38 @@
                 android:text="Save Schedule"
                 android:backgroundTint="@color/primary_purple"
                 android:textColor="@android:color/white"/>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/carbon_border"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="24dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Active Schedules"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/carbon_text_main"
+                android:layout_marginBottom="16dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvSchedules"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false" />
+
+            <TextView
+                android:id="@+id/tvSchedulesEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No active schedules for this device."
+                android:textColor="@color/carbon_text_muted"
+                android:gravity="center"
+                android:visibility="gone"
+                android:layout_marginTop="16dp" />
 
         </LinearLayout>
     </ScrollView>

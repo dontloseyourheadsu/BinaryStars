@@ -284,11 +284,6 @@ class MapFragment : Fragment(), MessagingEventListener {
     private fun loadHistory(deviceId: String) {
         history.clear()
         historyAdapter.notifyDataSetChanged()
-        val localHistory = if (isCurrentDevice(deviceId)) {
-            LocationCacheStorage.getLocalHistory(deviceId)
-        } else {
-            emptyList()
-        }
 
         if (NetworkUtils.isOnline(requireContext())) {
             viewLifecycleOwner.lifecycleScope.launch {
@@ -308,11 +303,6 @@ class MapFragment : Fragment(), MessagingEventListener {
                         }
                     }
                 } catch (_: Exception) {
-                    // Fall back to local history below.
-                }
-
-                if (localHistory.isNotEmpty()) {
-                    history.addAll(localHistory)
                 }
 
                 history.sortByDescending { it.timestamp }
@@ -326,7 +316,6 @@ class MapFragment : Fragment(), MessagingEventListener {
                 updateHistoryEmptyState()
             }
         } else {
-            history.addAll(localHistory)
             history.sortByDescending { it.timestamp }
             if (history.isNotEmpty()) {
                 val top = history.first()
@@ -498,7 +487,7 @@ class MapFragment : Fragment(), MessagingEventListener {
      * Configures the background location settings UI.
      */
     private fun setupLocationSettings() {
-        val intervalOptions = listOf(15, 30, 60)
+        val intervalOptions = listOf(5, 10, 15, 30)
         val labels = intervalOptions.map { "$it minutes" }
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, labels)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)

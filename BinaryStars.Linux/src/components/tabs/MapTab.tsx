@@ -92,9 +92,10 @@ export default function MapTab({
               onChange={(event) => onSetLocationMinutes(Number(event.target.value))}
               value={locationMinutes}
             >
+              <option value={5}>5 minutes</option>
+              <option value={10}>10 minutes</option>
               <option value={15}>15 minutes</option>
               <option value={30}>30 minutes</option>
-              <option value={60}>60 minutes</option>
             </select>
             <p className="section-label">Location Diagnostics</p>
             <p className="muted">Geolocation API: {isGeolocationAvailable ? "available" : "unavailable"}</p>
