@@ -34,12 +34,31 @@ object NotificationScheduleStorage {
         }
     }
 
-    fun upsertSchedules(schedules: List<NotificationScheduleResponse>) {
-        Log.i(LOG_TAG, "Upserting ${schedules.size} schedules into local storage")
+    fun syncSchedules(schedules: List<NotificationScheduleResponse>) {
+        Log.i(LOG_TAG, "Syncing ${schedules.size} schedules from server")
         val db = dbHelper?.writableDatabase ?: return
         db.beginTransaction()
         try {
-            // We want to keep track of existing ones to preserve last_notified_at if they haven't changed much
+            // 1. Get current IDs to see what was deleted
+            val serverIds = schedules.map { it.id }.toSet()
+            val localCursor = db.query(TABLE_SCHEDULES, arrayOf(COLUMN_ID), null, null, null, null, null)
+            val localIds = mutableSetOf<String>()
+            localCursor.use { c ->
+                while (c.moveToNext()) {
+                    localIds.add(c.getString(0))
+                }
+            }
+
+            // 2. Remove deleted ones
+            val deletedIds = localIds.filterNot { serverIds.contains(it) }
+            if (deletedIds.isNotEmpty()) {
+                Log.i(LOG_TAG, "Removing ${deletedIds.size} deleted schedules")
+                deletedIds.forEach { id ->
+                    db.delete(TABLE_SCHEDULES, "$COLUMN_ID = ?", arrayOf(id))
+                }
+            }
+
+            // 3. Upsert new/updated ones
             schedules.forEach { schedule ->
                 val values = ContentValues().apply {
                     put(COLUMN_ID, schedule.id)
@@ -51,15 +70,20 @@ object NotificationScheduleStorage {
                     put(COLUMN_SCHEDULED_FOR_UTC, schedule.scheduledForUtc)
                     put(COLUMN_REPEAT_MINUTES, schedule.repeatMinutes)
                 }
-                db.insertWithOnConflict(TABLE_SCHEDULES, null, values, SQLiteDatabase.CONFLICT_IGNORE)
-                
-                // If it already existed, update fields but don't touch last_notified_at
-                db.update(TABLE_SCHEDULES, values, "$COLUMN_ID = ?", arrayOf(schedule.id))
+                // insert or update. update preserves last_notified_at since it's not in values
+                val affected = db.update(TABLE_SCHEDULES, values, "$COLUMN_ID = ?", arrayOf(schedule.id))
+                if (affected == 0) {
+                    db.insert(TABLE_SCHEDULES, null, values)
+                }
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    fun upsertSchedules(schedules: List<NotificationScheduleResponse>) {
+        syncSchedules(schedules)
     }
 
     fun getActiveSchedules(): List<LocalSchedule> {

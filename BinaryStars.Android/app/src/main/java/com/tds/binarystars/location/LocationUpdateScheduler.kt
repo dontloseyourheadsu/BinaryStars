@@ -19,7 +19,7 @@ object LocationUpdateScheduler {
 
     /** Enqueues periodic location updates. */
     fun schedule(context: Context, intervalMinutes: Int) {
-        val repeatMinutes = intervalMinutes.coerceAtLeast(15)
+        val repeatMinutes = intervalMinutes.coerceAtLeast(5)
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()

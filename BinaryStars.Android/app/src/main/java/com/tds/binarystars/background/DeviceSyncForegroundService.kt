@@ -12,6 +12,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.tds.binarystars.api.ApiClient
@@ -33,6 +34,19 @@ import kotlin.math.roundToInt
 class DeviceSyncForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
+
+    companion object {
+        private const val LOG_TAG = "BinaryStarsSync"
+        private const val CHANNEL_ID = "binary_stars_sync"
+        private const val NOTIFICATION_ID = 3001
+        private const val SYNC_INTERVAL_MS = 3_000L
+        private const val TELEMETRY_EVERY_N_TICKS = 2
+
+        fun start(context: Context) {
+            val intent = Intent(context, DeviceSyncForegroundService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,6 +71,7 @@ class DeviceSyncForegroundService : Service() {
 
                 val deviceId = Settings.Secure.getString(applicationContext.contentResolver, Settings.Secure.ANDROID_ID)
                 runSyncStep(deviceId, telemetryTick)
+                checkLocalSchedules()
 
                 telemetryTick = (telemetryTick + 1) % TELEMETRY_EVERY_N_TICKS
                 delay(SYNC_INTERVAL_MS)
@@ -104,12 +119,10 @@ class DeviceSyncForegroundService : Service() {
                 NotificationUtils.showNotification(applicationContext, notification.title, notification.body)
             }
 
-            // Persist schedules pulled from server
-            if (payload.schedules.isNotEmpty()) {
-                NotificationScheduleStorage.upsertSchedules(payload.schedules)
-            }
+            // Sync schedules from server (including deletions)
+            NotificationScheduleStorage.syncSchedules(payload.schedules)
 
-            if (!(payload.notifications.isEmpty() && payload.hasPendingNotificationSync)) {
+            if (payload.hasPendingNotificationSync || payload.notifications.isNotEmpty()) {
                 ApiClient.apiService.ackNotificationSync(NotificationSyncAckRequestDto(deviceId))
             }
         } catch (_: Exception) {
@@ -120,31 +133,40 @@ class DeviceSyncForegroundService : Service() {
         val now = System.currentTimeMillis()
         val schedules = NotificationScheduleStorage.getActiveSchedules()
         
+        if (schedules.isNotEmpty()) {
+            Log.d(LOG_TAG, "Checking ${schedules.size} active schedules at now=$now")
+        }
+
         schedules.forEach { schedule ->
             var shouldNotify = false
             
             if (schedule.repeatMinutes != null && schedule.repeatMinutes > 0) {
                 val intervalMs = schedule.repeatMinutes * 60 * 1000L
-                if (now - schedule.lastNotifiedAt >= intervalMs) {
+                // If lastNotifiedAt is 0, initialize it to now to avoid immediate trigger
+                if (schedule.lastNotifiedAt == 0L) {
+                    Log.i(LOG_TAG, "Initializing lastNotifiedAt for repeating schedule: ${schedule.title}")
+                    NotificationScheduleStorage.updateLastNotified(schedule.id, now)
+                } else if (now - schedule.lastNotifiedAt >= intervalMs) {
+                    Log.i(LOG_TAG, "Triggering repeating schedule: ${schedule.title} (last=${schedule.lastNotifiedAt}, diff=${now - schedule.lastNotifiedAt})")
                     shouldNotify = true
                 }
             } else if (schedule.scheduledForUtc != null) {
                 try {
-                    val scheduledTime = java.time.OffsetDateTime.parse(schedule.scheduledForUtc).toInstant().toEpochMilli()
+                    val scheduledTime = java.time.Instant.parse(schedule.scheduledForUtc).toEpochMilli()
                     // If it's time (or passed) and we haven't notified for this specific one-time schedule yet
                     if (now >= scheduledTime && schedule.lastNotifiedAt == 0L) {
+                        Log.i(LOG_TAG, "Triggering one-time schedule: ${schedule.title} (scheduled=$scheduledTime, now=$now)")
                         shouldNotify = true
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.e(LOG_TAG, "Failed to parse scheduledForUtc: ${schedule.scheduledForUtc} for schedule: ${schedule.title}", e)
+                }
             }
 
             if (shouldNotify) {
+                Log.i(LOG_TAG, "Posting notification from schedule: ${schedule.title}")
                 NotificationUtils.showNotification(applicationContext, schedule.title, schedule.body)
                 NotificationScheduleStorage.updateLastNotified(schedule.id, now)
-                
-                // If it was a one-time schedule, we could disable or delete it locally, 
-                // but since it's synced from server, it might come back if not deleted there.
-                // For now, setting lastNotifiedAt is enough to prevent re-triggering one-time schedules.
             }
         }
     }
@@ -280,16 +302,4 @@ class DeviceSyncForegroundService : Service() {
     }
 
     private data class CpuStat(val total: Long, val idle: Long)
-
-    companion object {
-        private const val CHANNEL_ID = "binary_stars_sync"
-        private const val NOTIFICATION_ID = 3001
-        private const val SYNC_INTERVAL_MS = 3_000L
-        private const val TELEMETRY_EVERY_N_TICKS = 2
-
-        fun start(context: Context) {
-            val intent = Intent(context, DeviceSyncForegroundService::class.java)
-            ContextCompat.startForegroundService(context, intent)
-        }
-    }
 }

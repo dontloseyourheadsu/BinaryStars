@@ -41,7 +41,8 @@ class LiveLocationService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        val intervalMinutes = SettingsStorage.getLocationUpdateMinutes(15)
+        startForeground(NOTIFICATION_ID, buildNotification(intervalMinutes))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -50,6 +51,9 @@ class LiveLocationService : Service() {
             return START_NOT_STICKY
         }
 
+        val intervalMinutes = SettingsStorage.getLocationUpdateMinutes(15)
+        val intervalMs = intervalMinutes * 60 * 1000L
+
         if (liveJob?.isActive == true) {
             return START_STICKY
         }
@@ -57,7 +61,7 @@ class LiveLocationService : Service() {
         liveJob = serviceScope.launch {
             while (isActive) {
                 sendLiveLocationUpdate()
-                delay(LIVE_INTERVAL_MS)
+                delay(intervalMs)
             }
         }
 
@@ -131,11 +135,11 @@ class LiveLocationService : Service() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(intervalMinutes: Int): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_map)
             .setContentTitle("BinaryStars")
-            .setContentText("Sharing live location every 15 seconds")
+            .setContentText("Sharing live location every $intervalMinutes minutes")
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
@@ -144,7 +148,6 @@ class LiveLocationService : Service() {
     companion object {
         private const val CHANNEL_ID = "live_location_channel"
         private const val NOTIFICATION_ID = 2001
-        private const val LIVE_INTERVAL_MS = 15_000L
 
         fun start(context: Context) {
             val intent = Intent(context, LiveLocationService::class.java)

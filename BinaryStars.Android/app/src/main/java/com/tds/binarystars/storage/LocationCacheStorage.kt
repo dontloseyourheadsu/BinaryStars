@@ -10,20 +10,10 @@ import java.util.UUID
 
 object LocationCacheStorage {
     private const val PREFS_NAME = "location_cache_prefs"
-    private const val KEY_LOCAL_HISTORY = "local_history"
     private const val KEY_PENDING_UPLOADS = "pending_uploads"
 
     private var prefs: SharedPreferences? = null
     private val gson = Gson()
-
-    private data class CachedLocationPoint(
-        val id: String,
-        val deviceId: String,
-        val title: String,
-        val timestamp: String,
-        val latitude: Double,
-        val longitude: Double
-    )
 
     private data class PendingLocationUpload(
         val id: String,
@@ -37,43 +27,12 @@ object LocationCacheStorage {
     }
 
     fun saveLocalPoint(deviceId: String, latitude: Double, longitude: Double, recordedAt: String) {
-        val next = mutableListOf(
-            CachedLocationPoint(
-                id = UUID.randomUUID().toString(),
-                deviceId = deviceId,
-                title = "Local snapshot",
-                timestamp = recordedAt,
-                latitude = latitude,
-                longitude = longitude
-            )
-        )
-
-        next.addAll(readLocalHistory())
-
-        val bounded = next
-            .filter { it.deviceId == deviceId }
-            .take(2_000)
-
-        val others = readLocalHistory().filter { it.deviceId != deviceId }
-
-        prefs?.edit()
-            ?.putString(KEY_LOCAL_HISTORY, gson.toJson(others + bounded))
-            ?.apply()
+        // No-op: Map history is only stored on the API now.
     }
 
     fun getLocalHistory(deviceId: String): List<LocationHistoryPoint> {
-        return readLocalHistory()
-            .filter { it.deviceId == deviceId }
-            .sortedByDescending { it.timestamp }
-            .map {
-                LocationHistoryPoint(
-                    id = it.id,
-                    title = it.title,
-                    timestamp = it.timestamp,
-                    latitude = it.latitude,
-                    longitude = it.longitude
-                )
-            }
+        // No-op: Map history is only fetched from the API now.
+        return emptyList()
     }
 
     fun enqueuePendingUpload(request: LocationUpdateRequestDto) {
@@ -107,16 +66,6 @@ object LocationCacheStorage {
         prefs?.edit()
             ?.putString(KEY_PENDING_UPLOADS, gson.toJson(filtered))
             ?.apply()
-    }
-
-    private fun readLocalHistory(): List<CachedLocationPoint> {
-        val raw = prefs?.getString(KEY_LOCAL_HISTORY, null) ?: return emptyList()
-        return try {
-            val type = object : TypeToken<List<CachedLocationPoint>>() {}.type
-            gson.fromJson<List<CachedLocationPoint>>(raw, type) ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
-        }
     }
 
     private fun readPendingUploads(): List<PendingLocationUpload> {

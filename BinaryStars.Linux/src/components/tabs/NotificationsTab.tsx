@@ -8,7 +8,6 @@ type Props = {
   notificationBody: string;
   scheduledForUtc: string;
   repeatMinutes: string;
-  isScheduleEnabled: boolean;
   editingScheduleId: string | null;
   schedules: NotificationSchedule[];
   history: LocalNotificationHistoryItem[];
@@ -17,7 +16,6 @@ type Props = {
   onSetNotificationBody: (value: string) => void;
   onSetScheduledForUtc: (value: string) => void;
   onSetRepeatMinutes: (value: string) => void;
-  onSetScheduleEnabled: (value: boolean) => void;
   onSendNow: () => void;
   onSaveSchedule: () => void;
   onEditSchedule: (schedule: NotificationSchedule) => void;
@@ -35,7 +33,6 @@ export default function NotificationsTab({
   notificationBody,
   scheduledForUtc,
   repeatMinutes,
-  isScheduleEnabled,
   editingScheduleId,
   schedules,
   history,
@@ -44,7 +41,6 @@ export default function NotificationsTab({
   onSetNotificationBody,
   onSetScheduledForUtc,
   onSetRepeatMinutes,
-  onSetScheduleEnabled,
   onSendNow,
   onSaveSchedule,
   onEditSchedule,
@@ -100,14 +96,6 @@ export default function NotificationsTab({
 
           <p className="section-label">Schedule</p>
           <div className="split-row">
-            <label>
-              <input
-                type="checkbox"
-                checked={isScheduleEnabled}
-                onChange={(event) => onSetScheduleEnabled(event.target.checked)}
-              />
-              {" "}Enabled
-            </label>
             <input
               type="datetime-local"
               title="Schedule for date and time"
