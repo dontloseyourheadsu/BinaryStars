@@ -1,0 +1,24 @@
+<Application x:Class="BinaryStars.App"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             RequestedThemeVariant="Light">
+
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+
+  <Application.Resources>
+    <!-- Preferred Light Palette with High Contrast -->
+    <SolidColorBrush x:Key="AppBackground" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="AppSurface" Color="#F5F5F5" />
+    <SolidColorBrush x:Key="AppPrimary" Color="#1976D2" />
+    <SolidColorBrush x:Key="AppText" Color="#000000" />
+    <SolidColorBrush x:Key="AppTextSecondary" Color="#666666" />
+    <SolidColorBrush x:Key="AppBorder" Color="#CCCCCC" />
+    
+    <!-- Bubble Colors -->
+    <SolidColorBrush x:Key="MyBubbleBackground" Color="#E3F2FD" /> <!-- AliceBlue variant -->
+    <SolidColorBrush x:Key="OtherBubbleBackground" Color="#F0F0F0" />
+  </Application.Resources>
+
+</Application>

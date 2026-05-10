@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="BinaryStars.Android/BinaryStars.Android.csproj">
+    <Platform Solution="Any CPU" Project="Any CPU" />
+    <Deploy />
+  </Project>
+  <Project Path="BinaryStars.Desktop/BinaryStars.Desktop.csproj" />
+  <Project Path="BinaryStars/BinaryStars.csproj" />
+</Solution>
