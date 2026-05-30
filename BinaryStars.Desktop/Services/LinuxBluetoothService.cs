@@ -1,288 +1,414 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Net;
-using System.Net.Sockets;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Diagnostics;
-using System.Text.RegularExpressions;
+using System.Linq;
+using System.Reactive.Subjects;
+using System.Threading;
+using System.Threading.Tasks;
+using InTheHand.Net;
+using InTheHand.Net.Bluetooth;
+using InTheHand.Net.Sockets;
 using BinaryStars.Models;
 using BinaryStars.Services;
 
 namespace BinaryStars.Desktop.Services;
 
-public class LinuxBluetoothService : BluetoothChatService
+public class LinuxBluetoothService : IBluetoothService
 {
-    private int _socketFd = -1;
-    private bool _stopRead = false;
-    private static readonly Regex BluetoothctlDeviceLine = new(@"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", RegexOptions.Compiled);
-    private static readonly Regex SdpChannelLine = new(@"Channel:\s*(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Guid SppUuid = new("00001101-0000-1000-8000-00805F9B34FB");
 
-    // P/Invoke for libc
-    [DllImport("libc.so.6", SetLastError = true)]
-    private static extern int socket(int domain, int type, int protocol);
+    private readonly Subject<string> _receivedMessages = new();
+    public IObservable<string> ReceivedMessages => _receivedMessages;
 
-    [DllImport("libc.so.6", SetLastError = true)]
-    private static extern int connect(int sockfd, ref SockAddrRfcomm addr, int addrlen);
+    private BluetoothListener? _listener;
+    private BluetoothClient? _activeClient;
+    private StreamWriter? _writer;
+    private StreamReader? _reader;
+    
+    public bool IsConnected { get; private set; }
+    public string? ConnectedDeviceAddress { get; private set; }
 
-    [DllImport("libc.so.6", SetLastError = true)]
-    private static extern int read(int fd, byte[] buf, int count);
+    public static string NormalizeAddress(string? addr) =>
+        addr?.Replace(":", "").Replace("-", "").Trim().ToUpperInvariant() ?? "";
 
-    [DllImport("libc.so.6", SetLastError = true)]
-    private static extern int write(int fd, byte[] buf, int count);
-
-    [DllImport("libc.so.6", SetLastError = true)]
-    private static extern int close(int fd);
-
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    private struct BdAddr
+        private async Task<int> FindActiveAppChannelAsync(string address, CancellationToken ct)
     {
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)]
-        public byte[] b;
-    }
-
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    private struct SockAddrRfcomm
-    {
-        public ushort family;
-        public BdAddr addr;
-        public byte channel;
-    }
-
-    public override async Task StartScanning()
-    {
-        SetScanning(true);
-        UpdateStatus("Scanning paired devices from BlueZ...");
-
-        var devices = await Task.Run(GetPairedOrKnownDevices);
-        OnDeviceDiscovered(devices);
-
-        if (devices.Count == 0)
-        {
-            UpdateStatus("No known Bluetooth devices found. Pair first via bluetoothctl.");
-        }
-        else
-        {
-            UpdateStatus($"Found {devices.Count} known devices");
-        }
-
-        SetScanning(false);
-    }
-
-    public override async Task Connect(BluetoothDeviceModel device)
-    {
+        Console.WriteLine($"[LinuxBluetoothService] FindActiveAppChannelAsync for {address} started (sequential)...");
         try
         {
-            UpdateStatus($"Opening native link to {device.Id}...");
-
-            var candidateChannels = BuildCandidateChannels(device.Id);
-            var connected = false;
-
-            foreach (var channel in candidateChannels)
+            var deviceAddress = BluetoothAddress.Parse(address);
+            // Avoid channels 4 (SAP), 5 (PBAP), 6 (MAP), 16-20 (MAP/PBAP/Sync) which trigger system alerts on Android
+            var safeChannels = new[] { 1, 2, 3, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
+            
+            foreach (int channel in safeChannels)
             {
-                var fd = socket(31, 1, 3);
-                if (fd < 0)
+                if (ct.IsCancellationRequested)
+                    return -1;
+
+                using var client = new BluetoothClient();
+                try
                 {
-                    throw new Exception($"Native socket creation failed: {Marshal.GetLastWin32Error()}");
-                }
-
-                var addr = new SockAddrRfcomm
-                {
-                    family = 31,
-                    channel = (byte)channel,
-                    addr = new BdAddr { b = ParseBluetoothAddress(device.Id) }
-                };
-
-                var result = await Task.Run(() => connect(fd, ref addr, Marshal.SizeOf(addr)));
-                if (result == 0)
-                {
-                    _socketFd = fd;
-                    connected = true;
-                    UpdateStatus($"Connected on RFCOMM channel {channel}");
-                    break;
-                }
-
-                _ = close(fd);
-            }
-
-            if (!connected)
-            {
-                throw new Exception("Native connection failed on all tested RFCOMM channels. Ensure Android is discoverable/hosting and device is paired.");
-            }
-
-            SetConnected(true);
-            UpdateStatus("CONNECTED (Native C-Bridge)");
-            _stopRead = false;
-
-            // 4. Start Read Loop
-            _ = Task.Run(() =>
-            {
-                var buffer = new byte[4096];
-                while (!_stopRead)
-                {
-                    int bytes = read(_socketFd, buffer, buffer.Length);
-                    if (bytes > 0)
+                    var ep = new BluetoothEndPoint(deviceAddress, SppUuid, channel);
+                    
+                    var connectTask = Task.Run(() => client.Connect(ep), ct);
+                    var delayTask = Task.Delay(1500, ct);
+                    
+                    var completedTask = await Task.WhenAny(connectTask, delayTask);
+                    if (completedTask == connectTask)
                     {
-                        var text = Encoding.UTF8.GetString(buffer, 0, bytes);
-                        OnMessageReceived(new ChatMessage("Remote", text, DateTimeOffset.Now, false));
-                    }
-                    else if (bytes <= 0)
-                    {
-                        break;
+                        await connectTask;
+                        if (ct.IsCancellationRequested)
+                            return -1;
+
+                        var stream = client.GetStream();
+                        var probeBytes = System.Text.Encoding.UTF8.GetBytes("{\"Type\":\"Probe\"}\n");
+                        await stream.WriteAsync(probeBytes, 0, probeBytes.Length, ct);
+                        await stream.FlushAsync(ct);
+                        
+                        var buffer = new byte[1024];
+                        var readTask = stream.ReadAsync(buffer, 0, buffer.Length, ct);
+                        var readDelay = Task.Delay(1500, ct);
+                        
+                        var readCompleted = await Task.WhenAny(readTask, readDelay);
+                        if (readCompleted == readTask)
+                        {
+                            int bytesRead = await readTask;
+                            if (bytesRead > 0)
+                            {
+                                var line = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                                if (!string.IsNullOrEmpty(line) && line.Contains("\"Type\":\"ProbeReply\""))
+                                {
+                                    Console.WriteLine($"[LinuxBluetoothService] FOUND active app on channel {channel} for {address}!");
+                                    return channel;
+                                }
+                            }
+                        }
                     }
                 }
-                Disconnect().Wait();
-            });
+                catch (Exception ex)
+                {
+                    if (!ex.Message.Contains("refused") && !ex.Message.Contains("timeout") && !ex.Message.Contains("reset"))
+                    {
+                        Console.WriteLine($"[LinuxBluetoothService] Channel {channel} exception: {ex.Message}");
+                    }
+                }
+
+                // Cooldown delay to let BlueZ release socket resources and prevent EBUSY
+                await Task.Delay(1000, ct);
+            }
+
+            Console.WriteLine($"[LinuxBluetoothService] FindActiveAppChannelAsync for {address} finished. Channel: -1");
+            return -1;
         }
         catch (Exception ex)
         {
-            UpdateStatus(ex.Message);
-            SetConnected(false);
-            if (_socketFd != -1) close(_socketFd);
-            _socketFd = -1;
+            Console.WriteLine($"[LinuxBluetoothService] FindActiveAppChannelAsync error: {ex}");
+            return -1;
         }
     }
 
-    public override Task StartHosting(string localName)
+    private async Task<bool> ProbeSppAsync(string address, CancellationToken ct)
     {
-        SetHosting(false);
-        UpdateStatus("Linux hosting is not implemented yet. Use Android as host and connect from Linux.");
-        return Task.CompletedTask;
+        int channel = await FindActiveAppChannelAsync(address, ct);
+        return channel > 0;
     }
 
-    public override Task Disconnect()
+    public async Task<List<BluetoothDeviceModel>> DiscoverDevicesAsync(CancellationToken ct)
     {
-        _stopRead = true;
-        if (_socketFd != -1)
+        Console.WriteLine("[LinuxBluetoothService] DiscoverDevicesAsync starting scan...");
+        return await Task.Run(async () =>
         {
-            close(_socketFd);
-            _socketFd = -1;
-        }
-        SetConnected(false);
-        UpdateStatus("Disconnected");
-        return Task.CompletedTask;
-    }
-
-    public override async Task SendMessage(string text)
-    {
-        if (_socketFd < 0) throw new Exception("Link not active");
-        var bytes = Encoding.UTF8.GetBytes(text);
-        await Task.Run(() => write(_socketFd, bytes, bytes.Length));
-    }
-
-    public override void Dispose()
-    {
-        Disconnect().Wait();
-    }
-
-    private static List<BluetoothDeviceModel> GetPairedOrKnownDevices()
-    {
-        var devices = new List<BluetoothDeviceModel>();
-        var psi = new ProcessStartInfo("bluetoothctl", "devices")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = Process.Start(psi);
-        if (process == null)
-        {
-            return devices;
-        }
-
-        var output = process.StandardOutput.ReadToEnd();
-        process.WaitForExit();
-
-        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var match = BluetoothctlDeviceLine.Match(line.Trim());
-            if (!match.Success)
+            var list = new List<BluetoothDeviceModel>();
+            try
             {
-                continue;
+                using var client = new BluetoothClient();
+                var paired = client.PairedDevices;
+                var tasks = new List<Task<BluetoothDeviceModel?>>();
+
+                foreach (var d in paired)
+                {
+                    if (!d.Connected)
+                    {
+                        continue;
+                    }
+                    var address = d.DeviceAddress.ToString();
+                    var name = string.IsNullOrWhiteSpace(d.DeviceName) ? "Unnamed Device" : d.DeviceName;
+                    Console.WriteLine($"[LinuxBluetoothService] Paired and connected device found: {name} ({address})");
+
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        bool running = await ProbeSppAsync(address, ct);
+                        return running ? new BluetoothDeviceModel(address, name) : null;
+                    }, ct));
+                }
+
+                var results = await Task.WhenAll(tasks);
+                foreach (var res in results)
+                {
+                    if (res != null)
+                    {
+                        Console.WriteLine($"[LinuxBluetoothService] Discovered app running on: {res.Name} ({res.Id})");
+                        list.Add(res);
+                    }
+                }
             }
-
-            var address = match.Groups[1].Value.Trim().ToUpperInvariant();
-            var name = match.Groups[2].Value.Trim();
-            devices.Add(new BluetoothDeviceModel(address, name));
-        }
-
-        return devices
-            .GroupBy(d => d.Id)
-            .Select(g => g.First())
-            .OrderBy(d => d.Name)
-            .ToList();
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LinuxBluetoothService] DiscoverDevices error: {ex}");
+            }
+            Console.WriteLine($"[LinuxBluetoothService] DiscoverDevicesAsync scan finished. Found {list.Count} active app devices.");
+            return list;
+        }, ct);
     }
 
-    private static byte[] ParseBluetoothAddress(string address)
-    {
-        var parts = address.Split(':');
-        if (parts.Length != 6)
-        {
-            throw new ArgumentException($"Invalid Bluetooth address: {address}");
-        }
-
-        return parts.Select(x => Convert.ToByte(x, 16)).Reverse().ToArray();
-    }
-
-    private static List<int> BuildCandidateChannels(string macAddress)
-    {
-        var channels = new List<int>();
-        var discovered = DiscoverSppChannel(macAddress);
-        if (discovered.HasValue)
-        {
-            channels.Add(discovered.Value);
-        }
-
-        channels.Add(1);
-        channels.Add(2);
-        channels.Add(3);
-
-        return channels
-            .Where(c => c > 0 && c <= 30)
-            .Distinct()
-            .ToList();
-    }
-
-    private static int? DiscoverSppChannel(string macAddress)
+    public string GetLocalDeviceName()
     {
         try
         {
-            var psi = new ProcessStartInfo("sdptool", $"browse {macAddress}")
+            var radio = BluetoothRadio.Default;
+            if (radio != null && !string.IsNullOrEmpty(radio.Name))
             {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var process = Process.Start(psi);
-            if (process == null)
-            {
-                return null;
+                return radio.Name;
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[LinuxBluetoothService] Error getting local radio name: {ex.Message}");
+        }
+        return Environment.MachineName;
+    }
 
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-
-            var matches = SdpChannelLine.Matches(output);
-            foreach (Match match in matches)
+    public async Task StartServerAsync(string targetAddress, CancellationToken ct)
+    {
+        Disconnect();
+        
+        while (!ct.IsCancellationRequested)
+        {
+            try
             {
-                if (int.TryParse(match.Groups[1].Value, out var parsed) && parsed > 0)
+                _listener = new BluetoothListener(SppUuid);
+                _listener.Start();
+                Console.WriteLine($"[LinuxBluetoothService] Server started, listening on UUID {SppUuid} (Target: {targetAddress ?? "Any"})...");
+
+                while (!ct.IsCancellationRequested)
                 {
-                    return parsed;
+                    BluetoothClient? client = null;
+                    try
+                    {
+                        client = await Task.Run(() => _listener.AcceptBluetoothClient(), ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[LinuxBluetoothService] Accept failed, recreating listener: {ex.Message}");
+                        client?.Close();
+                        break; // Break inner loop to recreate listener
+                    }
+
+                    if (client == null) continue;
+
+                    // Handle connection in background
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var remoteEndPoint = client.Client?.RemoteEndPoint as BluetoothEndPoint;
+                            var remoteAddr = NormalizeAddress(remoteEndPoint?.Address?.ToString() ?? "");
+                            var normalizedTarget = NormalizeAddress(targetAddress);
+                            Console.WriteLine($"[LinuxBluetoothService] Server accepted socket from {remoteAddr}...");
+
+                            if (string.IsNullOrEmpty(targetAddress) || remoteAddr == normalizedTarget)
+                            {
+                                var stream = client.GetStream();
+                                
+                                // Read raw bytes
+                                var buffer = new byte[1024];
+                                var readTask = stream.ReadAsync(buffer, 0, buffer.Length, ct);
+                                var delayTask = Task.Delay(2000, ct);
+                                var completed = await Task.WhenAny(readTask, delayTask);
+
+                                if (completed == readTask)
+                                {
+                                    int bytesRead = await readTask;
+                                    if (bytesRead > 0)
+                                    {
+                                        var line = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                                        Console.WriteLine($"[LinuxBluetoothService] Server received first data from {remoteAddr}: {line}");
+                                        
+                                        if (line.Contains("\"Type\":\"Handshake\""))
+                                        {
+                                            Console.WriteLine($"[LinuxBluetoothService] Valid Handshake from {remoteAddr}. Establishing connection.");
+                                            var reader = new StreamReader(stream);
+                                            PrepareActiveConnection(client, reader, line);
+                                            _ = Task.Run(() => ReadLoopAsync(ct), ct);
+                                            
+                                            try { _listener?.Stop(); } catch {}
+                                            return;
+                                        }
+                                        else if (line.Contains("\"Type\":\"Probe\""))
+                                        {
+                                            Console.WriteLine($"[LinuxBluetoothService] Received Probe request from {remoteAddr}, sending ProbeReply...");
+                                            try
+                                            {
+                                                var replyBytes = System.Text.Encoding.UTF8.GetBytes("{\"Type\":\"ProbeReply\"}\n");
+                                                await stream.WriteAsync(replyBytes, 0, replyBytes.Length, ct);
+                                                await stream.FlushAsync(ct);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Console.WriteLine($"[LinuxBluetoothService] Error sending ProbeReply to {remoteAddr}: {ex.Message}");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[LinuxBluetoothService] Connection from {remoteAddr} rejected (Target expected: {normalizedTarget}).");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[LinuxBluetoothService] Error handling client: {ex.Message}");
+                        }
+                        finally
+                        {
+                            if (!IsConnected || ConnectedDeviceAddress != NormalizeAddress((client.Client?.RemoteEndPoint as BluetoothEndPoint)?.Address?.ToString()))
+                            {
+                                client.Close();
+                            }
+                        }
+                    }, ct);
                 }
             }
-        }
-        catch
-        {
-            // sdptool may not be installed on all distributions; fallback channels are used.
-        }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LinuxBluetoothService] Server exception: {ex}");
+                await Task.Delay(2000, ct);
+            }
+            finally
+            {
+                try { _listener?.Stop(); } catch {}
+                _listener = null;
+            }
 
-        return null;
+            if (IsConnected)
+            {
+                break;
+            }
+        }
+    }
+
+    public async Task ConnectAsync(string address, CancellationToken ct)
+    {
+        Disconnect();
+        
+        var deviceAddress = BluetoothAddress.Parse(address);
+        int channel = await FindActiveAppChannelAsync(address, ct);
+        if (channel <= 0)
+        {
+            throw new InvalidOperationException("App is not running on target device.");
+        }
+        
+        var client = new BluetoothClient();
+        var ep = new BluetoothEndPoint(deviceAddress, SppUuid, channel);
+        await Task.Run(() => client.Connect(ep), ct);
+        
+        var stream = client.GetStream();
+        var reader = new StreamReader(stream);
+        PrepareActiveConnection(client, reader);
+        _ = Task.Run(() => ReadLoopAsync(ct), ct);
+    }
+
+    private void PrepareActiveConnection(BluetoothClient client)
+    {
+        _activeClient = client;
+        var stream = client.GetStream();
+        _writer = new StreamWriter(stream) { AutoFlush = true };
+        _reader = new StreamReader(stream);
+        var remoteEndPoint = client.Client?.RemoteEndPoint as BluetoothEndPoint;
+        ConnectedDeviceAddress = NormalizeAddress(remoteEndPoint?.Address?.ToString() ?? "");
+        IsConnected = true;
+    }
+
+    private void PrepareActiveConnection(BluetoothClient client, StreamReader reader)
+    {
+        _activeClient = client;
+        var stream = client.GetStream();
+        _writer = new StreamWriter(stream) { AutoFlush = true };
+        _reader = reader;
+        var remoteEndPoint = client.Client?.RemoteEndPoint as BluetoothEndPoint;
+        ConnectedDeviceAddress = NormalizeAddress(remoteEndPoint?.Address?.ToString() ?? "");
+        IsConnected = true;
+    }
+
+    private void PrepareActiveConnection(BluetoothClient client, StreamReader reader, string handshakeLine)
+    {
+        _activeClient = client;
+        var stream = client.GetStream();
+        _writer = new StreamWriter(stream) { AutoFlush = true };
+        _reader = reader;
+        var remoteEndPoint = client.Client?.RemoteEndPoint as BluetoothEndPoint;
+        ConnectedDeviceAddress = NormalizeAddress(remoteEndPoint?.Address?.ToString() ?? "");
+        IsConnected = true;
+        _receivedMessages.OnNext(handshakeLine);
+    }
+
+    private async Task ReadLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            Console.WriteLine("[LinuxBluetoothService] Read loop started.");
+            while (!ct.IsCancellationRequested && IsConnected && _reader != null)
+            {
+                var line = await _reader.ReadLineAsync(ct);
+                if (line == null)
+                {
+                    Console.WriteLine("[LinuxBluetoothService] Read line returned null.");
+                    break;
+                }
+                Console.WriteLine($"[LinuxBluetoothService] Received line: {line}");
+                _receivedMessages.OnNext(line);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[LinuxBluetoothService] Connection closed/lost: {ex.Message}");
+        }
+        finally
+        {
+            Disconnect();
+        }
+    }
+
+    public async Task SendAsync(string message)
+    {
+        if (_writer != null && IsConnected)
+        {
+            Console.WriteLine($"[LinuxBluetoothService] Sending message: {message}");
+            await _writer.WriteLineAsync(message);
+        }
+        else
+        {
+            throw new InvalidOperationException("Not connected to any device.");
+        }
+    }
+
+    public void Disconnect()
+    {
+        IsConnected = false;
+        ConnectedDeviceAddress = null;
+        
+        try { _writer?.Dispose(); } catch {}
+        _writer = null;
+
+        try { _reader?.Dispose(); } catch {}
+        _reader = null;
+
+        try { _activeClient?.Close(); } catch {}
+        try { _activeClient?.Dispose(); } catch {}
+        _activeClient = null;
+
+        try { _listener?.Stop(); } catch {}
+        _listener = null;
     }
 }

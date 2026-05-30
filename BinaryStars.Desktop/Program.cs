@@ -13,11 +13,8 @@ sealed class Program
     public static void Main(string[] args)
     {
         var services = new ServiceCollection();
-        
-        // Native Linux Implementation
-        services.AddSingleton<IBluetoothChatService, LinuxBluetoothService>();
-        services.AddSingleton<IHistoryService, HistoryService>();
-        services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
+        services.AddSingleton<IDatabaseService, DatabaseService>();
+        services.AddSingleton<IBluetoothService, LinuxBluetoothService>();
         services.AddSingleton<MainViewModel>();
 
         App.Services = services.BuildServiceProvider();
