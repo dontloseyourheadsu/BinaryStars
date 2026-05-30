@@ -1,7 +1,8 @@
-using System.Collections.Specialized;
-using System.Linq;
+using System;
+using System.IO;
 using Avalonia.Controls;
-using Avalonia.Threading;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using BinaryStars.ViewModels;
 
 namespace BinaryStars.Views;
@@ -11,29 +12,38 @@ public partial class MainView : UserControl
     public MainView()
     {
         InitializeComponent();
-        this.DataContextChanged += MainView_DataContextChanged;
     }
 
-    private void MainView_DataContextChanged(object? sender, System.EventArgs e)
+    private async void OnAddAttachmentClick(object sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel vm)
-        {
-            vm.Messages.CollectionChanged += Messages_CollectionChanged;
-        }
-    }
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null) return;
 
-    private void Messages_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.Action == NotifyCollectionChangedAction.Add)
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Dispatcher.UIThread.Post(() =>
+            Title = "Select File/Image",
+            AllowMultiple = false
+        });
+
+        if (files != null && files.Count > 0)
+        {
+            var file = files[0];
+            try
             {
-                var lastItem = ((MainViewModel)DataContext!).Messages.LastOrDefault();
-                if (lastItem != null)
+                using var stream = await file.OpenReadAsync();
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                var bytes = memoryStream.ToArray();
+
+                if (DataContext is MainViewModel vm)
                 {
-                    ChatList.ScrollIntoView(lastItem);
+                    await vm.SendFileAttachmentAsync(file.Name, bytes);
                 }
-            });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to read attachment file: {ex.Message}");
+            }
         }
     }
 }

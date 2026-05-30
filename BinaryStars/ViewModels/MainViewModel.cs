@@ -1,219 +1,541 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
-using System.Reactive.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Input;
-using System.IO;
-using System.Runtime.InteropServices;
 using Avalonia.Threading;
-using BinaryStars.Models;
-using BinaryStars.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using BinaryStars.Models;
+using BinaryStars.Services;
 
 namespace BinaryStars.ViewModels;
 
+public class NetworkPacket
+{
+    public string Type { get; set; } = ""; // "Handshake", "Text", "File"
+    public string? SenderId { get; set; }
+    public string? SenderName { get; set; }
+    public string? Text { get; set; }
+    public string? FileName { get; set; }
+    public long? FileSize { get; set; }
+    public string? FileType { get; set; }
+    public string? FileData { get; set; } // Base64 encoded file data
+}
+
 public partial class MainViewModel : ViewModelBase
 {
-    private readonly IBluetoothChatService _chatService;
-    private readonly IHistoryService _historyService;
-    private readonly IFilePickerService _filePickerService;
+    private readonly IDatabaseService _databaseService;
+    private readonly IBluetoothService _bluetoothService;
+
+    private CancellationTokenSource? _connectionCts;
+    private CancellationTokenSource? _scanCts;
+    private IDisposable? _messageSubscription;
+    private bool _sentHandshake;
 
     [ObservableProperty]
-    private string _messageText = string.Empty;
+    private string _displayName = "";
 
     [ObservableProperty]
-    private string _localName = "Device-" + Random.Shared.Next(1000, 9999);
-
-    public ObservableCollection<ChatMessage> Messages { get; } = new();
-    public ObservableCollection<BluetoothDeviceModel> DiscoveredDevices { get; } = new();
+    private string _myDeviceId = "";
 
     [ObservableProperty]
     private bool _isScanning;
 
     [ObservableProperty]
-    private bool _isHosting;
-
-    [ObservableProperty]
     private bool _isConnected;
 
     [ObservableProperty]
-    private string _status = "Ready";
+    private string _statusText = "Disconnected";
 
     [ObservableProperty]
-    private bool _isBusy;
+    private string _messageText = "";
 
-    public string Title => "BinaryStars Chat";
+    [ObservableProperty]
+    private ChatEntity? _activeChat;
 
-    public ICommand StartScanCommand { get; }
-    public ICommand StopScanCommand { get; }
-    public ICommand StartHostCommand { get; }
-    public ICommand StopHostCommand { get; }
-    public ICommand SendCommand { get; }
-    public ICommand PickFileCommand { get; }
-    public ICommand ClearHistoryCommand { get; }
-    public ICommand DiscoverableCommand { get; }
-    public IRelayCommand<BluetoothDeviceModel> ConnectCommand { get; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsChatsView))]
+    [NotifyPropertyChangedFor(nameof(IsChatRoomView))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsView))]
+    private string _currentView = "Chats"; // "Chats", "ChatRoom", "Settings"
 
-    public MainViewModel(
-        IBluetoothChatService chatService,
-        IHistoryService historyService,
-        IFilePickerService filePickerService)
+    [ObservableProperty]
+    private bool _showConnectionRequestPrompt;
+
+    [ObservableProperty]
+    private string _pendingRequestSenderName = "";
+
+    [ObservableProperty]
+    private string _pendingRequestAddress = "";
+
+    [ObservableProperty]
+    private string _pendingRequestId = "";
+
+    public bool IsChatsView => CurrentView == "Chats";
+    public bool IsChatRoomView => CurrentView == "ChatRoom";
+    public bool IsSettingsView => CurrentView == "Settings";
+
+    public ObservableCollection<ChatEntity> Chats { get; } = new();
+    public ObservableCollection<BluetoothDeviceModel> NearbyDevices { get; } = new();
+    public ObservableCollection<MessageEntity> Messages { get; } = new();
+
+    public MainViewModel(IDatabaseService databaseService, IBluetoothService bluetoothService)
     {
-        _chatService = chatService;
-        _historyService = historyService;
-        _filePickerService = filePickerService;
+        _databaseService = databaseService;
+        _bluetoothService = bluetoothService;
 
-        // Setup Subscriptions
-        _chatService.DiscoveredDevices
-            .Subscribe(devices => Dispatcher.UIThread.Post(() =>
-            {
-                DiscoveredDevices.Clear();
-                foreach (var d in devices) DiscoveredDevices.Add(d);
-                if (IsScanning) Status = $"Scanning... Found {DiscoveredDevices.Count} devices";
-            }));
+        _ = InitializeAsync();
 
-        _chatService.MessageReceived
-            .Subscribe(msg => Dispatcher.UIThread.Post(async () =>
-            {
-                Messages.Add(msg);
-                await _historyService.SaveMessage(msg);
-            }));
-
-        _chatService.StatusUpdates
-            .Subscribe(s => Dispatcher.UIThread.Post(() => Status = s));
-
-        _chatService.IsScanning.Subscribe(v => IsScanning = v);
-        _chatService.IsHosting.Subscribe(v => IsHosting = v);
-        _chatService.IsConnected.Subscribe(v => IsConnected = v);
-
-        // Commands
-        StartScanCommand = new AsyncRelayCommand(async () => {
-            Status = "Scanning...";
-            await _chatService.StartScanning();
+        _messageSubscription = _bluetoothService.ReceivedMessages.Subscribe(line =>
+        {
+            Dispatcher.UIThread.Post(async () => await HandleIncomingLineAsync(line));
         });
-        
-        StopScanCommand = new AsyncRelayCommand(async () => {
-            await _chatService.StopScanning();
-            Status = "Scan stopped";
-        });
-
-        StartHostCommand = new AsyncRelayCommand(async () => {
-            await _chatService.StartHosting(LocalName);
-        });
-
-        StopHostCommand = new AsyncRelayCommand(async () => {
-            await _chatService.StopHosting();
-            Status = "Hosting stopped";
-        });
-
-        SendCommand = new AsyncRelayCommand(OnSendMessage, () => !string.IsNullOrWhiteSpace(MessageText) && IsConnected);
-        PickFileCommand = new AsyncRelayCommand(OnPickFile, () => IsConnected);
-        
-        ClearHistoryCommand = new AsyncRelayCommand(async () => {
-            await _historyService.ClearHistory();
-            Messages.Clear();
-            Status = "History cleared";
-        });
-
-        DiscoverableCommand = new AsyncRelayCommand(async () => {
-            await _chatService.MakeDiscoverable();
-        });
-
-        ConnectCommand = new AsyncRelayCommand<BluetoothDeviceModel>(OnConnect);
-
-        _ = LoadHistory();
     }
 
-    private async Task LoadHistory()
+    private async Task InitializeAsync()
     {
-        try 
+        await _databaseService.InitializeAsync();
+        MyDeviceId = await _databaseService.GetDeviceIdAsync();
+
+        // Always take the device name directly from the system's Bluetooth name
+        var systemName = _bluetoothService.GetLocalDeviceName();
+        await _databaseService.SetDeviceNameAsync(systemName);
+        DisplayName = systemName;
+
+        await LoadChatsAsync();
+        StartGeneralListener();
+        StartPeriodicScanner();
+    }
+
+    public async Task LoadChatsAsync()
+    {
+        var list = await _databaseService.GetChatsAsync();
+        Chats.Clear();
+        foreach (var chat in list)
         {
-            var messages = await _historyService.GetMessages();
-            Dispatcher.UIThread.Post(() => {
-                foreach (var msg in messages) Messages.Add(msg);
-            });
-        }
-        catch (Exception)
-        {
-            Status = "Error loading history";
+            Chats.Add(chat);
         }
     }
 
-    private async Task OnPickFile()
+    [RelayCommand]
+    public async Task ScanForDevicesAsync()
     {
+        if (IsScanning) return;
+        IsScanning = true;
+        NearbyDevices.Clear();
+
+        _scanCts = new CancellationTokenSource();
         try
         {
-            var results = await _filePickerService.PickFilesAsync();
-            if (results == null || !results.Any()) return;
-
-            foreach (var file in results)
+            var devices = await _bluetoothService.DiscoverDevicesAsync(_scanCts.Token);
+            foreach (var d in devices)
             {
-                IsBusy = true;
-                Status = $"Sending {file.Name}...";
-                await _chatService.SendFile(file.Name, file.Data);
-                
-                var msg = new ChatMessage("Me", $"Sent file: {file.Name}", DateTimeOffset.Now, true, 
-                    new FileAttachment(file.Name, file.Data.Length, "application/octet-stream", IsImage: CheckIfImage(file.Name), Data: file.Data));
-                
-                Messages.Add(msg);
-                await _historyService.SaveMessage(msg);
+                if (!NearbyDevices.Any(x => x.Id == d.Id))
+                {
+                    NearbyDevices.Add(d);
+                }
             }
-            Status = "All files sent";
         }
         catch (Exception ex)
         {
-            Status = $"File error: {ex.Message}";
+            Console.WriteLine($"Scan failed: {ex.Message}");
         }
         finally
         {
-            IsBusy = false;
+            IsScanning = false;
         }
     }
 
-    private bool CheckIfImage(string fileName)
+    [RelayCommand]
+    public void GoToSettings()
     {
-        var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp" || ext == ".webp";
+        CurrentView = "Settings";
     }
 
-    private async Task OnSendMessage()
+    [RelayCommand]
+    public async Task SaveSettingsAsync()
     {
-        if (string.IsNullOrWhiteSpace(MessageText)) return;
-        try
+        if (!string.IsNullOrWhiteSpace(DisplayName))
         {
-            await _chatService.SendMessage(MessageText);
-            var msg = new ChatMessage("Me", MessageText, DateTimeOffset.Now, true);
+            await _databaseService.SetDeviceNameAsync(DisplayName);
+        }
+        CurrentView = "Chats";
+        StartGeneralListener();
+    }
+
+    [RelayCommand]
+    public async Task SelectDeviceAsync(BluetoothDeviceModel device)
+    {
+        var chat = new ChatEntity
+        {
+            Address = device.Id,
+            DeviceName = device.Name,
+            DeviceId = "",
+            LastSeen = DateTime.UtcNow
+        };
+        await _databaseService.SaveChatAsync(chat);
+        await EnterChatAsync(chat);
+    }
+
+    [RelayCommand]
+    public async Task EnterChatAsync(ChatEntity chat)
+    {
+        ActiveChat = chat;
+        CurrentView = "ChatRoom";
+        StatusText = "Connecting...";
+        IsConnected = false;
+        _sentHandshake = false;
+
+        Messages.Clear();
+        var history = await _databaseService.GetMessagesForChatAsync(chat.Address);
+        foreach (var msg in history)
+        {
             Messages.Add(msg);
-            await _historyService.SaveMessage(msg);
-            MessageText = string.Empty;
+        }
+
+        _connectionCts?.Cancel();
+        _connectionCts = new CancellationTokenSource();
+        var ct = _connectionCts.Token;
+
+        // 1. Start Server Loop: listen for incoming client matching this device address
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _bluetoothService.StartServerAsync(chat.Address, ct);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Server loop error: {ex.Message}");
+            }
+        }, ct);
+
+        // 2. Start Client Loop: retry connecting as client to target device address
+        _ = Task.Run(async () =>
+        {
+            while (!ct.IsCancellationRequested && !_bluetoothService.IsConnected)
+            {
+                try
+                {
+                    await _bluetoothService.ConnectAsync(chat.Address, ct);
+                    // Connection succeeded! Send handshake immediately as Client
+                    await SendHandshakeAsync();
+                    break;
+                }
+                catch (Exception)
+                {
+                    // Delay and retry
+                    await Task.Delay(3000, ct);
+                }
+            }
+        }, ct);
+    }
+
+    public void StartGeneralListener()
+    {
+        _connectionCts?.Cancel();
+        _connectionCts = new CancellationTokenSource();
+        var ct = _connectionCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _bluetoothService.StartServerAsync("", ct);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"General listener error: {ex.Message}");
+            }
+        }, ct);
+    }
+
+    private void StartPeriodicScanner()
+    {
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                try
+                {
+                    if (CurrentView == "Chats" && !IsConnected)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(async () =>
+                        {
+                            await ScanForDevicesAsync();
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Periodic scan failed: {ex.Message}");
+                }
+                await Task.Delay(6000);
+            }
+        });
+    }
+
+    [RelayCommand]
+    public async Task AcceptConnectionRequestAsync()
+    {
+        ShowConnectionRequestPrompt = false;
+
+        var chat = new ChatEntity
+        {
+            Address = PendingRequestAddress,
+            DeviceName = PendingRequestSenderName,
+            DeviceId = PendingRequestId,
+            LastSeen = DateTime.UtcNow
+        };
+        await _databaseService.SaveChatAsync(chat);
+
+        ActiveChat = chat;
+        CurrentView = "ChatRoom";
+        StatusText = "Connected";
+        IsConnected = true;
+        _sentHandshake = false;
+
+        Messages.Clear();
+        var history = await _databaseService.GetMessagesForChatAsync(chat.Address);
+        foreach (var msg in history)
+        {
+            Messages.Add(msg);
+        }
+
+        // Cancel general listener, reply with handshake
+        _connectionCts?.Cancel();
+        _connectionCts = new CancellationTokenSource();
+        
+        await SendHandshakeAsync();
+    }
+
+    [RelayCommand]
+    public void RejectConnectionRequest()
+    {
+        ShowConnectionRequestPrompt = false;
+        _bluetoothService.Disconnect();
+        StartGeneralListener();
+    }
+
+    private async Task SendHandshakeAsync()
+    {
+        if (_sentHandshake) return;
+        _sentHandshake = true;
+
+        var packet = new NetworkPacket
+        {
+            Type = "Handshake",
+            SenderId = MyDeviceId,
+            SenderName = DisplayName
+        };
+
+        try
+        {
+            var json = JsonSerializer.Serialize(packet);
+            await _bluetoothService.SendAsync(json);
+            
+            // If we are sending client handshake, we transition to connected once server responds.
+            // If we are replying as server, we transition immediately.
+            IsConnected = _bluetoothService.IsConnected;
+            if (IsConnected)
+            {
+                StatusText = "Connected";
+            }
         }
         catch (Exception ex)
         {
-            Status = $"Error: {ex.Message}";
+            Console.WriteLine($"Handshake failed: {ex.Message}");
+            _sentHandshake = false;
         }
     }
 
-    private async Task OnConnect(BluetoothDeviceModel? device)
+    [RelayCommand]
+    public async Task SendMessageAsync()
     {
-        if (device == null) return;
-        IsBusy = true;
-        Status = $"Connecting to {device.Name}...";
+        if (string.IsNullOrWhiteSpace(MessageText) || ActiveChat == null || !IsConnected) return;
+
+        var text = MessageText;
+        MessageText = "";
+
+        var packet = new NetworkPacket
+        {
+            Type = "Text",
+            SenderId = MyDeviceId,
+            SenderName = DisplayName,
+            Text = text
+        };
+
         try
         {
-            await _chatService.Connect(device);
-            Status = $"Connected to {device.Name}";
+            var json = JsonSerializer.Serialize(packet);
+            await _bluetoothService.SendAsync(json);
+
+            var dbMsg = new MessageEntity
+            {
+                ChatAddress = ActiveChat.Address,
+                Sender = DisplayName,
+                Text = text,
+                Timestamp = DateTimeOffset.UtcNow,
+                IsMe = true
+            };
+
+            await _databaseService.SaveMessageAsync(dbMsg);
+            Messages.Add(dbMsg);
         }
         catch (Exception ex)
         {
-            Status = $"Connection failed: {ex.Message}";
+            Console.WriteLine($"Send message failed: {ex.Message}");
+            StatusText = "Reconnecting...";
+            IsConnected = false;
         }
-        finally
+    }
+
+    public async Task SendFileAttachmentAsync(string fileName, byte[] data)
+    {
+        if (ActiveChat == null || !IsConnected) return;
+
+        var extension = Path.GetExtension(fileName).ToLower();
+        var mimeType = extension switch
         {
-            IsBusy = false;
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            _ => "application/octet-stream"
+        };
+
+        var packet = new NetworkPacket
+        {
+            Type = "File",
+            SenderId = MyDeviceId,
+            SenderName = DisplayName,
+            FileName = fileName,
+            FileSize = data.Length,
+            FileType = mimeType,
+            FileData = Convert.ToBase64String(data)
+        };
+
+        try
+        {
+            var json = JsonSerializer.Serialize(packet);
+            await _bluetoothService.SendAsync(json);
+
+            var dbMsg = new MessageEntity
+            {
+                ChatAddress = ActiveChat.Address,
+                Sender = DisplayName,
+                Text = $"Sent a file: {fileName}",
+                Timestamp = DateTimeOffset.UtcNow,
+                IsMe = true,
+                AttachmentName = fileName,
+                AttachmentSize = data.Length,
+                AttachmentType = mimeType,
+                AttachmentData = data
+            };
+
+            await _databaseService.SaveMessageAsync(dbMsg);
+            Messages.Add(dbMsg);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Send file failed: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task GoBackAsync()
+    {
+        _connectionCts?.Cancel();
+        _bluetoothService.Disconnect();
+        IsConnected = false;
+        StatusText = "Disconnected";
+        ActiveChat = null;
+        CurrentView = "Chats";
+        await LoadChatsAsync();
+        StartGeneralListener();
+    }
+
+    private async Task HandleIncomingLineAsync(string line)
+    {
+        try
+        {
+            var packet = JsonSerializer.Deserialize<NetworkPacket>(line);
+            if (packet == null) return;
+
+            if (packet.Type == "Handshake")
+            {
+                if (ActiveChat == null)
+                {
+                    PendingRequestSenderName = packet.SenderName ?? "Unknown Device";
+                    PendingRequestAddress = _bluetoothService.ConnectedDeviceAddress ?? "";
+                    PendingRequestId = packet.SenderId ?? "";
+                    ShowConnectionRequestPrompt = true;
+                    return;
+                }
+
+                IsConnected = true;
+                StatusText = "Connected";
+
+                // Update nickname & UUID in Chat history
+                var chat = new ChatEntity
+                {
+                    Address = ActiveChat.Address,
+                    DeviceId = packet.SenderId ?? "",
+                    DeviceName = packet.SenderName ?? ActiveChat.DeviceName,
+                    LastSeen = DateTime.UtcNow
+                };
+                await _databaseService.SaveChatAsync(chat);
+                ActiveChat = chat;
+
+                if (!_sentHandshake)
+                {
+                    await SendHandshakeAsync();
+                }
+            }
+            else if (packet.Type == "Text")
+            {
+                var dbMsg = new MessageEntity
+                {
+                    ChatAddress = ActiveChat.Address,
+                    Sender = packet.SenderName ?? "Other",
+                    Text = packet.Text ?? "",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    IsMe = false
+                };
+                await _databaseService.SaveMessageAsync(dbMsg);
+                Messages.Add(dbMsg);
+            }
+            else if (packet.Type == "File")
+            {
+                byte[]? fileData = null;
+                if (!string.IsNullOrEmpty(packet.FileData))
+                {
+                    fileData = Convert.FromBase64String(packet.FileData);
+                }
+
+                var dbMsg = new MessageEntity
+                {
+                    ChatAddress = ActiveChat.Address,
+                    Sender = packet.SenderName ?? "Other",
+                    Text = $"Received a file: {packet.FileName}",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    IsMe = false,
+                    AttachmentName = packet.FileName,
+                    AttachmentSize = packet.FileSize,
+                    AttachmentType = packet.FileType,
+                    AttachmentData = fileData
+                };
+                await _databaseService.SaveMessageAsync(dbMsg);
+                Messages.Add(dbMsg);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error processing incoming packet: {ex.Message}");
         }
     }
 }

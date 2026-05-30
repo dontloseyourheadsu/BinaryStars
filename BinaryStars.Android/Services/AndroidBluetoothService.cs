@@ -1,205 +1,408 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Reactive.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Reactive.Subjects;
 using System.Threading;
+using System.Threading.Tasks;
 using Android.Bluetooth;
 using Android.Content;
 using BinaryStars.Models;
 using BinaryStars.Services;
-using Java.Util;
 
 namespace BinaryStars.Android.Services;
 
-public class AndroidBluetoothService : BluetoothChatService
+public class AndroidBluetoothService : IBluetoothService
 {
-    private readonly BluetoothAdapter? _adapter;
-    private BluetoothSocket? _activeSocket;
+    private static readonly Java.Util.UUID SppUuid =
+        Java.Util.UUID.FromString("00001101-0000-1000-8000-00805F9B34FB")!;
+
+    private readonly Subject<string> _messages = new();
+    public IObservable<string> ReceivedMessages => _messages;
+
+    private readonly BluetoothAdapter _adapter = BluetoothAdapter.DefaultAdapter!;
     private BluetoothServerSocket? _serverSocket;
-    private readonly List<BluetoothDeviceModel> _discoveredList = new();
-    private CancellationTokenSource? _hostingCts;
-    private Task? _hostingTask;
+    private BluetoothSocket? _activeSocket;
+    private StreamWriter? _writer;
+    private StreamReader? _reader;
 
-    private const string AppName = "BinaryStarsChat";
-    // Standard Serial Port Profile UUID
-    private static readonly UUID ChatUuid = UUID.FromString("00001101-0000-1000-8000-00805F9B34FB")!;
+    public bool IsConnected { get; private set; }
+    public string? ConnectedDeviceAddress { get; private set; }
 
-    public AndroidBluetoothService()
+    public static string NormalizeAddress(string? addr) =>
+        addr?.Replace(":", "").Replace("-", "").Trim().ToUpperInvariant() ?? "";
+
+    private bool IsDeviceConnected(BluetoothDevice device)
     {
-        var manager = (BluetoothManager?)global::Android.App.Application.Context.GetSystemService(global::Android.Content.Context.BluetoothService);
-        _adapter = manager?.Adapter;
-    }
-
-    public override async Task StartScanning()
-    {
-        if (_adapter == null || !_adapter.IsEnabled) throw new Exception("Bluetooth is disabled");
-
-        await StartHosting(AppName);
-
-        _discoveredList.Clear();
-        if (_adapter.BondedDevices != null)
+        try
         {
-            foreach (var device in _adapter.BondedDevices)
+            IntPtr classRef = global::Android.Runtime.JNIEnv.GetObjectClass(device.Handle);
+            IntPtr methodId = global::Android.Runtime.JNIEnv.GetMethodID(classRef, "isConnected", "()Z");
+            if (methodId != IntPtr.Zero)
             {
-                if (!string.IsNullOrWhiteSpace(device.Name))
-                    _discoveredList.Add(new BluetoothDeviceModel(device.Address!, device.Name));
+                return global::Android.Runtime.JNIEnv.CallBooleanMethod(device.Handle, methodId);
             }
         }
-        OnDeviceDiscovered(_discoveredList);
-
-        _adapter.StartDiscovery();
-        SetScanning(true);
-    }
-
-    public override Task StopScanning()
-    {
-        _adapter?.CancelDiscovery();
-        SetScanning(false);
-        return Task.CompletedTask;
-    }
-
-    public override Task StartHosting(string localName)
-    {
-        if (_adapter == null || !_adapter.IsEnabled)
-            throw new Exception("Bluetooth is disabled");
-
-        if (_hostingTask != null && !_hostingTask.IsCompleted)
+        catch (Exception ex)
         {
-            SetHosting(true);
-            return Task.CompletedTask;
+            Console.WriteLine($"[AndroidBluetoothService] JNI isConnected failed: {ex.Message}");
         }
-
-        _hostingCts = new CancellationTokenSource();
-        _hostingTask = Task.Run(() => StartHostingInternal(_hostingCts.Token));
-        SetHosting(true);
-        UpdateStatus("Hosting started");
-        return Task.CompletedTask;
-    }
-
-    public override Task StopHosting()
-    {
-        _hostingCts?.Cancel();
-        _hostingCts = null;
 
         try
         {
-            _serverSocket?.Close();
-            _serverSocket?.Dispose();
+            var method = device.Class.GetMethod("isConnected");
+            var result = method?.Invoke(device);
+            if (result is global::Java.Lang.Boolean jBool)
+            {
+                return jBool.BooleanValue();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AndroidBluetoothService] Reflection isConnected failed: {ex.Message}");
+        }
+
+        return false;
+    }
+
+    private async Task<bool> ProbeSppAsync(string address, CancellationToken ct)
+    {
+        BluetoothSocket? socket = null;
+        try
+        {
+            var device = _adapter.GetRemoteDevice(address)!;
+            socket = device.CreateRfcommSocketToServiceRecord(SppUuid)!;
+
+            var connectTask = Task.Run(() => socket.Connect());
+            var delayTask = Task.Delay(2000, ct);
+
+            var completedTask = await Task.WhenAny(connectTask, delayTask);
+            if (completedTask == connectTask)
+            {
+                await connectTask;
+                
+                var stream = socket.OutputStream!;
+                var inStream = socket.InputStream!;
+                
+                var probeBytes = System.Text.Encoding.UTF8.GetBytes("{\"Type\":\"Probe\"}\n");
+                await stream.WriteAsync(probeBytes, 0, probeBytes.Length, ct);
+                await stream.FlushAsync(ct);
+                
+                var buffer = new byte[1024];
+                var readTask = inStream.ReadAsync(buffer, 0, buffer.Length, ct);
+                var readDelay = Task.Delay(2000, ct);
+                
+                var readCompleted = await Task.WhenAny(readTask, readDelay);
+                if (readCompleted == readTask)
+                {
+                    int bytesRead = await readTask;
+                    if (bytesRead > 0)
+                    {
+                        var line = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                        if (line.Contains("\"Type\":\"ProbeReply\""))
+                        {
+                            socket.Close();
+                            return true;
+                        }
+                    }
+                }
+            }
+            socket?.Close();
+            return false;
         }
         catch
         {
-            // Ignore close failures during shutdown.
+            socket?.Close();
+            return false;
         }
-
-        _serverSocket = null;
-        SetHosting(false);
-        UpdateStatus("Hosting stopped");
-        return Task.CompletedTask;
     }
 
-    public override Task MakeDiscoverable()
+    public async Task<List<BluetoothDeviceModel>> DiscoverDevicesAsync(CancellationToken ct)
     {
-        var intent = new Intent(BluetoothAdapter.ActionRequestDiscoverable);
-        intent.PutExtra(BluetoothAdapter.ExtraDiscoverableDuration, 300);
-        intent.SetFlags(ActivityFlags.NewTask);
-        global::Android.App.Application.Context.StartActivity(intent);
-        return Task.CompletedTask;
-    }
+        var list = new List<BluetoothDeviceModel>();
 
-    private async Task StartHostingInternal(CancellationToken cancellationToken)
-    {
-        if (_adapter == null) return;
         try
         {
-            _serverSocket = _adapter.ListenUsingRfcommWithServiceRecord(AppName, ChatUuid);
-            var serverSocket = _serverSocket;
-            if (serverSocket == null)
+            var bonded = _adapter.BondedDevices;
+            if (bonded != null)
             {
-                throw new Exception("Could not open Bluetooth server socket");
-            }
+                var tasks = new List<Task<BluetoothDeviceModel?>>();
 
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var socket = await serverSocket.AcceptAsync();
-                if (socket != null)
+                foreach (var d in bonded)
                 {
-                    _ = HandleConnection(socket);
+                    if (!IsDeviceConnected(d))
+                    {
+                        continue;
+                    }
+                    var address = d.Address!;
+                    var name = string.IsNullOrWhiteSpace(d.Name) ? "Unnamed Device" : d.Name;
+                    Console.WriteLine($"[AndroidBluetoothService] Paired and connected device found: {name} ({address})");
+
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        bool running = await ProbeSppAsync(address, ct);
+                        return running ? new BluetoothDeviceModel(address, name) : null;
+                    }, ct));
+                }
+
+                var results = await Task.WhenAll(tasks);
+                foreach (var res in results)
+                {
+                    if (res != null)
+                    {
+                        list.Add(res);
+                    }
                 }
             }
         }
         catch (Exception ex)
         {
-            if (!cancellationToken.IsCancellationRequested)
+            Console.WriteLine($"[AndroidBluetoothService] Error getting bonded devices: {ex.Message}");
+        }
+
+        return list;
+    }
+
+    public string GetLocalDeviceName()
+    {
+        try
+        {
+            var name = _adapter?.Name;
+            if (!string.IsNullOrEmpty(name))
             {
-                UpdateStatus($"Host Error: {ex.Message}");
+                return name;
             }
         }
-        finally
+        catch (Exception ex)
         {
-            SetHosting(false);
+            Console.WriteLine($"[AndroidBluetoothService] Error getting local adapter name: {ex.Message}");
         }
+        string model = global::Android.OS.Build.Model;
+        return $"{model} (Android)";
     }
 
-    public override async Task Connect(BluetoothDeviceModel device)
+    public async Task StartServerAsync(string targetAddress, CancellationToken ct)
     {
-        if (_adapter == null) throw new Exception("No adapter");
-        _adapter.CancelDiscovery();
-        var nativeDevice = _adapter.GetRemoteDevice(device.Id);
-        var socket = nativeDevice?.CreateRfcommSocketToServiceRecord(ChatUuid);
-        if (socket == null) throw new Exception("Could not create socket");
+        Disconnect();
 
-        await socket.ConnectAsync();
-        await HandleConnection(socket);
-    }
-
-    private async Task HandleConnection(BluetoothSocket socket)
-    {
-        _activeSocket = socket;
-        SetConnected(true);
-        UpdateStatus($"Connected to {socket.RemoteDevice?.Name}");
-
-        await Task.Run(async () =>
+        while (!ct.IsCancellationRequested)
         {
-            var buffer = new byte[8192];
             try
             {
-                while (_activeSocket != null && _activeSocket.IsConnected)
+                _serverSocket = _adapter.ListenUsingRfcommWithServiceRecord("BinaryStars", SppUuid)!;
+                Console.WriteLine("[AndroidBluetoothService] Server started, listening on UUID " + SppUuid);
+
+                while (!ct.IsCancellationRequested)
                 {
-                    int bytesRead = await _activeSocket.InputStream!.ReadAsync(buffer, 0, buffer.Length);
-                    if (bytesRead > 0)
+                    BluetoothSocket? socket = null;
+                    try
                     {
-                        var text = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                        OnMessageReceived(new ChatMessage("Remote", text, DateTimeOffset.Now, false));
+                        socket = await Task.Run(() => _serverSocket.Accept(), ct);
                     }
-                    else if (bytesRead <= 0) break;
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[AndroidBluetoothService] Accept failed, recreating server socket: {ex.Message}");
+                        socket?.Close();
+                        break;
+                    }
+
+                    if (socket == null) continue;
+
+                    // Handle connection in background
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var remoteAddr = NormalizeAddress(socket.RemoteDevice?.Address);
+                            var normalizedTarget = NormalizeAddress(targetAddress);
+                            Console.WriteLine($"[AndroidBluetoothService] Server accepted socket from {remoteAddr}...");
+
+                            if (string.IsNullOrEmpty(targetAddress) || remoteAddr == normalizedTarget)
+                            {
+                                var inStream = socket.InputStream!;
+                                var outStream = socket.OutputStream!;
+                                
+                                // Read raw bytes
+                                var buffer = new byte[1024];
+                                var readTask = inStream.ReadAsync(buffer, 0, buffer.Length, ct);
+                                var delayTask = Task.Delay(2000, ct);
+                                var completed = await Task.WhenAny(readTask, delayTask);
+
+                                if (completed == readTask)
+                                {
+                                    int bytesRead = await readTask;
+                                    if (bytesRead > 0)
+                                    {
+                                        var line = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                                        Console.WriteLine($"[AndroidBluetoothService] Server received first data from {remoteAddr}: {line}");
+                                        
+                                        if (line.Contains("\"Type\":\"Handshake\""))
+                                        {
+                                            Console.WriteLine($"[AndroidBluetoothService] Valid Handshake from {remoteAddr}. Establishing connection.");
+                                            var reader = new StreamReader(inStream);
+                                            PrepareActiveConnection(socket, reader, line);
+                                            _ = Task.Run(() => ReadLoopAsync(ct), ct);
+                                            
+                                            try { _serverSocket?.Close(); } catch {}
+                                            return;
+                                        }
+                                        else if (line.Contains("\"Type\":\"Probe\""))
+                                        {
+                                            Console.WriteLine($"[AndroidBluetoothService] Received Probe request from {remoteAddr}, sending ProbeReply...");
+                                            try
+                                            {
+                                                var replyBytes = System.Text.Encoding.UTF8.GetBytes("{\"Type\":\"ProbeReply\"}\n");
+                                                await outStream.WriteAsync(replyBytes, 0, replyBytes.Length, ct);
+                                                await outStream.FlushAsync(ct);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Console.WriteLine($"[AndroidBluetoothService] Error sending ProbeReply to {remoteAddr}: {ex.Message}");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[AndroidBluetoothService] Connection from {remoteAddr} rejected (Target expected: {normalizedTarget}).");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[AndroidBluetoothService] Error handling client: {ex.Message}");
+                        }
+                        finally
+                        {
+                            if (!IsConnected || ConnectedDeviceAddress != NormalizeAddress(socket.RemoteDevice?.Address))
+                            {
+                                socket.Close();
+                            }
+                        }
+                    }, ct);
                 }
             }
             catch (Exception ex)
             {
-                UpdateStatus($"Link Lost: {ex.Message}");
+                Console.WriteLine($"[AndroidBluetoothService] Server exception: {ex}");
+                await Task.Delay(2000, ct);
             }
             finally
             {
-                socket.Dispose();
-                if (_activeSocket == socket) _activeSocket = null;
-                SetConnected(false);
+                try { _serverSocket?.Close(); } catch {}
+                _serverSocket = null;
             }
-        });
+
+            if (IsConnected)
+            {
+                break;
+            }
+        }
     }
 
-    public override async Task SendMessage(string text)
+    public async Task ConnectAsync(string address, CancellationToken ct)
     {
-        if (_activeSocket == null || !_activeSocket.IsConnected) throw new Exception("Not connected");
-        var bytes = Encoding.UTF8.GetBytes(text);
-        await _activeSocket.OutputStream!.WriteAsync(bytes, 0, bytes.Length);
+        Disconnect();
+
+        _adapter.CancelDiscovery();
+        var device = _adapter.GetRemoteDevice(address)!;
+        var socket = device.CreateRfcommSocketToServiceRecord(SppUuid)!;
+
+        await Task.Run(() => socket.Connect(), ct);
+        PrepareActiveConnection(socket);
+        _ = Task.Run(() => ReadLoopAsync(ct), ct);
     }
 
-    public override void Dispose()
+    private void PrepareActiveConnection(BluetoothSocket socket)
     {
-        _hostingCts?.Cancel();
-        _activeSocket?.Dispose();
-        _serverSocket?.Dispose();
+        _activeSocket = socket;
+        _writer = new StreamWriter(socket.OutputStream!) { AutoFlush = true };
+        _reader = new StreamReader(socket.InputStream!);
+        ConnectedDeviceAddress = NormalizeAddress(socket.RemoteDevice?.Address ?? "");
+        IsConnected = true;
+    }
+
+    private void PrepareActiveConnection(BluetoothSocket socket, StreamReader reader, string handshakeLine)
+    {
+        _activeSocket = socket;
+        _writer = new StreamWriter(socket.OutputStream!) { AutoFlush = true };
+        _reader = reader;
+        ConnectedDeviceAddress = NormalizeAddress(socket.RemoteDevice?.Address ?? "");
+        IsConnected = true;
+        _messages.OnNext(handshakeLine);
+    }
+
+    private async Task ReadLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested && IsConnected && _reader != null)
+            {
+                var line = await _reader.ReadLineAsync(ct);
+                if (line == null) break;
+                _messages.OnNext(line);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AndroidBluetoothService] Connection closed/lost: {ex.Message}");
+        }
+        finally
+        {
+            Disconnect();
+        }
+    }
+
+    public async Task SendAsync(string message)
+    {
+        if (_writer != null && IsConnected)
+        {
+            await _writer.WriteLineAsync(message);
+        }
+        else
+        {
+            throw new InvalidOperationException("Not connected to a remote device.");
+        }
+    }
+
+    public void Disconnect()
+    {
+        IsConnected = false;
+        ConnectedDeviceAddress = null;
+
+        try { _writer?.Dispose(); } catch {}
+        _writer = null;
+
+        try { _reader?.Dispose(); } catch {}
+        _reader = null;
+
+        try { _activeSocket?.Close(); } catch {}
+        try { _activeSocket?.Dispose(); } catch {}
+        _activeSocket = null;
+
+        try { _serverSocket?.Close(); } catch {}
+        _serverSocket = null;
+    }
+
+    private class BluetoothReceiver : BroadcastReceiver
+    {
+        private readonly Action<BluetoothDevice> _onDeviceFound;
+
+        public BluetoothReceiver(Action<BluetoothDevice> onDeviceFound)
+        {
+            _onDeviceFound = onDeviceFound;
+        }
+
+        public override void OnReceive(Context? context, Intent? intent)
+        {
+            if (intent?.Action == BluetoothDevice.ActionFound)
+            {
+                var device = (BluetoothDevice?)intent.GetParcelableExtra(BluetoothDevice.ExtraDevice);
+                if (device != null)
+                {
+                    _onDeviceFound(device);
+                }
+            }
+        }
     }
 }
