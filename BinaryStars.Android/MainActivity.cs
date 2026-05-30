@@ -12,6 +12,8 @@ using Microsoft.Extensions.DependencyInjection;
 using BinaryStars.Services;
 using BinaryStars.ViewModels;
 using BinaryStars.Android.Services;
+using AndroidX.Core.App;
+using AndroidX.Core.Content;
 
 namespace BinaryStars.Android;
 
@@ -32,11 +34,8 @@ public class MainActivity : AvaloniaMainActivity<App>
         if (App.Services == null)
         {
             var services = new ServiceCollection();
-
-            // Native Android Implementation
-            services.AddSingleton<IBluetoothChatService, AndroidBluetoothService>();
-            services.AddSingleton<IHistoryService, HistoryService>();
-            services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
+            services.AddSingleton<IDatabaseService, DatabaseService>();
+            services.AddSingleton<IBluetoothService, AndroidBluetoothService>();
             services.AddSingleton<MainViewModel>();
 
             App.Services = services.BuildServiceProvider();
