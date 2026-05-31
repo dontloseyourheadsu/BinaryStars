@@ -38,7 +38,7 @@
       </Border>
 
       <!-- Main Body -->
-      <Grid Grid.Row="1" RowDefinitions="Auto, *, Auto, *">
+      <Grid Grid.Row="1" RowDefinitions="Auto, *">
         <!-- Scan Header Button -->
         <Border Grid.Row="0" Background="White" Padding="16" BorderBrush="#EAEAEA" BorderThickness="0,0,0,1">
           <Grid ColumnDefinitions="*, Auto">
@@ -57,50 +57,29 @@
         </Border>
 
         <!-- Discovered Devices -->
-        <TextBlock Grid.Row="1" Text="NEARBY DEVICES" FontSize="12" FontWeight="Bold" Foreground="#008069" Margin="16,16,16,8"/>
-        <ScrollViewer Grid.Row="1" Margin="0,40,0,0">
-          <ItemsControl ItemsSource="{Binding NearbyDevices}" Margin="16,0">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="m:BluetoothDeviceModel">
-                <Border Background="White" CornerRadius="8" Padding="12" Margin="0,0,0,8" BoxShadow="0 1 2 #15000000">
-                  <Grid ColumnDefinitions="*, Auto">
-                    <StackPanel VerticalAlignment="Center">
-                      <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="14" Foreground="#111B21"/>
-                      <TextBlock Text="{Binding Id}" FontSize="12" Foreground="#667781"/>
-                    </StackPanel>
-                    <Button Grid.Column="1" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SelectDeviceCommand}" CommandParameter="{Binding}"
-                            Background="#008069" Foreground="White" CornerRadius="15" Padding="12,6" FontSize="12">
-                      Connect
-                    </Button>
-                  </Grid>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
-
-        <!-- Active Chat History -->
-        <TextBlock Grid.Row="2" Text="RECENT CHATS" FontSize="12" FontWeight="Bold" Foreground="#008069" Margin="16,16,16,8"/>
-        <ScrollViewer Grid.Row="3" Margin="0,0,0,0">
-          <ItemsControl ItemsSource="{Binding Chats}" Margin="16,0">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="db:ChatEntity">
-                <Border Background="White" CornerRadius="8" Padding="12" Margin="0,0,0,8" BoxShadow="0 1 2 #15000000">
-                  <Grid ColumnDefinitions="*, Auto">
-                    <StackPanel VerticalAlignment="Center">
-                      <TextBlock Text="{Binding DeviceName}" FontWeight="Bold" FontSize="14" Foreground="#111B21"/>
-                      <TextBlock Text="{Binding Address}" FontSize="12" Foreground="#667781"/>
-                    </StackPanel>
-                    <Button Grid.Column="1" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).EnterChatCommand}" CommandParameter="{Binding}"
-                            Background="#E3F2FD" Foreground="#1976D2" CornerRadius="15" Padding="12,6" FontSize="12">
-                      Open Chat
-                    </Button>
-                  </Grid>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
+        <Grid Grid.Row="1" RowDefinitions="Auto, *">
+          <TextBlock Grid.Row="0" Text="NEARBY DEVICES" FontSize="12" FontWeight="Bold" Foreground="#008069" Margin="16,16,16,8"/>
+          <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding NearbyDevices}" Margin="16,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="m:BluetoothDeviceModel">
+                  <Border Background="White" CornerRadius="8" Padding="12" Margin="0,0,0,8" BoxShadow="0 1 2 #15000000">
+                    <Grid ColumnDefinitions="*, Auto">
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="14" Foreground="#111B21"/>
+                        <TextBlock Text="{Binding Id}" FontSize="12" Foreground="#667781"/>
+                      </StackPanel>
+                      <Button Grid.Column="1" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SelectDeviceCommand}" CommandParameter="{Binding}"
+                              Background="#008069" Foreground="White" CornerRadius="15" Padding="12,6" FontSize="12">
+                        Connect
+                      </Button>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
       </Grid>
     </Grid>
 

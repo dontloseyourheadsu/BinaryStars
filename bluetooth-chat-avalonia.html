@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bluetooth Chat — Avalonia .NET 10 (Linux & Android)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #1a1e28;
+    --border: #252a38;
+    --accent: #5b8dee;
+    --accent2: #38d9a9;
+    --accent3: #f06595;
+    --warn: #ffd43b;
+    --text: #e2e8f0;
+    --muted: #7a869a;
+    --code-bg: #0b0e16;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 48px 32px;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 32px;
+    margin-bottom: 40px;
+  }
+  .badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid;
+  }
+  .badge-blue  { border-color: var(--accent);  color: var(--accent);  background: rgba(91,141,238,.08); }
+  .badge-green { border-color: var(--accent2); color: var(--accent2); background: rgba(56,217,169,.08); }
+  .badge-red   { border-color: var(--accent3); color: var(--accent3); background: rgba(240,101,149,.08); }
+  .badge-warn  { border-color: var(--warn);    color: var(--warn);    background: rgba(255,212,59,.08); }
+
+  h1 { font-size: 2.2rem; font-weight: 800; color: #fff; line-height: 1.2; }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--muted); margin-top: 10px; font-size: 1rem; }
+
+  /* ── Sections ── */
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 40px 0 14px;
+    padding-left: 12px;
+    border-left: 3px solid var(--accent);
+  }
+  h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent2);
+    margin: 24px 0 10px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: .85rem;
+  }
+  p { margin-bottom: 12px; color: var(--text); }
+
+  /* ── Callouts ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    border: 1px solid;
+    font-size: .9rem;
+  }
+  .callout-info  { border-color: var(--accent);  background: rgba(91,141,238,.06); }
+  .callout-warn  { border-color: var(--warn);    background: rgba(255,212,59,.06); }
+  .callout-ok    { border-color: var(--accent2); background: rgba(56,217,169,.06); }
+  .callout-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .callout-info  .callout-label { color: var(--accent); }
+  .callout-warn  .callout-label { color: var(--warn); }
+  .callout-ok    .callout-label { color: var(--accent2); }
+
+  /* ── Code ── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    overflow-x: auto;
+    margin: 12px 0 20px;
+    position: relative;
+  }
+  pre .lang {
+    position: absolute;
+    top: 8px; right: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .68rem;
+    color: var(--muted);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .82rem;
+    line-height: 1.6;
+  }
+  p code, li code {
+    background: var(--surface2);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: .82rem;
+    color: var(--accent2);
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    font-size: .88rem;
+  }
+  th {
+    background: var(--surface2);
+    color: var(--muted);
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    text-transform: uppercase;
+    font-size: .72rem;
+    letter-spacing: .06em;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .ok  { color: var(--accent2); }
+  .no  { color: var(--accent3); }
+  .warn{ color: var(--warn); }
+
+  /* ── Lists ── */
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 6px; }
+
+  /* ── Diagram ── */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0 32px;
+    overflow-x: auto;
+  }
+  .mermaid { font-family: 'Syne', sans-serif !important; }
+
+  /* ── Step numbers ── */
+  .steps { counter-reset: step; list-style: none; padding: 0; }
+  .steps li {
+    counter-increment: step;
+    display: flex; gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+  .steps li::before {
+    content: counter(step);
+    min-width: 28px; height: 28px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: .8rem;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* ── Grid ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  @media(max-width:640px){ .grid2{ grid-template-columns:1fr; } }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+  }
+  .card-title {
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-blue  { background: var(--accent); }
+  .dot-green { background: var(--accent2); }
+
+  footer {
+    margin-top: 64px;
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    color: var(--muted);
+    font-size: .8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge-row">
+    <span class="badge badge-blue">.NET 10</span>
+    <span class="badge badge-blue">Avalonia 12</span>
+    <span class="badge badge-green">Linux (BlueZ)</span>
+    <span class="badge badge-green">Android</span>
+    <span class="badge badge-red">Bluetooth Classic / RFCOMM</span>
+    <span class="badge badge-warn">32feet.NET v4.2.4</span>
+  </div>
+  <h1>Bluetooth Chat<br><span>Avalonia · .NET 10 · Linux & Android</span></h1>
+  <p class="subtitle">Architecture, device setup, library selection, full code structure, and UML system diagram<br>for cross-device text and file transfer via Bluetooth Classic RFCOMM.</p>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>1 — Library Decision</h2>
+
+<div class="callout callout-ok">
+  <span class="callout-label">✔ Chosen: InTheHand.Net.Bluetooth (32feet.NET) v4.2.4</span>
+  The only production-ready, actively maintained .NET Bluetooth library that simultaneously covers Linux (via BlueZ native sockets), Android (.NET for Android), and is explicitly confirmed to work in Avalonia. It targets .NET Standard 2.0, making it compatible with .NET 10. Last updated April 2026.
+</div>
+
+<table>
+  <tr>
+    <th>Library</th>
+    <th>Linux</th>
+    <th>Android</th>
+    <th>Avalonia confirmed</th>
+    <th>.NET 10</th>
+    <th>Classic BT (RFCOMM)</th>
+  </tr>
+  <tr>
+    <td><strong>InTheHand.Net.Bluetooth</strong> 4.2.4</td>
+    <td class="ok">✔ BlueZ sockets</td>
+    <td class="ok">✔</td>
+    <td class="ok">✔ explicit blog post</td>
+    <td class="ok">✔ via netstandard2.0</td>
+    <td class="ok">✔ primary feature</td>
+  </tr>
+  <tr>
+    <td>InTheHand.BluetoothLE 4.0.44</td>
+    <td class="warn">BLE only</td>
+    <td class="warn">BLE only</td>
+    <td class="ok">✔</td>
+    <td class="ok">✔</td>
+    <td class="no">✗ BLE only, small MTU</td>
+  </tr>
+  <tr>
+    <td>Linux.Bluetooth (SuessLabs)</td>
+    <td class="ok">✔ DBus/BlueZ</td>
+    <td class="no">✗</td>
+    <td class="warn">untested</td>
+    <td class="ok">✔</td>
+    <td class="no">✗ BLE only</td>
+  </tr>
+  <tr>
+    <td>Plugin.BLE (Shiny)</td>
+    <td class="no">✗</td>
+    <td class="warn">BLE only</td>
+    <td class="no">✗</td>
+    <td class="warn">partial</td>
+    <td class="no">✗</td>
+  </tr>
+</table>
+
+<p>For file transfer over Classic Bluetooth RFCOMM, <code>InTheHand.Net.Bluetooth</code> is the only viable choice that works across both target platforms inside an Avalonia project.</p>
+
+<div class="callout callout-warn">
+  <span class="callout-label">⚠ Important Limitation</span>
+  The Linux implementation uses <strong>native P/Invoke AF_BLUETOOTH sockets</strong> (not D-Bus) on .NET 6+. This requires BlueZ kernel modules and <code>bluetoothd</code> to be running, and the pairing must be done via <code>bluetoothctl</code> before connecting in code. Device discovery on Linux also depends on BlueZ being accessible to the process user (usually requires the user to be in the <code>bluetooth</code> group).
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>2 — Solution Structure</h2>
+
+<pre><code class="lang-text"><span class="lang">Directory Tree</span>BluetoothChat/
+├── BluetoothChat.Core/               ← Shared: interfaces, models, ViewModels
+│   ├── IBluetoothService.cs
+│   ├── BluetoothMessage.cs           ← Wire protocol model
+│   ├── MessageFramer.cs              ← Length-prefix framing
+│   ├── FileChunker.cs
+│   ├── BluetoothChatService.cs       ← Orchestrates IBluetoothService
+│   └── ViewModels/
+│       └── ChatViewModel.cs
+│
+├── BluetoothChat.Linux/              ← Linux platform impl
+│   └── LinuxBluetoothService.cs      ← BlueZ / AF_BLUETOOTH sockets
+│
+├── BluetoothChat.Android/            ← Android platform impl
+│   ├── AndroidBluetoothService.cs
+│   └── MainActivity.cs               ← Sets InTheHand.AndroidActivity
+│
+├── BluetoothChat.Desktop/            ← Avalonia Linux app entry point
+│   ├── Program.cs
+│   └── App.axaml.cs
+│
+└── BluetoothChat.Mobile/             ← Avalonia Android app entry point
+    ├── Program.cs
+    └── App.axaml.cs</code></pre>
+
+<h3>Project file — BluetoothChat.Core</h3>
+<pre><code><span class="lang">XML (.csproj)</span>&lt;Project Sdk="Microsoft.NET.Sdk"&gt;
+  &lt;PropertyGroup&gt;
+    &lt;TargetFramework&gt;net10.0&lt;/TargetFramework&gt;
+    &lt;Nullable&gt;enable&lt;/Nullable&gt;
+  &lt;/PropertyGroup&gt;
+  &lt;ItemGroup&gt;
+    &lt;PackageReference Include="InTheHand.Net.Bluetooth" Version="4.2.4" /&gt;
+    &lt;PackageReference Include="Avalonia" Version="12.0.3" /&gt;
+    &lt;PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" /&gt;
+    &lt;PackageReference Include="System.Reactive" Version="6.0.1" /&gt;
+  &lt;/ItemGroup&gt;
+&lt;/Project&gt;</code></pre>
+
+<h3>Project file — BluetoothChat.Mobile (Android)</h3>
+<pre><code><span class="lang">XML (.csproj)</span>&lt;Project Sdk="Microsoft.NET.Sdk"&gt;
+  &lt;PropertyGroup&gt;
+    &lt;TargetFramework&gt;net10.0-android&lt;/TargetFramework&gt;
+    &lt;ApplicationId&gt;com.example.bluetoothchat&lt;/ApplicationId&gt;
+    &lt;ApplicationVersion&gt;1&lt;/ApplicationVersion&gt;
+    &lt;SupportedOSPlatformVersion&gt;21.0&lt;/SupportedOSPlatformVersion&gt;
+  &lt;/PropertyGroup&gt;
+  &lt;ItemGroup&gt;
+    &lt;PackageReference Include="Avalonia" Version="12.0.3" /&gt;
+    &lt;PackageReference Include="Avalonia.Android" Version="12.0.3" /&gt;
+    &lt;PackageReference Include="InTheHand.Net.Bluetooth" Version="4.2.4" /&gt;
+    &lt;ProjectReference Include="..\BluetoothChat.Core\BluetoothChat.Core.csproj" /&gt;
+    &lt;ProjectReference Include="..\BluetoothChat.Android\BluetoothChat.Android.csproj" /&gt;
+  &lt;/ItemGroup&gt;
+&lt;/Project&gt;</code></pre>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>3 — Device Setup</h2>
+
+<div class="grid2">
+  <div class="card">
+    <div class="card-title"><span class="dot dot-blue"></span>Linux Setup</div>
+    <ol class="steps">
+      <li>Install BlueZ and D-Bus tools:<br>
+        <code>sudo apt install bluez bluez-tools</code></li>
+      <li>Add your user to the bluetooth group:<br>
+        <code>sudo usermod -aG bluetooth $USER</code><br>then log out and back in.</li>
+      <li>Enable and start bluetoothd:<br>
+        <code>sudo systemctl enable --now bluetooth</code></li>
+      <li>Pair the remote device:<br>
+        <code>bluetoothctl</code><br>
+        <code>power on</code><br>
+        <code>agent on</code><br>
+        <code>scan on</code><br>
+        <code>pair &lt;MAC&gt;</code><br>
+        <code>trust &lt;MAC&gt;</code></li>
+      <li>Verify RFCOMM kernel module:<br>
+        <code>lsmod | grep rfcomm</code><br>
+        If missing: <code>sudo modprobe rfcomm</code></li>
+    </ol>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="dot dot-green"></span>Android Setup</div>
+    <ol class="steps">
+      <li>Declare permissions in <code>AndroidManifest.xml</code> (see code block below).</li>
+      <li>Request runtime permissions on app launch (API 31+ requires BLUETOOTH_CONNECT, BLUETOOTH_SCAN at runtime).</li>
+      <li>Enable Bluetooth and make the device discoverable from Settings → Bluetooth.</li>
+      <li>Pair with the target device from Android Settings. The app connects after pairing.</li>
+      <li>Override <code>MainActivity.OnCreate</code> to set <code>InTheHand.AndroidActivity.CurrentActivity</code> — required for 32feet on Avalonia Android (see code).</li>
+    </ol>
+  </div>
+</div>
+
+<h3>AndroidManifest.xml — required permissions</h3>
+<pre><code><span class="lang">XML</span>&lt;manifest xmlns:android="http://schemas.android.com/apk/res/android"&gt;
+
+  &lt;!-- API &lt; 31 (Android 11 and below) --&gt;
+  &lt;uses-permission android:name="android.permission.BLUETOOTH"
+                   android:maxSdkVersion="30" /&gt;
+  &lt;uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+                   android:maxSdkVersion="30" /&gt;
+  &lt;uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+                   android:maxSdkVersion="30" /&gt;
+
+  &lt;!-- API 31+ (Android 12+) --&gt;
+  &lt;uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+                   android:usesPermissionFlags="neverForLocation" /&gt;
+  &lt;uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /&gt;
+  &lt;uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" /&gt;
+
+  &lt;uses-feature android:name="android.hardware.bluetooth" android:required="true" /&gt;
+
+  &lt;application ...&gt; ... &lt;/application&gt;
+&lt;/manifest&gt;</code></pre>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>4 — Core Code</h2>
+
+<h3>IBluetoothService.cs</h3>
+<pre><code><span class="lang">C#</span>using InTheHand.Net;
+using InTheHand.Net.Sockets;
+
+namespace BluetoothChat.Core;
+
+public interface IBluetoothService
+{
+    IObservable&lt;BluetoothMessage&gt;  MessageReceived       { get; }
+    IObservable&lt;ConnectionState&gt;   ConnectionStateChanged { get; }
+
+    Task&lt;IEnumerable&lt;BluetoothDeviceInfo&gt;&gt; DiscoverDevicesAsync(
+        CancellationToken ct = default);
+
+    /// &lt;summary&gt;Start the RFCOMM listener (server role).&lt;/summary&gt;
+    Task StartListeningAsync(Guid serviceUuid, CancellationToken ct = default);
+
+    /// &lt;summary&gt;Connect to a remote server (client role).&lt;/summary&gt;
+    Task ConnectAsync(BluetoothAddress address, Guid serviceUuid,
+                      CancellationToken ct = default);
+
+    Task SendMessageAsync(BluetoothMessage message, CancellationToken ct = default);
+    void Disconnect();
+}
+
+public enum ConnectionState { Disconnected, Discovering, Listening, Connecting, Connected }
+</code></pre>
+
+<h3>BluetoothMessage.cs — wire protocol</h3>
+<pre><code><span class="lang">C#</span>namespace BluetoothChat.Core;
+
+public enum MessageType : byte { Text = 1, FileTransfer = 2, Handshake = 3 }
+
+public sealed class BluetoothMessage
+{
+    public MessageType Type     { get; init; }
+    public string?     Text     { get; init; }
+    public string?     FileName { get; init; }
+    public byte[]?     FileData { get; init; }
+    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+    // Wire format: [1 byte type][4 bytes payload length][payload bytes]
+    // Text payload:  UTF-8 string
+    // File payload:  [2 bytes name-length][name UTF-8][file bytes]
+    public byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+        bw.Write((byte)Type);
+        if (Type == MessageType.Text)
+        {
+            var body = System.Text.Encoding.UTF8.GetBytes(Text ?? "");
+            bw.Write(body.Length);
+            bw.Write(body);
+        }
+        else if (Type == MessageType.FileTransfer)
+        {
+            var nameBytes = System.Text.Encoding.UTF8.GetBytes(FileName ?? "file");
+            var data      = FileData ?? [];
+            bw.Write(nameBytes.Length + data.Length + 2);
+            bw.Write((short)nameBytes.Length);
+            bw.Write(nameBytes);
+            bw.Write(data);
+        }
+        return ms.ToArray();
+    }
+
+    public static BluetoothMessage Deserialize(byte[] raw)
+    {
+        using var ms = new MemoryStream(raw);
+        using var br = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+        var type    = (MessageType)br.ReadByte();
+        var payLen  = br.ReadInt32();
+        if (type == MessageType.Text)
+        {
+            var text = System.Text.Encoding.UTF8.GetString(br.ReadBytes(payLen));
+            return new BluetoothMessage { Type = type, Text = text };
+        }
+        else // FileTransfer
+        {
+            var nameLen  = br.ReadInt16();
+            var name     = System.Text.Encoding.UTF8.GetString(br.ReadBytes(nameLen));
+            var fileData = br.ReadBytes(payLen - nameLen - 2);
+            return new BluetoothMessage { Type = type, FileName = name, FileData = fileData };
+        }
+    }
+}
+</code></pre>
+
+<h3>MessageFramer.cs — length-prefix framing over streams</h3>
+<pre><code><span class="lang">C#</span>namespace BluetoothChat.Core;
+
+/// Writes/reads length-prefixed frames so messages are reliably delimited
+/// across the raw RFCOMM stream.
+public static class MessageFramer
+{
+    public static async Task WriteFrameAsync(Stream stream, byte[] payload,
+        CancellationToken ct)
+    {
+        var lenBuf = BitConverter.GetBytes(payload.Length); // 4 bytes LE
+        await stream.WriteAsync(lenBuf, ct);
+        await stream.WriteAsync(payload, ct);
+        await stream.FlushAsync(ct);
+    }
+
+    public static async Task&lt;byte[]?&gt; ReadFrameAsync(Stream stream,
+        CancellationToken ct)
+    {
+        var lenBuf = new byte[4];
+        if (!await ReadExactAsync(stream, lenBuf, ct)) return null;
+        var length = BitConverter.ToInt32(lenBuf);
+        if (length is <= 0 or > 50_000_000) return null; // 50 MB safety cap
+        var payload = new byte[length];
+        return await ReadExactAsync(stream, payload, ct) ? payload : null;
+    }
+
+    static async Task&lt;bool&gt; ReadExactAsync(Stream s, byte[] buf, CancellationToken ct)
+    {
+        int offset = 0;
+        while (offset &lt; buf.Length)
+        {
+            var read = await s.ReadAsync(buf.AsMemory(offset), ct);
+            if (read == 0) return false;
+            offset += read;
+        }
+        return true;
+    }
+}
+</code></pre>
+
+<h3>BluetoothChatService.cs — platform-agnostic orchestrator</h3>
+<pre><code><span class="lang">C#</span>using System.Reactive.Subjects;
+using InTheHand.Net;
+using InTheHand.Net.Sockets;
+
+namespace BluetoothChat.Core;
+
+public sealed class BluetoothChatService
+{
+    // Shared service UUID — must be identical on all devices
+    public static readonly Guid ServiceUuid =
+        new("3a0d9440-7b5b-4f5a-b0a3-00112233aabb");
+
+    private readonly IBluetoothService _bt;
+    private readonly Subject&lt;BluetoothMessage&gt; _messages = new();
+
+    public IObservable&lt;BluetoothMessage&gt; Messages    => _messages;
+    public IObservable&lt;ConnectionState&gt;  StateChanges => _bt.ConnectionStateChanged;
+
+    public BluetoothChatService(IBluetoothService bluetoothService)
+    {
+        _bt = bluetoothService;
+        _bt.MessageReceived.Subscribe(m => _messages.OnNext(m));
+    }
+
+    public Task&lt;IEnumerable&lt;BluetoothDeviceInfo&gt;&gt; DiscoverAsync(CancellationToken ct = default)
+        => _bt.DiscoverDevicesAsync(ct);
+
+    public Task ListenAsync(CancellationToken ct = default)
+        => _bt.StartListeningAsync(ServiceUuid, ct);
+
+    public Task ConnectToAsync(BluetoothAddress address, CancellationToken ct = default)
+        => _bt.ConnectAsync(address, ServiceUuid, ct);
+
+    public Task SendTextAsync(string text, CancellationToken ct = default)
+        => _bt.SendMessageAsync(new BluetoothMessage { Type = MessageType.Text, Text = text }, ct);
+
+    public async Task SendFileAsync(string filePath, CancellationToken ct = default)
+    {
+        var data = await File.ReadAllBytesAsync(filePath, ct);
+        await _bt.SendMessageAsync(new BluetoothMessage
+        {
+            Type     = MessageType.FileTransfer,
+            FileName = Path.GetFileName(filePath),
+            FileData = data
+        }, ct);
+    }
+
+    public void Disconnect() => _bt.Disconnect();
+}
+</code></pre>
+
+<h3>LinuxBluetoothService.cs</h3>
+<pre><code><span class="lang">C#</span>using System.Reactive.Subjects;
+using InTheHand.Net;
+using InTheHand.Net.Bluetooth;
+using InTheHand.Net.Sockets;
+using BluetoothChat.Core;
+
+namespace BluetoothChat.Linux;
+
+/// Uses InTheHand.Net.Bluetooth 4.2.4 which P/Invokes AF_BLUETOOTH
+/// sockets directly on Linux (no D-Bus layer needed at this level).
+public sealed class LinuxBluetoothService : IBluetoothService, IAsyncDisposable
+{
+    private readonly Subject&lt;BluetoothMessage&gt; _msgs  = new();
+    private readonly Subject&lt;ConnectionState&gt;  _state = new();
+
+    private BluetoothListener? _listener;
+    private BluetoothClient?   _client;
+    private Stream?            _stream;
+    private CancellationTokenSource _cts = new();
+
+    public IObservable&lt;BluetoothMessage&gt; MessageReceived        => _msgs;
+    public IObservable&lt;ConnectionState&gt;  ConnectionStateChanged => _state;
+
+    public async Task&lt;IEnumerable&lt;BluetoothDeviceInfo&gt;&gt; DiscoverDevicesAsync(
+        CancellationToken ct = default)
+    {
+        _state.OnNext(ConnectionState.Discovering);
+        using var bc = new BluetoothClient();
+        var devices = bc.DiscoverDevices(maxDevices: 20); // synchronous on Linux
+        _state.OnNext(ConnectionState.Disconnected);
+        return devices;
+    }
+
+    public async Task StartListeningAsync(Guid serviceUuid, CancellationToken ct = default)
+    {
+        _state.OnNext(ConnectionState.Listening);
+        _listener = new BluetoothListener(serviceUuid);
+        _listener.Start();
+        // AcceptBluetoothClient blocks — run on thread pool
+        _client = await Task.Run(() => _listener.AcceptBluetoothClient(), ct);
+        _stream = _client.GetStream();
+        _state.OnNext(ConnectionState.Connected);
+        _ = ReadLoopAsync(_cts.Token);
+    }
+
+    public async Task ConnectAsync(BluetoothAddress address, Guid serviceUuid,
+        CancellationToken ct = default)
+    {
+        _state.OnNext(ConnectionState.Connecting);
+        _client = new BluetoothClient();
+        await _client.ConnectAsync(address, serviceUuid);
+        _stream = _client.GetStream();
+        _state.OnNext(ConnectionState.Connected);
+        _ = ReadLoopAsync(_cts.Token);
+    }
+
+    public async Task SendMessageAsync(BluetoothMessage message,
+        CancellationToken ct = default)
+    {
+        if (_stream is null) throw new InvalidOperationException("Not connected.");
+        await MessageFramer.WriteFrameAsync(_stream, message.Serialize(), ct);
+    }
+
+    public void Disconnect()
+    {
+        _cts.Cancel();
+        _stream?.Close();
+        _client?.Close();
+        _listener?.Stop();
+        _state.OnNext(ConnectionState.Disconnected);
+    }
+
+    private async Task ReadLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested && _stream is not null)
+            {
+                var frame = await MessageFramer.ReadFrameAsync(_stream, ct);
+                if (frame is null) break;
+                _msgs.OnNext(BluetoothMessage.Deserialize(frame));
+            }
+        }
+        catch { }
+        finally { _state.OnNext(ConnectionState.Disconnected); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Disconnect();
+        await _cts.CancelAsync();
+        _cts.Dispose();
+    }
+}
+</code></pre>
+
+<h3>AndroidBluetoothService.cs</h3>
+<pre><code><span class="lang">C#</span>using System.Reactive.Subjects;
+using InTheHand.Net;
+using InTheHand.Net.Bluetooth;
+using InTheHand.Net.Sockets;
+using BluetoothChat.Core;
+
+namespace BluetoothChat.Android;
+
+/// InTheHand.Net.Bluetooth on Android uses the android.bluetooth.*
+/// Java APIs under the hood via the .NET Android bindings.
+public sealed class AndroidBluetoothService : IBluetoothService, IAsyncDisposable
+{
+    private readonly Subject&lt;BluetoothMessage&gt; _msgs  = new();
+    private readonly Subject&lt;ConnectionState&gt;  _state = new();
+
+    private BluetoothListener? _listener;
+    private BluetoothClient?   _client;
+    private Stream?            _stream;
+    private CancellationTokenSource _cts = new();
+
+    public IObservable&lt;BluetoothMessage&gt; MessageReceived        => _msgs;
+    public IObservable&lt;ConnectionState&gt;  ConnectionStateChanged => _state;
+
+    public async Task&lt;IEnumerable&lt;BluetoothDeviceInfo&gt;&gt; DiscoverDevicesAsync(
+        CancellationToken ct = default)
+    {
+        _state.OnNext(ConnectionState.Discovering);
+        using var bc = new BluetoothClient();
+        // DiscoverDevices uses ACTION_DISCOVERY intent on Android
+        var devices = await Task.Run(() => bc.DiscoverDevices(20), ct);
+        _state.OnNext(ConnectionState.Disconnected);
+        return devices;
+    }
+
+    public async Task StartListeningAsync(Guid serviceUuid, CancellationToken ct = default)
+    {
+        _state.OnNext(ConnectionState.Listening);
+        _listener = new BluetoothListener(serviceUuid);
+        _listener.Start();
+        _client = await Task.Run(() => _listener.AcceptBluetoothClient(), ct);
+        _stream = _client.GetStream();
+        _state.OnNext(ConnectionState.Connected);
+        _ = ReadLoopAsync(_cts.Token);
+    }
+
+    public async Task ConnectAsync(BluetoothAddress address, Guid serviceUuid,
+        CancellationToken ct = default)
+    {
+        _state.OnNext(ConnectionState.Connecting);
+        _client = new BluetoothClient();
+        await _client.ConnectAsync(address, serviceUuid);
+        _stream = _client.GetStream();
+        _state.OnNext(ConnectionState.Connected);
+        _ = ReadLoopAsync(_cts.Token);
+    }
+
+    public async Task SendMessageAsync(BluetoothMessage message,
+        CancellationToken ct = default)
+    {
+        if (_stream is null) throw new InvalidOperationException("Not connected.");
+        await MessageFramer.WriteFrameAsync(_stream, message.Serialize(), ct);
+    }
+
+    public void Disconnect()
+    {
+        _cts.Cancel();
+        _stream?.Close();
+        _client?.Close();
+        _listener?.Stop();
+        _state.OnNext(ConnectionState.Disconnected);
+    }
+
+    private async Task ReadLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested &amp;&amp; _stream is not null)
+            {
+                var frame = await MessageFramer.ReadFrameAsync(_stream, ct);
+                if (frame is null) break;
+                _msgs.OnNext(BluetoothMessage.Deserialize(frame));
+            }
+        }
+        catch { }
+        finally { _state.OnNext(ConnectionState.Disconnected); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Disconnect();
+        await _cts.CancelAsync();
+        _cts.Dispose();
+    }
+}
+</code></pre>
+
+<h3>MainActivity.cs — critical Avalonia Android hook</h3>
+<pre><code><span class="lang">C#</span>using Android.App;
+using Android.OS;
+using Avalonia.Android;
+using Microsoft.Extensions.DependencyInjection;
+using BluetoothChat.Android;
+using BluetoothChat.Core;
+
+namespace BluetoothChat.Mobile;
+
+[Activity(Theme = "@style/Theme.AppCompat.DayNight.NoActionBar",
+          MainLauncher = true)]
+public class MainActivity : AvaloniaMainActivity&lt;App&gt;
+{
+    protected override void OnCreate(Bundle? savedInstanceState)
+    {
+        // ⚠️ Required: 32feet needs a reference to the current Android Activity
+        // to open Bluetooth intents (device picker, pairing, etc.)
+        InTheHand.AndroidActivity.CurrentActivity = this;
+        base.OnCreate(savedInstanceState);
+        RequestBluetoothPermissions();
+    }
+
+    private void RequestBluetoothPermissions()
+    {
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.S)
+        {
+            RequestPermissions(new[]
+            {
+                "android.permission.BLUETOOTH_SCAN",
+                "android.permission.BLUETOOTH_CONNECT",
+                "android.permission.BLUETOOTH_ADVERTISE"
+            }, requestCode: 1001);
+        }
+        else
+        {
+            RequestPermissions(new[]
+            {
+                "android.permission.BLUETOOTH",
+                "android.permission.BLUETOOTH_ADMIN",
+                "android.permission.ACCESS_FINE_LOCATION"
+            }, requestCode: 1000);
+        }
+    }
+}
+</code></pre>
+
+<h3>App.axaml.cs — Dependency Injection wiring (Android entry point)</h3>
+<pre><code><span class="lang">C#</span>using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using BluetoothChat.Android;   // AndroidBluetoothService
+using BluetoothChat.Core;
+
+namespace BluetoothChat.Mobile;
+
+public partial class App : Application
+{
+    public override void OnFrameworkInitializationCompleted()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton&lt;IBluetoothService, AndroidBluetoothService&gt;();
+        services.AddSingleton&lt;BluetoothChatService&gt;();
+        services.AddTransient&lt;ChatViewModel&gt;();
+        var sp = services.BuildServiceProvider();
+
+        if (ApplicationLifetime is ISingleViewApplicationLifetime svl)
+            svl.MainView = new MainView { DataContext = sp.GetRequiredService&lt;ChatViewModel&gt;() };
+
+        base.OnFrameworkInitializationCompleted();
+    }
+}
+</code></pre>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>5 — Connection Scenarios</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Device A Role</th>
+    <th>Device B Role</th>
+    <th>Pairing step</th>
+  </tr>
+  <tr>
+    <td><strong>Linux → Android</strong></td>
+    <td>Client (<code>ConnectAsync</code>)</td>
+    <td>Server (<code>StartListeningAsync</code>)</td>
+    <td>Pair via <code>bluetoothctl</code> on Linux; accept on Android</td>
+  </tr>
+  <tr>
+    <td><strong>Android → Linux</strong></td>
+    <td>Client</td>
+    <td>Server (starts listener first)</td>
+    <td>Same pair; Android initiates connect</td>
+  </tr>
+  <tr>
+    <td><strong>Android ↔ Android</strong></td>
+    <td>Client or Server</td>
+    <td>Server or Client</td>
+    <td>Pair via Android Settings on either device</td>
+  </tr>
+  <tr>
+    <td><strong>Linux ↔ Linux</strong></td>
+    <td>Client</td>
+    <td>Server</td>
+    <td>Both pair via <code>bluetoothctl</code></td>
+  </tr>
+</table>
+
+<div class="callout callout-info">
+  <span class="callout-label">ℹ Design tip</span>
+  Both apps should always start both a listener (<code>StartListeningAsync</code> in a background task) AND be capable of initiating a connection. This "peer-to-peer" approach eliminates the need for a fixed server/client assignment — whichever device taps "Connect" first becomes the client.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>6 — UML System Diagram</h2>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+classDiagram
+    direction TB
+
+    class IBluetoothService {
+        <<interface>>
+        +MessageReceived IObservable~BluetoothMessage~
+        +ConnectionStateChanged IObservable~ConnectionState~
+        +DiscoverDevicesAsync() Task
+        +StartListeningAsync(uuid) Task
+        +ConnectAsync(addr, uuid) Task
+        +SendMessageAsync(msg) Task
+        +Disconnect() void
+    }
+
+    class BluetoothMessage {
+        +Type MessageType
+        +Text string
+        +FileName string
+        +FileData byte[]
+        +Timestamp DateTimeOffset
+        +Serialize() byte[]
+        +Deserialize(data)$ BluetoothMessage
+    }
+
+    class MessageType {
+        <<enumeration>>
+        Text
+        FileTransfer
+        Handshake
+    }
+
+    class MessageFramer {
+        <<static utility>>
+        +WriteFrameAsync(stream, payload) Task
+        +ReadFrameAsync(stream) Task~byte[]~
+    }
+
+    class BluetoothChatService {
+        -_bt IBluetoothService
+        +Messages IObservable~BluetoothMessage~
+        +StateChanges IObservable~ConnectionState~
+        +DiscoverAsync() Task
+        +ListenAsync() Task
+        +ConnectToAsync(addr) Task
+        +SendTextAsync(text) Task
+        +SendFileAsync(path) Task
+        +Disconnect() void
+    }
+
+    class ChatViewModel {
+        -_chat BluetoothChatService
+        +Messages ObservableCollection
+        +Devices ObservableCollection
+        +ConnectCommand ICommand
+        +ListenCommand ICommand
+        +SendTextCommand ICommand
+        +SendFileCommand ICommand
+        +DiscoverCommand ICommand
+    }
+
+    class LinuxBluetoothService {
+        -_listener BluetoothListener
+        -_client BluetoothClient
+        -_stream Stream
+        +DiscoverDevicesAsync() Task
+        +StartListeningAsync(uuid) Task
+        +ConnectAsync(addr, uuid) Task
+        +SendMessageAsync(msg) Task
+        -ReadLoopAsync() Task
+    }
+
+    class AndroidBluetoothService {
+        -_listener BluetoothListener
+        -_client BluetoothClient
+        -_stream Stream
+        +DiscoverDevicesAsync() Task
+        +StartListeningAsync(uuid) Task
+        +ConnectAsync(addr, uuid) Task
+        +SendMessageAsync(msg) Task
+        -ReadLoopAsync() Task
+    }
+
+    class MainActivity {
+        +OnCreate(bundle) void
+        -RequestBluetoothPermissions() void
+        -SetCurrentActivity() void
+    }
+
+    class ConnectionState {
+        <<enumeration>>
+        Disconnected
+        Discovering
+        Listening
+        Connecting
+        Connected
+    }
+
+    IBluetoothService <|.. LinuxBluetoothService : implements
+    IBluetoothService <|.. AndroidBluetoothService : implements
+    BluetoothChatService --> IBluetoothService : uses
+    BluetoothChatService --> BluetoothMessage : sends and receives
+    ChatViewModel --> BluetoothChatService : uses
+    BluetoothMessage --> MessageType : has
+    LinuxBluetoothService --> MessageFramer : uses
+    AndroidBluetoothService --> MessageFramer : uses
+    LinuxBluetoothService --> ConnectionState : emits
+    AndroidBluetoothService --> ConnectionState : emits
+    MainActivity --> AndroidBluetoothService : initializes
+</div>
+</div>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+sequenceDiagram
+    participant UserA as Device A (Server)
+    participant BTA as IBluetoothService A
+    participant BT as Bluetooth RFCOMM Channel
+    participant BTB as IBluetoothService B
+    participant UserB as Device B (Client)
+
+    Note over UserA,UserB: Both devices already paired via OS
+
+    UserA->>BTA: StartListeningAsync(uuid)
+    BTA->>BT: BluetoothListener.Start()
+    Note over BTA: Awaiting connection...
+
+    UserB->>BTB: DiscoverDevicesAsync()
+    BTB-->>UserB: List of BluetoothDeviceInfo
+
+    UserB->>BTB: ConnectAsync(addressA, uuid)
+    BTB->>BT: BluetoothClient.Connect()
+    BT-->>BTA: AcceptBluetoothClient() returns
+    BTA-->>UserA: ConnectionState.Connected
+    BTB-->>UserB: ConnectionState.Connected
+
+    Note over BTA,BTB: RFCOMM stream open — both start ReadLoopAsync()
+
+    UserA->>BTA: SendMessageAsync(TextMessage)
+    BTA->>BT: MessageFramer.WriteFrameAsync([len][payload])
+    BT->>BTB: MessageFramer.ReadFrameAsync() returns frame
+    BTB-->>UserB: MessageReceived → BluetoothMessage{Type=Text}
+
+    UserB->>BTB: SendFileAsync("photo.jpg")
+    BTB->>BT: MessageFramer.WriteFrameAsync([len][FileTransfer payload])
+    BT->>BTA: ReadFrameAsync() returns frame
+    BTA-->>UserA: MessageReceived → BluetoothMessage{Type=FileTransfer}
+
+    UserA->>BTA: Disconnect()
+    BTA->>BT: Stream.Close()
+    BT-->>BTB: ReadFrameAsync returns null
+    BTB-->>UserB: ConnectionState.Disconnected
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>7 — Key Gotchas & Workarounds</h2>
+
+<ul>
+  <li><strong>Linux discovery is synchronous.</strong> <code>BluetoothClient.DiscoverDevices()</code> blocks the calling thread on Linux. Always wrap it in <code>Task.Run()</code>.</li>
+  <li><strong>Linux user permissions.</strong> The process user must be in the <code>bluetooth</code> group or running as root. Without this, socket creation silently fails.</li>
+  <li><strong><code>InTheHand.AndroidActivity.CurrentActivity</code> is mandatory on Avalonia Android.</strong> Without overriding <code>MainActivity.OnCreate</code> to set this, device discovery (which requires an Intent) will throw a <code>NullReferenceException</code>.</li>
+  <li><strong>Runtime permissions on Android 12+.</strong> Even with manifest declarations, you must request BLUETOOTH_CONNECT and BLUETOOTH_SCAN at runtime. Without them, <code>DiscoverDevices</code> returns an empty list silently.</li>
+  <li><strong>The server-side UUID must match exactly.</strong> Use the same <code>static readonly Guid ServiceUuid</code> in both apps — this is how RFCOMM SDP lookup finds the right service.</li>
+  <li><strong>Large files.</strong> For files over ~5 MB, consider chunking: send file metadata first (name, total size), then multiple frames, then an end-of-file marker. The current <code>SendFileAsync</code> reads the whole file into memory — fine for small files.</li>
+  <li><strong>Avalonia v12 vs v11.</strong> Avalonia 12.0.3 (May 2026) is the latest and supports .NET 10 cleanly. Use it; v11 on .NET 10 may have minor API mismatches in the MAUI backend.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>8 — Summary</h2>
+
+<table>
+  <tr><th>Concern</th><th>Answer</th></tr>
+  <tr><td>UI framework</td><td>Avalonia 12.0.3 (net10.0 / net10.0-android)</td></tr>
+  <tr><td>Bluetooth library</td><td><code>InTheHand.Net.Bluetooth</code> 4.2.4</td></tr>
+  <tr><td>Transport</td><td>Bluetooth Classic — RFCOMM (Serial Port Profile)</td></tr>
+  <tr><td>Linux stack</td><td>BlueZ 5.50+, AF_BLUETOOTH native sockets via P/Invoke</td></tr>
+  <tr><td>Android stack</td><td>.NET Android bindings → android.bluetooth.*</td></tr>
+  <tr><td>Pairing (Linux)</td><td><code>bluetoothctl</code> CLI before first run</td></tr>
+  <tr><td>Pairing (Android)</td><td>Android Settings → Bluetooth, then app connects</td></tr>
+  <tr><td>Message framing</td><td>4-byte length prefix + raw payload</td></tr>
+  <tr><td>Supported links</td><td>Linux↔Linux, Linux↔Android, Android↔Android</td></tr>
+</table>
+
+<footer>
+  Generated May 2026 · InTheHand.Net.Bluetooth 4.2.4 · Avalonia 12.0.3 · .NET 10
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#13161e',
+      primaryColor: '#1a2035',
+      primaryBorderColor: '#5b8dee',
+      primaryTextColor: '#e2e8f0',
+      secondaryColor: '#1e2a1e',
+      secondaryBorderColor: '#38d9a9',
+      tertiaryColor: '#1e1a2e',
+      tertiaryBorderColor: '#9775fa',
+      lineColor: '#5b8dee',
+      edgeLabelBackground: '#13161e',
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: '13px',
+    }
+  });
+</script>
+</body>
+</html>
