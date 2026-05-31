@@ -15,6 +15,7 @@ sealed class Program
         var services = new ServiceCollection();
         services.AddSingleton<IDatabaseService, DatabaseService>();
         services.AddSingleton<IBluetoothService, LinuxBluetoothService>();
+        services.AddSingleton<BluetoothChatService>();
         services.AddSingleton<MainViewModel>();
 
         App.Services = services.BuildServiceProvider();

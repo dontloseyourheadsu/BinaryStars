@@ -51,6 +51,13 @@ packages/
 *.idsig
 
 # ------------------------------
-# Logs
+# Rust / Bridge artifacts
 # ------------------------------
+**/target/
+Cargo.lock
+
+# ------------------------------
+# Gemini-specific
+# ------------------------------
+GEMINI.md
 *.log
