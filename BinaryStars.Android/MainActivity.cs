@@ -27,8 +27,6 @@ namespace BinaryStars.Android;
     LaunchMode = LaunchMode.SingleTask)]
 public class MainActivity : AvaloniaMainActivity<App>
 {
-    private const int BluetoothPermissionRequestCode = 1001;
-
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         if (App.Services == null)
@@ -36,13 +34,15 @@ public class MainActivity : AvaloniaMainActivity<App>
             var services = new ServiceCollection();
             services.AddSingleton<IDatabaseService, DatabaseService>();
             services.AddSingleton<IBluetoothService, AndroidBluetoothService>();
+            services.AddSingleton<BluetoothChatService>();
             services.AddSingleton<MainViewModel>();
 
             App.Services = services.BuildServiceProvider();
         }
 
+        InTheHand.AndroidActivity.CurrentActivity = this;
         base.OnCreate(savedInstanceState);
-        RequestBluetoothPermissionsIfNeeded();
+        _ = PermissionHelper.EnsureBluetoothPermissions(this);
     }
 
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
@@ -51,27 +51,9 @@ public class MainActivity : AvaloniaMainActivity<App>
             .WithInterFont();
     }
 
-    private void RequestBluetoothPermissionsIfNeeded()
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
     {
-        var required = new List<string>();
-
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.S)
-        {
-            required.Add("android.permission.BLUETOOTH_SCAN");
-            required.Add("android.permission.BLUETOOTH_CONNECT");
-            required.Add("android.permission.BLUETOOTH_ADVERTISE");
-        }
-
-        required.Add(Manifest.Permission.AccessFineLocation);
-
-        var pending = required
-            .Distinct()
-            .Where(permission => CheckSelfPermission(permission) != Permission.Granted)
-            .ToArray();
-
-        if (pending.Length > 0)
-        {
-            RequestPermissions(pending, BluetoothPermissionRequestCode);
-        }
+        PermissionHelper.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 }
