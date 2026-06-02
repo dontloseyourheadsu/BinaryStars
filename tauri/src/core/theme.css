@@ -1,0 +1,47 @@
+:root {
+  /* Notion Dark Theme Constants */
+  --bg-dark: #191919;
+  --card-bg-dark: #202020;
+  --border-dark: #2e2e2e;
+  --text-primary-dark: #ffffff;
+  --text-secondary-dark: #9b9b9b;
+  --accent-color: #2383e2;
+  --bubble-outgoing-dark: #2383e2;
+  --bubble-incoming-dark: #2c2c2c;
+
+  /* Notion Light Theme Constants */
+  --bg-light: #ffffff;
+  --card-bg-light: #f7f7f7;
+  --border-light: #e9e9e9;
+  --text-primary-light: #37352f;
+  --text-secondary-light: #7c7b77;
+  --bubble-outgoing-light: #2383e2;
+  --bubble-incoming-light: #f1f1f1;
+
+  font-family: 'Outfit', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Global resets and structure */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}

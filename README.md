@@ -1,54 +1,110 @@
-# BinaryStars Bluetooth Chat & File Sharing
+# BinaryStars 🌌
 
-A modern, cross-platform Bluetooth chat and file-sharing application built with **Avalonia UI** and **RFCOMM/SPP**. 
+BinaryStars is a decentralized, peer-to-peer communication app that allows you to instantly chat and share files between your devices via **pure Bluetooth (RFCOMM/SPP)**. It requires no accounts, internet connectivity, or servers.
 
-Supports **Android and Linux (Desktop)**.
-
-## Features
-- **Real-time Chat**: Messaging over Bluetooth Serial Port Profile (SPP).
-- **Persistent History**: Local chat logs and settings saved securely using SQLite.
-- **Cross-Platform**: Unified codebase for Desktop and Mobile.
-- **Dual Role Support**: Every device can act as both a **Server** and a **Client**.
+It supports seamless cross-platform connectivity:
+- 📱 **Android to Linux**
+- 💻 **Linux to Android**
+- 📱 **Android to Android**
+- 💻 **Linux to Linux**
 
 ---
 
-## Development Setup
+## 🏗️ System Architecture
 
-### 1. Prerequisites
-- **.NET 10 SDK**
-- **Android Workload**:
-  ```bash
-  dotnet workload install android
+The codebase is split into two primary projects:
+
+```mermaid
+graph TD
+    A[BinaryStars Workspace] --> B[android - Jetpack Compose]
+    A --> C[tauri - React + TypeScript]
+    A --> D[legacy - Old view-based code]
+    
+    subgraph Android MVVM Clean Architecture
+        B --> B1[Domain Layer - Entities, UseCases]
+        B --> B2[Data Layer - Bluetooth Socket Impl]
+        B --> B3[Presentation Layer - ViewModels, Compose Theme]
+    end
+    
+    subgraph Tauri Vertical Slices Architecture
+        C --> C1[Features Slices - Discovery, Chat]
+        C1 --> C2[Rust Commands / Event Emitter]
+        C1 --> C3[React Views / Local Handlers]
+    end
+```
+
+### 1. Android Application (`/android`)
+Follows **MVVM Clean Architecture**:
+- **Domain Layer**: Contains the core business rules and interfaces (`BtDevice`, `ChatMessage`, `BluetoothRepository` interface) and isolated **Use Cases** (`StartServerUseCase`, `ConnectToDeviceUseCase`, `SendMessageUseCase`, `SendFileUseCase`). No Android framework dependencies.
+- **Data Layer**: Handles Bluetooth sockets, discovery receiver scanning, base64 formatting, and disk I/O (`BluetoothRepositoryImpl`).
+- **Presentation Layer**: Built entirely on **Jetpack Compose** following an MVVM design. Displays a cosmic dark/frost light dashboard and chat logs.
+
+### 2. Desktop Application (`/tauri`)
+Follows a **Vertical Slices Architecture**:
+- Instead of grouping files by technical layer (e.g., controllers, services, UI components), they are grouped by vertical feature slices:
+  - **Discovery Slice**: Handles Bluetooth status check, device scanning, server hosting, and remote connection triggers (`DiscoveryPanel.tsx`, `discoveryApi.ts` and Rust module `discovery.rs`).
+  - **Chat Slice**: Handles text transmission, file encoding, and downloading (`ChatPanel.tsx`, `chatApi.ts` and Rust module `chat.rs`).
+- Shared state is safely managed in Rust utilizing a global `AppState` with Tokio mutexes, and events are emitted to the frontend.
+
+---
+
+## 📡 Bluetooth Communication Protocol
+
+Communication is carried out using **Bluetooth SPP (Serial Port Profile)** on RFCOMM channel 1 using UUID `00001101-0000-1000-8000-00805F9B34FB`.
+
+### 🤝 1. Connection Handshake
+Upon socket connection (client to server), the following handshake must complete:
+1. The **Client** transmits an identification header:
+   ```text
+   IDENTIFY|<client_device_id>\n
+   ```
+2. The **Server** receives the string and responds with its own identification:
+   ```text
+   IDENTIFIED|<server_device_id>\n
+   ```
+3. Once both devices verify the protocol prefix, the state shifts to `Connected` and the UI updates.
+
+### 💬 2. Message Formats
+All frames are sent line-by-line (ending with `\n`).
+
+* **Text Messages**: Simple raw text lines (newlines are replaced with spaces to fit the single-line format):
+  ```text
+  Hello space explorer!\n
   ```
-
-### 2. Platform-Specific Setup
-#### Linux (Desktop)
-- Ensure the `bluez` package is installed.
-- Bluetooth must be active.
-
-#### Android
-- **Crucial**: Bluetooth and Location permissions are required.
+* **File Messages**: Transmitted as a piped payload containing the file name and base64-encoded binary:
+  ```text
+  FILE|<filename>|<base64_data>\n
+  ```
+  * On Android, received files are decoded and stored in the app's internal sandbox: `filesDir/transfers/received`.
+  * On Linux (Tauri), files are downloaded to the user's default system `Downloads` folder.
 
 ---
 
-## Running the Application
+## 🎨 Design System
 
-### Running on Linux Desktop
-Execute the following command from the root directory:
-```bash
-dotnet run --project BinaryStars.Desktop/BinaryStars.Desktop.csproj -f net10.0
-```
-
-### Running on Android
-Ensure your device is connected (via USB or Wireless Debugging) and detected by `adb devices`, then run:
-```bash
-dotnet build BinaryStars.Android/BinaryStars.Android.csproj -f net10.0-android -t:Run
-```
+Both apps ditch classic material design templates in favor of a customized, high-contrast, premium interface:
+* **Dark Theme (Deep Space)**: Translucent glassmorphic panels, neon borders, and glowing gradient accents (Cyan and Nebula Purple).
+* **Light Theme (Frost Aurora)**: Translucent pearl white backgrounds, soft indigo outlines, and cool blue accents.
+* Single-toggle switch in both app headers allows fluid theme switching.
 
 ---
 
-## Architecture Note
-The system uses **RFCOMM (Serial Port Profile)**:
-- **Service UUID**: `00001101-0000-1000-8000-00805F9B34FB` (Standard SPP).
-- **SQLite Storage**: Uses `DatabaseService` for local persistence of chats and messages.
-- **Avalonia UI**: Handles rendering natively across platforms.
+## 🚀 Building & Running
+
+### Android Project
+1. Open the `/android` folder in Android Studio.
+2. Build files are automatically configured with Jetpack Compose compiler plugins for Kotlin 2.0.21.
+3. To compile from the CLI, run:
+   ```bash
+   cd android
+   ./gradlew assembleDebug
+   ```
+
+### Tauri Project
+1. Make sure you have Rust (`cargo`), Node.js (`npm`), and `libsoup` / `bluez` dependencies installed.
+2. Build frontend and run the app:
+   ```bash
+   cd tauri
+   npm install
+   npm run tauri dev
+   ```
