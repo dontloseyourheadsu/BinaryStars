@@ -17,6 +17,7 @@ use crate::features::chat::{
     download_bluetooth_file,
     get_messages_paged,
     save_file_to_custom_path,
+    get_recent_chats,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,7 +39,8 @@ pub fn run() {
             send_bluetooth_file,
             download_bluetooth_file,
             get_messages_paged,
-            save_file_to_custom_path
+            save_file_to_custom_path,
+            get_recent_chats
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
