@@ -446,3 +446,108 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Offline mode additions */
+.online-indicator.offline {
+  background: var(--text-secondary-dark);
+}
+
+.offline-banner {
+  padding: 16px 20px;
+  text-align: center;
+  font-size: 12px;
+  border-top: 1px solid transparent;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.offline-banner.dark {
+  background: rgba(35, 131, 226, 0.05);
+  border-top-color: var(--border-dark);
+  color: var(--text-secondary-dark);
+}
+
+.offline-banner.light {
+  background: rgba(35, 131, 226, 0.03);
+  border-top-color: var(--border-light);
+  color: var(--text-secondary-light);
+}
+
+/* Recents list styling */
+.recents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 12px;
+}
+
+.recent-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.light-theme .recent-item:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.recent-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: rgba(35, 131, 226, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  margin-right: 12px;
+}
+
+.recent-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recent-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.recent-meta h4 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recent-time {
+  font-size: 10px;
+  color: var(--text-secondary-dark);
+  white-space: nowrap;
+}
+
+.light-theme .recent-time {
+  color: var(--text-secondary-light);
+}
+
+.recent-preview {
+  font-size: 11px;
+  color: var(--text-secondary-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.light-theme .recent-preview {
+  color: var(--text-secondary-light);
+}
+
