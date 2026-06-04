@@ -177,3 +177,9 @@ pub async fn save_file_to_custom_path(msg_id: String) -> Result<String, String> 
         Err("Message file not found in history".to_string())
     }
 }
+
+#[tauri::command]
+pub async fn get_recent_chats() -> Result<Vec<crate::core::types::RecentChat>, String> {
+    crate::core::database::query_recent_chats()
+}
+

@@ -11,6 +11,7 @@ import {
 } from "./features/discovery/discoveryApi";
 import { DiscoveryPanel } from "./features/discovery/DiscoveryPanel";
 import { ChatPanel } from "./features/chat/ChatPanel";
+import { getRecentChats, RecentChat } from "./features/chat/chatApi";
 import "./core/theme.css";
 import "./App.css";
 
@@ -30,6 +31,21 @@ function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [devices, setDevices] = useState<LinuxBluetoothDevice[]>([]);
+  const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
+  const [viewingHistoryPeerId, setViewingHistoryPeerId] = useState<string | null>(null);
+
+  const updateRecentChats = async () => {
+    try {
+      const recents = await getRecentChats();
+      setRecentChats(recents);
+    } catch (e) {
+      console.error("Failed to query recent chats", e);
+    }
+  };
+
+  useEffect(() => {
+    updateRecentChats();
+  }, [connected, viewingHistoryPeerId]);
 
   // Monitor connection states
   useEffect(() => {
@@ -153,15 +169,24 @@ function App() {
             peerId={peerId}
             onDisconnect={handleDisconnect}
           />
+        ) : viewingHistoryPeerId ? (
+          <ChatPanel
+            isDark={isDark}
+            peerId={viewingHistoryPeerId}
+            isOffline={true}
+            onDisconnect={() => setViewingHistoryPeerId(null)}
+          />
         ) : (
           <DiscoveryPanel
             isDark={isDark}
             devices={devices}
+            recentChats={recentChats}
             isScanning={isScanning}
             isHosting={isHosting}
             onScanToggle={handleScanToggle}
             onHostToggle={handleHostToggle}
             onConnect={handleConnect}
+            onViewHistory={setViewingHistoryPeerId}
           />
         )}
       </main>

@@ -108,3 +108,42 @@ pub fn query_messages_paged(peer_id: &str, limit: i64, offset: i64) -> Result<Ve
     list.reverse();
     Ok(list)
 }
+
+pub fn query_recent_chats() -> Result<Vec<crate::core::types::RecentChat>, String> {
+    let conn = get_db_connection()?;
+    let mut stmt = conn.prepare(
+        "SELECT peer_id, content, is_file, file_name, MAX(sent_at) as last_msg_at
+         FROM messages
+         GROUP BY peer_id
+         ORDER BY last_msg_at DESC"
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map([], |row| {
+        let peer_id: String = row.get(0)?;
+        let content: String = row.get(1)?;
+        let is_file_int: i32 = row.get(2)?;
+        let file_name: Option<String> = row.get(3)?;
+        let last_msg_at: i64 = row.get(4)?;
+
+        let last_message = if is_file_int == 1 {
+            format!("File: {}", file_name.unwrap_or_else(|| "unnamed".to_string()))
+        } else {
+            content
+        };
+
+        Ok(crate::core::types::RecentChat {
+            peer_id,
+            last_message,
+            last_msg_at: last_msg_at as u64,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        if let Ok(chat) = r {
+            list.push(chat);
+        }
+    }
+    Ok(list)
+}
+

@@ -30,3 +30,14 @@ export async function saveFileToCustomPath(msgId: string): Promise<string> {
 export async function getMessagesPaged(peerId: string, limit: number, offset: number): Promise<BluetoothMessage[]> {
   return await invoke<BluetoothMessage[]>("get_messages_paged", { peerId, limit, offset });
 }
+
+export interface RecentChat {
+  peerId: string;
+  lastMessage: string;
+  lastMsgAt: number;
+}
+
+export async function getRecentChats(): Promise<RecentChat[]> {
+  return await invoke<RecentChat[]>("get_recent_chats");
+}
+

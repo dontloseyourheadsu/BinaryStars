@@ -17,6 +17,14 @@ pub struct BluetoothMessage {
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RecentChat {
+    pub peer_id: String,
+    pub last_message: String,
+    pub last_msg_at: u64,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LinuxBluetoothDevice {
     pub name: String,
     pub address: String,

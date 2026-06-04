@@ -6,12 +6,14 @@ import "../../features/features.css";
 interface ChatPanelProps {
   isDark: boolean;
   peerId: string;
+  isOffline?: boolean;
   onDisconnect: () => void;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
   isDark,
   peerId,
+  isOffline = false,
   onDisconnect,
 }) => {
   const [messages, setMessages] = useState<BluetoothMessage[]>([]);
@@ -45,20 +47,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       })
       .catch(console.error);
 
-    // Listen to real-time messages
-    const unlistenMsgPromise = listen("bluetooth-message", (event) => {
-      const msg = event.payload as BluetoothMessage;
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        return [...prev, msg];
+    // Listen to real-time messages if online
+    let unlistenMsgPromise: Promise<any> | null = null;
+    if (!isOffline) {
+      unlistenMsgPromise = listen("bluetooth-message", (event) => {
+        const msg = event.payload as BluetoothMessage;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+        shouldAutoScrollRef.current = true;
       });
-      shouldAutoScrollRef.current = true;
-    });
+    }
 
     return () => {
-      unlistenMsgPromise.then((unlisten) => unlisten());
+      if (unlistenMsgPromise) {
+        unlistenMsgPromise.then((unlisten) => unlisten());
+      }
     };
-  }, [peerId]);
+  }, [peerId, isOffline]);
 
   // 2. Auto scroll to bottom
   useEffect(() => {
@@ -175,14 +182,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       {/* Chat Header */}
       <div className={`chat-header ${isDark ? "dark" : "light"}`}>
         <div className="peer-info">
-          <span className="online-indicator"></span>
+          <span className={`online-indicator ${isOffline ? "offline" : ""}`}></span>
           <div>
-            <span className="header-label">Connected Peer</span>
+            <span className="header-label">{isOffline ? "Historical Archive" : "Connected Peer"}</span>
             <h4 className="peer-title">{peerId}</h4>
           </div>
         </div>
         <button onClick={onDisconnect} className="btn-disconnect">
-          Disconnect
+          {isOffline ? "Close History" : "Disconnect"}
         </button>
       </div>
 
@@ -278,36 +285,42 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         })}
       </div>
 
-      {/* Input Tray */}
-      <div className="input-tray">
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          style={{ display: "none" }}
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className={`btn-attach ${isDark ? "dark" : "light"}`}
-        >
-          📎
-        </button>
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSendText()}
-          placeholder="Type a message..."
-          className={`text-input ${isDark ? "dark" : "light"}`}
-        />
-        <button
-          onClick={handleSendText}
-          disabled={!text.trim()}
-          className={`btn-send ${text.trim() ? "active" : ""}`}
-        >
-          🚀
-        </button>
-      </div>
+      {/* Input Tray or Offline Banner */}
+      {isOffline ? (
+        <div className={`offline-banner ${isDark ? "dark" : "light"}`}>
+          <span>🪐 Viewing historical chat archive. Connect to device to transmit new signals.</span>
+        </div>
+      ) : (
+        <div className="input-tray">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className={`btn-attach ${isDark ? "dark" : "light"}`}
+          >
+            📎
+          </button>
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSendText()}
+            placeholder="Type a message..."
+            className={`text-input ${isDark ? "dark" : "light"}`}
+          />
+          <button
+            onClick={handleSendText}
+            disabled={!text.trim()}
+            className={`btn-send ${text.trim() ? "active" : ""}`}
+          >
+            🚀
+          </button>
+        </div>
+      )}
     </div>
   );
 };
