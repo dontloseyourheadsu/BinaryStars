@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State, Emitter};
+use tauri::{AppHandle, State, Emitter, Manager};
 use bluer::{rfcomm::{Profile, Role}, Session};
 use futures::StreamExt;
 use tokio::io::{AsyncWriteExt, AsyncBufReadExt, BufReader as TokioBufReader};
@@ -169,7 +169,8 @@ pub async fn start_server_impl(
                                 let mut messages = state.bluetooth.messages.lock().unwrap();
                                 messages.push(msg.clone());
                             }
-                            let _ = app_handle.emit("bluetooth-message", msg);
+                            let _ = app_handle.emit("bluetooth-message", msg.clone());
+                            trigger_notification(&app_handle, &peer_id, &msg.content, msg.is_file);
                             line.clear();
                         }
                     })
@@ -358,7 +359,8 @@ pub async fn connect_impl(
                     let mut messages = state.bluetooth.messages.lock().unwrap();
                     messages.push(msg.clone());
                 }
-                let _ = app_handle_read.emit("bluetooth-message", msg);
+                let _ = app_handle_read.emit("bluetooth-message", msg.clone());
+                trigger_notification(&app_handle_read, &peer_id_read, &msg.content, msg.is_file);
                 line.clear();
             }
         });
@@ -390,4 +392,42 @@ pub async fn connect_impl(
     });
 
     Ok(peer_id)
+}
+
+pub fn trigger_notification(app_handle: &AppHandle, sender: &str, content: &str, is_file: bool) {
+    let summary = if is_file {
+        format!("File from {}", sender)
+    } else {
+        format!("New message from {}", sender)
+    };
+
+    let body = content.to_string();
+
+    let mut notification = notify_rust::Notification::new();
+    notification
+        .summary(&summary)
+        .body(&body)
+        .icon("dialog-information")
+        .action("default", "Open Chat");
+
+    match notification.show() {
+        Ok(handle) => {
+            let app_handle_clone = app_handle.clone();
+            let sender_clone = sender.to_string();
+            tokio::task::spawn_blocking(move || {
+                handle.wait_for_action(move |action| {
+                    if action == "default" {
+                        if let Some(window) = app_handle_clone.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                        let _ = app_handle_clone.emit("open-chat", sender_clone);
+                    }
+                });
+            });
+        }
+        Err(e) => {
+            eprintln!("[ERROR] Failed to show notification: {:?}", e);
+        }
+    }
 }

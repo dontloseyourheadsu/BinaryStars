@@ -81,38 +81,57 @@ fun MainScreen(
                         .fillMaxSize()
                         .weight(1f)
                 ) {
-                    when (val state = connState) {
-                        is ConnectionState.Disconnected -> {
-                            DashboardScreen(
-                                isDark = isDark,
-                                devices = devices,
-                                isScanning = isScanning,
-                                isHosting = isHosting,
-                                onScanToggle = {
-                                    if (isScanning) viewModel.stopScanning() else viewModel.startScanning()
-                                },
-                                onHostToggle = {
-                                    if (isHosting) viewModel.stopHosting() else viewModel.startHosting()
-                                },
-                                onConnect = { viewModel.connectToDevice(it) }
-                            )
-                        }
-                        is ConnectionState.Connecting -> {
-                            ConnectingScreen(isDark = isDark)
-                        }
-                        is ConnectionState.Connected -> {
-                            ChatScreen(
-                                isDark = isDark,
-                                peerId = state.peerId,
-                                messages = messages,
-                                onSendMessage = { viewModel.sendMessage(it) },
-                                onPickFile = onPickFile,
-                                onDisconnect = { viewModel.disconnect() },
-                                onLoadMore = { viewModel.loadMoreHistory(state.peerId) },
-                                onOpenFile = onOpenFile,
-                                onSaveFile = onSaveFile,
-                                onShareFile = onShareFile
-                            )
+                    val historyPeerId by viewModel.viewingHistoryPeerId.collectAsState()
+
+                    if (historyPeerId != null) {
+                        ChatScreen(
+                            isDark = isDark,
+                            peerId = historyPeerId!!,
+                            messages = messages,
+                            onSendMessage = { /* Cannot send message in history */ },
+                            onPickFile = { /* Cannot pick file in history */ },
+                            onDisconnect = { viewModel.setViewingHistoryPeerId(null) },
+                            onLoadMore = { viewModel.loadMoreHistory(historyPeerId!!) },
+                            onOpenFile = onOpenFile,
+                            onSaveFile = onSaveFile,
+                            onShareFile = onShareFile,
+                            isOffline = true
+                        )
+                    } else {
+                        when (val state = connState) {
+                            is ConnectionState.Disconnected -> {
+                                DashboardScreen(
+                                    isDark = isDark,
+                                    devices = devices,
+                                    isScanning = isScanning,
+                                    isHosting = isHosting,
+                                    onScanToggle = {
+                                        if (isScanning) viewModel.stopScanning() else viewModel.startScanning()
+                                    },
+                                    onHostToggle = {
+                                        if (isHosting) viewModel.stopHosting() else viewModel.startHosting()
+                                    },
+                                    onConnect = { viewModel.connectToDevice(it) }
+                                )
+                            }
+                            is ConnectionState.Connecting -> {
+                                ConnectingScreen(isDark = isDark)
+                            }
+                            is ConnectionState.Connected -> {
+                                ChatScreen(
+                                    isDark = isDark,
+                                    peerId = state.peerId,
+                                    messages = messages,
+                                    onSendMessage = { viewModel.sendMessage(it) },
+                                    onPickFile = onPickFile,
+                                    onDisconnect = { viewModel.disconnect() },
+                                    onLoadMore = { viewModel.loadMoreHistory(state.peerId) },
+                                    onOpenFile = onOpenFile,
+                                    onSaveFile = onSaveFile,
+                                    onShareFile = onShareFile,
+                                    isOffline = false
+                                )
+                            }
                         }
                     }
                 }
@@ -434,7 +453,8 @@ fun ChatScreen(
     onLoadMore: () -> Unit,
     onOpenFile: (ChatMessage) -> Unit,
     onSaveFile: (ChatMessage) -> Unit,
-    onShareFile: (ChatMessage) -> Unit
+    onShareFile: (ChatMessage) -> Unit,
+    isOffline: Boolean = false
 ) {
     var textState by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -481,14 +501,14 @@ fun ChatScreen(
                     modifier = Modifier
                         .size(8.dp)
                         .background(
-                            color = Color(0xFF2EA85C), // Green Notion dot
+                            color = if (isOffline) Color(0xFF888888) else Color(0xFF2EA85C), // Grey or Green dot
                             shape = RoundedCornerShape(4.dp)
                         )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = "Connected Peer",
+                        text = if (isOffline) "Historical Archive" else "Connected Peer",
                         fontSize = 10.sp,
                         color = if (isDark) TextDarkSecondary else TextLightSecondary,
                         fontWeight = FontWeight.Bold
@@ -514,13 +534,13 @@ fun ChatScreen(
                     .height(32.dp)
                     .border(
                         1.dp,
-                        Color.Red.copy(alpha = 0.5f),
+                        if (isOffline) (if (isDark) DarkBorder else LightBorder) else Color.Red.copy(alpha = 0.5f),
                         RoundedCornerShape(6.dp)
                     )
             ) {
                 Text(
-                    text = "DISCONNECT",
-                    color = Color.Red,
+                    text = if (isOffline) "CLOSE HISTORY" else "DISCONNECT",
+                    color = if (isOffline) (if (isDark) TextDarkPrimary else TextLightPrimary) else Color.Red,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -549,92 +569,118 @@ fun ChatScreen(
         }
 
         // Bottom Input Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // File Attachment Button
-            IconButton(
-                onClick = onPickFile,
+        if (isOffline) {
+            Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .background(
+                        color = (if (isDark) DarkCardBg else LightCardBg).copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
                     .border(
                         width = 1.dp,
                         color = if (isDark) DarkBorder else LightBorder,
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
-                    .background(
-                        color = if (isDark) DarkCardBg else LightCardBg,
-                        shape = RoundedCornerShape(6.dp)
-                    )
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Send File",
-                    tint = if (isDark) TextDarkPrimary else TextLightPrimary
+                Text(
+                    text = "🪐 Viewing historical chat archive. Connect to device to transmit new signals.",
+                    fontSize = 12.sp,
+                    color = if (isDark) TextDarkSecondary else TextLightSecondary,
+                    textAlign = TextAlign.Center
                 )
             }
-
-            // Text Input Field
-            OutlinedTextField(
-                value = textState,
-                onValueChange = { textState = it },
-                placeholder = {
-                    Text(
-                        text = "Type a message...",
-                        color = if (isDark) TextDarkSecondary else TextLightSecondary,
-                        fontSize = 14.sp
-                    )
-                },
+        } else {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .background(if (isDark) DarkCardBg else LightCardBg, shape = RoundedCornerShape(6.dp)),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryBlue,
-                    unfocusedBorderColor = if (isDark) DarkBorder else LightBorder,
-                    focusedTextColor = if (isDark) TextDarkPrimary else TextLightPrimary,
-                    unfocusedTextColor = if (isDark) TextDarkPrimary else TextLightPrimary
-                ),
-                shape = RoundedCornerShape(6.dp),
-                maxLines = 3,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = {
-                    if (textState.isNotBlank()) {
-                        onSendMessage(textState)
-                        textState = ""
-                    }
-                })
-            )
-
-            // Send Button
-            IconButton(
-                onClick = {
-                    if (textState.isNotBlank()) {
-                        onSendMessage(textState)
-                        textState = ""
-                    }
-                },
-                enabled = textState.isNotBlank(),
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(
-                        if (textState.isNotBlank()) PrimaryBlue else (if (isDark) DarkCardBg else LightCardBg)
-                    )
-                    .border(
-                        1.dp,
-                        if (textState.isNotBlank()) PrimaryBlue else (if (isDark) DarkBorder else LightBorder),
-                        RoundedCornerShape(6.dp)
-                    )
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Send,
-                    contentDescription = "Send",
-                    tint = if (textState.isNotBlank()) Color.White else (if (isDark) TextDarkSecondary else TextLightSecondary)
+                // File Attachment Button
+                IconButton(
+                    onClick = onPickFile,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .border(
+                            width = 1.dp,
+                            color = if (isDark) DarkBorder else LightBorder,
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        .background(
+                            color = if (isDark) DarkCardBg else LightCardBg,
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Send File",
+                        tint = if (isDark) TextDarkPrimary else TextLightPrimary
+                    )
+                }
+
+                // Text Input Field
+                OutlinedTextField(
+                    value = textState,
+                    onValueChange = { textState = it },
+                    placeholder = {
+                        Text(
+                            text = "Type a message...",
+                            color = if (isDark) TextDarkSecondary else TextLightSecondary,
+                            fontSize = 14.sp
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(if (isDark) DarkCardBg else LightCardBg, shape = RoundedCornerShape(6.dp)),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryBlue,
+                        unfocusedBorderColor = if (isDark) DarkBorder else LightBorder,
+                        focusedTextColor = if (isDark) TextDarkPrimary else TextLightPrimary,
+                        unfocusedTextColor = if (isDark) TextDarkPrimary else TextLightPrimary
+                    ),
+                    shape = RoundedCornerShape(6.dp),
+                    maxLines = 3,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        if (textState.isNotBlank()) {
+                            onSendMessage(textState)
+                            textState = ""
+                        }
+                    })
                 )
+
+                // Send Button
+                IconButton(
+                    onClick = {
+                        if (textState.isNotBlank()) {
+                            onSendMessage(textState)
+                            textState = ""
+                        }
+                    },
+                    enabled = textState.isNotBlank(),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            if (textState.isNotBlank()) PrimaryBlue else (if (isDark) DarkCardBg else LightCardBg)
+                        )
+                        .border(
+                            1.dp,
+                            if (textState.isNotBlank()) PrimaryBlue else (if (isDark) DarkBorder else LightBorder),
+                            RoundedCornerShape(6.dp)
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send",
+                        tint = if (textState.isNotBlank()) Color.White else (if (isDark) TextDarkSecondary else TextLightSecondary)
+                    )
+                }
             }
         }
     }

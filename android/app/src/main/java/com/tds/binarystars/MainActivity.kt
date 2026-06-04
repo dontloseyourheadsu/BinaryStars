@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         checkAndRequestPermissions()
+        handleIntent(intent)
 
         setContent {
             MainScreen(
@@ -61,6 +62,18 @@ class MainActivity : ComponentActivity() {
                 onSaveFile = { message -> saveFileToPublicDownloads(message) },
                 onShareFile = { message -> shareFile(message) }
             )
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        intent?.getStringExtra("EXTRA_PEER_ID")?.let { peerId ->
+            viewModel.openChatFromIntent(peerId)
         }
     }
 
@@ -75,6 +88,10 @@ class MainActivity : ComponentActivity() {
             permissions.add(Manifest.permission.BLUETOOTH)
             permissions.add(Manifest.permission.BLUETOOTH_ADMIN)
             permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
         val missingPermissions = permissions.filter {

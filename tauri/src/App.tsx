@@ -80,6 +80,18 @@ function App() {
     };
   }, []);
 
+  // Listen for open-chat events from notification click
+  useEffect(() => {
+    const unlistenOpenChatPromise = listen<string>("open-chat", (event) => {
+      const targetPeerId = event.payload;
+      setViewingHistoryPeerId(targetPeerId);
+    });
+
+    return () => {
+      unlistenOpenChatPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
   const updateDevicesList = async () => {
     try {
       const list = await getBluetoothDevices();
