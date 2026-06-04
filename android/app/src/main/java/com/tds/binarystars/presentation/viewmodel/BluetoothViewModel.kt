@@ -57,6 +57,27 @@ class BluetoothViewModel(
     private val _isDarkTheme = MutableStateFlow(true)
     val isDarkTheme = _isDarkTheme.asStateFlow()
 
+    private val _viewingHistoryPeerId = MutableStateFlow<String?>(null)
+    val viewingHistoryPeerId = _viewingHistoryPeerId.asStateFlow()
+
+    fun setViewingHistoryPeerId(peerId: String?) {
+        _viewingHistoryPeerId.value = peerId
+        if (peerId != null) {
+            initMessageSession(peerId)
+        } else {
+            clearMessageSession()
+        }
+    }
+
+    fun openChatFromIntent(peerId: String) {
+        val state = connectionState.value
+        if (state is ConnectionState.Connected && state.peerId == peerId) {
+            _viewingHistoryPeerId.value = null
+        } else {
+            setViewingHistoryPeerId(peerId)
+        }
+    }
+
     private var scanJob: Job? = null
     private var serverJob: Job? = null
     private var messageCollectorJob: Job? = null
@@ -66,9 +87,12 @@ class BluetoothViewModel(
         viewModelScope.launch {
             connectionState.collect { state ->
                 if (state is ConnectionState.Connected) {
+                    _viewingHistoryPeerId.value = null // Clear history view if connected
                     initMessageSession(state.peerId)
                 } else {
-                    clearMessageSession()
+                    if (_viewingHistoryPeerId.value == null) {
+                        clearMessageSession()
+                    }
                 }
             }
         }
