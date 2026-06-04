@@ -411,8 +411,20 @@ pub fn trigger_notification(app_handle: &AppHandle, sender: &str, content: &str,
         .action("default", "Open Chat");
 
     match notification.show() {
-        Ok(_handle) => {
-            println!("[INFO] Notification shown for message from {}", sender);
+        Ok(handle) => {
+            let app_handle_clone = app_handle.clone();
+            let sender_clone = sender.to_string();
+            tokio::task::spawn_blocking(move || {
+                handle.wait_for_action(move |action| {
+                    if action == "default" {
+                        if let Some(window) = app_handle_clone.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                        let _ = app_handle_clone.emit("open-chat", sender_clone);
+                    }
+                });
+            });
         }
         Err(e) => {
             eprintln!("[ERROR] Failed to show notification: {:?}", e);
