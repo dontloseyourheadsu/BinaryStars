@@ -9,7 +9,7 @@ import com.tds.binarystars.domain.usecase.*
 class BluetoothViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(BluetoothViewModel::class.java)) {
-            val repository = BluetoothRepositoryImpl(context.applicationContext)
+            val repository = com.tds.binarystars.BinaryStarsApp.repository
             
             @Suppress("UNCHECKED_CAST")
             return BluetoothViewModel(

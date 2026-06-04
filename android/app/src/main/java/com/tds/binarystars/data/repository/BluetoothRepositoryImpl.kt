@@ -49,6 +49,24 @@ class BluetoothRepositoryImpl(
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     override fun getConnectionState(): Flow<ConnectionState> = _connectionState.asStateFlow()
 
+    private fun updateConnectionState(state: ConnectionState) {
+        _connectionState.value = state
+        val intent = Intent(context, BluetoothService::class.java)
+        try {
+            if (state is ConnectionState.Connected || state is ConnectionState.Connecting) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } else if (state is ConnectionState.Disconnected) {
+                context.stopService(intent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting/stopping foreground service: ${e.message}")
+        }
+    }
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     override fun getMessages(): Flow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -156,7 +174,7 @@ class BluetoothRepositoryImpl(
                     reader = inputReader
                     writer = outputStream
                     
-                    _connectionState.value = ConnectionState.Connected(peerId, socket.remoteDevice.address)
+                    updateConnectionState(ConnectionState.Connected(peerId, socket.remoteDevice.address))
                     channel.trySend(ConnectionState.Connected(peerId, socket.remoteDevice.address))
 
                     // Start reading messages
@@ -201,7 +219,7 @@ class BluetoothRepositoryImpl(
         disconnect()
 
         trySend(ConnectionState.Connecting)
-        _connectionState.value = ConnectionState.Connecting
+        updateConnectionState(ConnectionState.Connecting)
 
         connectionJob = scope.launch {
             try {
@@ -227,7 +245,7 @@ class BluetoothRepositoryImpl(
                     writer = outputStream
 
                     val connectedState = ConnectionState.Connected(peerId, device.address)
-                    _connectionState.value = connectedState
+                    updateConnectionState(connectedState)
                     trySend(connectedState)
 
                     // Start reading loop
@@ -237,13 +255,13 @@ class BluetoothRepositoryImpl(
                     Log.e(TAG, "CONNECTION FAILED (CLIENT): Handshake verification failed from ${device.address}")
                     socket.close()
                     trySend(ConnectionState.Disconnected)
-                    _connectionState.value = ConnectionState.Disconnected
+                    updateConnectionState(ConnectionState.Disconnected)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Client connection failed: ${e.message}")
                 Log.e(TAG, "CONNECTION FAILED (CLIENT): Connection to ${device.address} failed: ${e.message}")
                 trySend(ConnectionState.Disconnected)
-                _connectionState.value = ConnectionState.Disconnected
+                updateConnectionState(ConnectionState.Disconnected)
             }
         }
 
@@ -277,7 +295,7 @@ class BluetoothRepositoryImpl(
         }
         
         if (_connectionState.value != ConnectionState.Disconnected) {
-            _connectionState.value = ConnectionState.Disconnected
+            updateConnectionState(ConnectionState.Disconnected)
         }
     }
 
