@@ -16,6 +16,11 @@ import android.util.Log
 import com.tds.binarystars.domain.model.BtDevice
 import com.tds.binarystars.domain.model.ChatMessage
 import com.tds.binarystars.domain.repository.BluetoothRepository
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import androidx.core.app.NotificationCompat
+import com.tds.binarystars.MainActivity
 import com.tds.binarystars.domain.repository.ConnectionState
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.awaitClose
@@ -392,6 +397,7 @@ class BluetoothRepositoryImpl(
                         // Save to SQLite
                         dbHelper.insertMessage(peerId, msg)
                         _messages.value = _messages.value + msg
+                        triggerNotification(peerId, msg.body, false)
                     }
                 }
             } catch (e: Exception) {
@@ -429,6 +435,7 @@ class BluetoothRepositoryImpl(
                 // Save to SQLite
                 dbHelper.insertMessage(peerId, msg)
                 _messages.value = _messages.value + msg
+                triggerNotification(peerId, msg.body, true)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to save file: ${e.message}")
             }
@@ -507,6 +514,46 @@ class BluetoothRepositoryImpl(
                 Log.e(TAG, "Error unregistering discovery receiver: ${e.message}")
             }
         }
+    }
+
+    private fun triggerNotification(peerId: String, content: String, isFile: Boolean) {
+        val channelId = "binarystars_chat_channel"
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Chat Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for received messages and files"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_PEER_ID", peerId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            peerId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = if (isFile) "File received from $peerId" else "Message from $peerId"
+
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        notificationManager.notify(peerId.hashCode(), notification)
     }
 
     private fun getConnectionStateValue(): ConnectionState {
