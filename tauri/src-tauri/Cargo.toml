@@ -31,4 +31,6 @@ dirs = "5"
 uuid = { version = "1.7", features = ["v4", "serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 rfd = "0.14"
+aes-gcm = "0.10"
+sha2 = "0.10"
 
