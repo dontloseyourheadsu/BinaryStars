@@ -728,6 +728,14 @@ fun MessageBubble(
             ),
         horizontalAlignment = alignment
     ) {
+        if (!message.isOutgoing && message.senderDeviceId != message.deviceId) {
+            Text(
+                text = message.senderDeviceId,
+                fontSize = 10.sp,
+                color = if (isDark) TextDarkSecondary else TextLightSecondary,
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+        }
         Box(modifier = bubbleModifier) {
             if (message.isFile) {
                 FileMessageBody(
