@@ -37,6 +37,7 @@ pub async fn start_server_impl(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     my_device_id: String,
+    password: Option<String>,
 ) -> Result<String, String> {
     let bluetooth = &state.bluetooth;
     {
@@ -44,6 +45,11 @@ pub async fn start_server_impl(
         if s.is_some() {
             return Ok("Server already running".to_string());
         }
+    }
+
+    {
+        let mut pwd = bluetooth.password.lock().unwrap();
+        *pwd = password.clone();
     }
 
     let session = Session::new().await.map_err(|e| e.to_string())?;
@@ -69,28 +75,60 @@ pub async fn start_server_impl(
 
             if let Ok(stream) = req.accept() {
                 let peer_address = stream.peer_addr().ok().map(|a| a.addr.to_string()).unwrap_or_default();
+
+                // Check if already connected (enforce single-client connection)
+                if state.bluetooth.connected_device_id.lock().unwrap().is_some() {
+                    let mut writer = stream;
+                    let _ = writer.write_all(b"ERROR|Host busy: client already connected\n").await;
+                    let _ = writer.flush().await;
+                    eprintln!("[ERROR] CONNECTION REJECTED (SERVER): Host is already connected");
+                    continue;
+                }
+
                 let (tx, mut rx) = mpsc::unbounded_channel::<String>();
                 let (reader, mut writer) = stream.into_split();
                 let mut reader = TokioBufReader::new(reader);
 
                 // Handshake
                 let mut identified = false;
+                let mut pwd_fail = false;
                 let mut peer_id = String::new();
                 let mut line = String::new();
                 let res = tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut line)).await;
                 if let Ok(Ok(_)) = res {
                     let raw = line.trim();
                     if raw.starts_with("IDENTIFY|") {
-                        let parts: Vec<&str> = raw.splitn(2, '|').collect();
+                        let parts: Vec<&str> = raw.split('|').collect();
                         if parts.len() >= 2 {
-                            identified = true;
                             peer_id = parts[1].to_string();
+                            let client_pwd = parts.get(2).map(|s| s.to_string()).unwrap_or_default();
+
+                            let host_pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+                            if let Some(host_pwd) = host_pwd_opt {
+                                if !host_pwd.is_empty() && host_pwd != client_pwd {
+                                    pwd_fail = true;
+                                } else {
+                                    identified = true;
+                                }
+                            } else {
+                                identified = true;
+                            }
                         }
                     }
                 }
 
+                if pwd_fail {
+                    let mut writer = writer;
+                    let _ = writer.write_all(b"ERROR|Password required or incorrect\n").await;
+                    let _ = writer.flush().await;
+                    eprintln!("[ERROR] CONNECTION REJECTED (SERVER): Password mismatch from {}", peer_address);
+                    continue;
+                }
+
                 if !identified {
+                    let mut writer = writer;
                     let _ = writer.write_all(b"ERROR|Identity verification failed\n").await;
+                    let _ = writer.flush().await;
                     eprintln!("[ERROR] CONNECTION FAILED (SERVER): Handshake validation failed from {}", peer_address);
                     continue;
                 }
