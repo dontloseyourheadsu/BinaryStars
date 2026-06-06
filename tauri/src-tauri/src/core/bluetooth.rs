@@ -468,7 +468,165 @@ pub async fn connect_impl(
                     break;
                 }
                 let raw = line.trim();
-                let msg = if raw.starts_with("ENC_FILE|") {
+                let msg = if raw.starts_with("GROUP_MSG|") {
+                    let parts: Vec<&str> = raw.splitn(3, '|').collect();
+                    if parts.len() >= 3 {
+                        let sender_id = parts[1].to_string();
+                        let content = parts[2].to_string();
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: sender_id,
+                            content,
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("GROUP_ENC|") {
+                    let parts: Vec<&str> = raw.splitn(3, '|').collect();
+                    if parts.len() >= 3 {
+                        let sender_id = parts[1].to_string();
+                        let encrypted_data = parts[2];
+                        let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+                        let decrypted_res = if let Some(pwd) = pwd_opt {
+                            crate::core::crypto::decrypt(encrypted_data, &pwd)
+                        } else {
+                            Err("No decryption password available".to_string())
+                        };
+                        match decrypted_res {
+                            Ok(decrypted_bytes) => {
+                                let decrypted_text = String::from_utf8(decrypted_bytes).unwrap_or_default();
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: decrypted_text,
+                                    is_file: false,
+                                    file_name: None,
+                                    base64_data: None,
+                                    file_path: None,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                            Err(e) => {
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: format!("Error decrypting message: {}", e),
+                                    is_file: false,
+                                    file_name: None,
+                                    base64_data: None,
+                                    file_path: None,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("GROUP_FILE|") {
+                    let parts: Vec<&str> = raw.splitn(4, '|').collect();
+                    if parts.len() >= 4 {
+                        let sender_id = parts[1].to_string();
+                        let file_name = parts[2].to_string();
+                        let base64_data = parts[3];
+                        let file_path = save_received_file(&file_name, base64_data);
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: sender_id,
+                            content: format!("Received file: {}", file_name),
+                            is_file: true,
+                            file_name: Some(file_name),
+                            base64_data: None,
+                            file_path,
+                            sent_at: current_epoch_ms(),
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("GROUP_ENC_FILE|") {
+                    let parts: Vec<&str> = raw.splitn(4, '|').collect();
+                    if parts.len() >= 4 {
+                        let sender_id = parts[1].to_string();
+                        let file_name = parts[2].to_string();
+                        let encrypted_data = parts[3];
+                        let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+                        let decrypted_res = if let Some(pwd) = pwd_opt {
+                            crate::core::crypto::decrypt(encrypted_data, &pwd)
+                        } else {
+                            Err("No decryption password available".to_string())
+                        };
+                        match decrypted_res {
+                            Ok(decrypted_bytes) => {
+                                let decrypted_base64 = String::from_utf8(decrypted_bytes).unwrap_or_default();
+                                let file_path = save_received_file(&file_name, &decrypted_base64);
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: format!("Received file: {}", file_name),
+                                    is_file: true,
+                                    file_name: Some(file_name),
+                                    base64_data: None,
+                                    file_path,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                            Err(e) => {
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: format!("Error decrypting file: {}", e),
+                                    is_file: false,
+                                    file_name: None,
+                                    base64_data: None,
+                                    file_path: None,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("ENC_FILE|") {
                     let parts: Vec<&str> = raw.splitn(3, '|').collect();
                     if parts.len() >= 3 {
                         let file_name = parts[1].to_string();
@@ -608,7 +766,7 @@ pub async fn connect_impl(
                     messages.push(msg.clone());
                 }
                 let _ = app_handle_read.emit("bluetooth-message", msg.clone());
-                trigger_notification(&app_handle_read, &peer_id_read, &msg.content, msg.is_file);
+                trigger_notification(&app_handle_read, &msg.sender, &msg.content, msg.is_file);
                 line.clear();
             }
         });
