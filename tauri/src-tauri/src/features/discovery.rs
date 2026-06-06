@@ -22,8 +22,9 @@ pub async fn start_bluetooth_server(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     my_device_id: String,
+    password: Option<String>,
 ) -> Result<String, String> {
-    start_server_impl(app_handle, state, my_device_id).await
+    start_server_impl(app_handle, state, my_device_id, password).await
 }
 
 #[tauri::command]
@@ -43,6 +44,9 @@ pub async fn stop_bluetooth_server(state: State<'_, AppState>) -> Result<(), Str
     let mut m = state.bluetooth.messages.lock().unwrap();
     m.clear();
     
+    let mut pwd = state.bluetooth.password.lock().unwrap();
+    *pwd = None;
+    
     Ok(())
 }
 
@@ -52,8 +56,9 @@ pub async fn connect_bluetooth_device(
     state: State<'_, AppState>,
     my_device_id: String,
     device_address: String,
+    password: Option<String>,
 ) -> Result<String, String> {
-    connect_impl(app_handle, state, my_device_id, device_address).await
+    connect_impl(app_handle, state, my_device_id, device_address, password).await
 }
 
 #[tauri::command]

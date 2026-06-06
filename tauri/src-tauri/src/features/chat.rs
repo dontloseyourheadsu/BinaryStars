@@ -14,7 +14,18 @@ pub async fn send_bluetooth_message(
     let tx = state.bluetooth.tx.lock().unwrap();
     if let Some(tx) = &*tx {
         let clean = content.replace('\n', " ");
-        tx.send(format!("{}\n", clean)).map_err(|e| e.to_string())?;
+        let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+        let payload = if let Some(pwd) = pwd_opt {
+            if !pwd.is_empty() {
+                let encrypted = crate::core::crypto::encrypt(clean.as_bytes(), &pwd)?;
+                format!("ENC|{}\n", encrypted)
+            } else {
+                format!("{}\n", clean)
+            }
+        } else {
+            format!("{}\n", clean)
+        };
+        tx.send(payload).map_err(|e| e.to_string())?;
         
         let peer_id = state.bluetooth.connected_device_id.lock().unwrap().clone().unwrap_or_else(|| "Unknown".to_string());
         println!("[INFO] MESSAGE SENT: From Me to peer {}", peer_id);
@@ -53,7 +64,17 @@ pub async fn send_bluetooth_file(
 ) -> Result<(), String> {
     let tx = state.bluetooth.tx.lock().unwrap();
     if let Some(tx) = &*tx {
-        let payload = format!("FILE|{}|{}\n", name, base64_data);
+        let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+        let payload = if let Some(pwd) = pwd_opt {
+            if !pwd.is_empty() {
+                let encrypted_base64 = crate::core::crypto::encrypt(base64_data.as_bytes(), &pwd)?;
+                format!("ENC_FILE|{}|{}\n", name, encrypted_base64)
+            } else {
+                format!("FILE|{}|{}\n", name, base64_data)
+            }
+        } else {
+            format!("FILE|{}|{}\n", name, base64_data)
+        };
         tx.send(payload).map_err(|e| e.to_string())?;
         
         let peer_id = state.bluetooth.connected_device_id.lock().unwrap().clone().unwrap_or_else(|| "Unknown".to_string());

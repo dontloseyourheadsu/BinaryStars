@@ -156,3 +156,106 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(155, 155, 155, 0.3);
 }
+
+/* Password modal styling */
+.pwd-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.pwd-modal-card {
+  width: 380px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: modalScaleUp 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+}
+
+@keyframes modalScaleUp {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pwd-modal-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.pwd-modal-card p {
+  font-size: 12px;
+  color: var(--text-secondary-dark);
+  margin: 0;
+}
+
+.pwd-modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: inherit;
+  box-sizing: border-box;
+}
+
+.pwd-modal-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.pwd-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.btn-pwd-cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: inherit;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-pwd-cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-pwd-submit {
+  background: var(--accent-color);
+  border: none;
+  color: white;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-pwd-submit:hover {
+  filter: brightness(1.1);
+}
+

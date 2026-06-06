@@ -38,6 +38,7 @@ pub struct BluetoothState {
     pub connected_device_id: StdMutex<Option<String>>,
     pub connected_device_address: StdMutex<Option<String>>,
     pub messages: StdMutex<Vec<BluetoothMessage>>,
+    pub password: StdMutex<Option<String>>,
 }
 
 impl BluetoothState {
@@ -48,6 +49,7 @@ impl BluetoothState {
             connected_device_id: StdMutex::new(None),
             connected_device_address: StdMutex::new(None),
             messages: StdMutex::new(Vec::new()),
+            password: StdMutex::new(None),
         }
     }
 }

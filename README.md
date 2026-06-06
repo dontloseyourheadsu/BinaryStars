@@ -54,27 +54,38 @@ Communication is carried out using **Bluetooth SPP (Serial Port Profile)** on RF
 
 ### 🤝 1. Connection Handshake
 Upon socket connection (client to server), the following handshake must complete:
-1. The **Client** transmits an identification header:
+1. The **Client** transmits an identification header (optionally containing the password):
    ```text
-   IDENTIFY|<client_device_id>\n
+   IDENTIFY|<client_device_id>|<optional_password>\n
    ```
-2. The **Server** receives the string and responds with its own identification:
+2. The **Server** checks the connection status. If a client is already connected, it rejects the socket with `ERROR|Host busy: client already connected\n`. If a password was set by the host, it verifies the client password, rejecting with `ERROR|Password required or incorrect\n` on failure.
+3. If valid, the **Server** responds with its own identification:
    ```text
    IDENTIFIED|<server_device_id>\n
    ```
-3. Once both devices verify the protocol prefix, the state shifts to `Connected` and the UI updates.
+4. Once both devices verify the protocol prefix, the state shifts to `Connected` and the UI updates.
 
 ### 💬 2. Message Formats
 All frames are sent line-by-line (ending with `\n`).
 
-* **Text Messages**: Simple raw text lines (newlines are replaced with spaces to fit the single-line format):
-  ```text
-  Hello space explorer!\n
-  ```
-* **File Messages**: Transmitted as a piped payload containing the file name and base64-encoded binary:
-  ```text
-  FILE|<filename>|<base64_data>\n
-  ```
+* **Text Messages**:
+  * Unencrypted: Simple raw text lines (newlines are replaced with spaces):
+    ```text
+    Hello space explorer!\n
+    ```
+  * Encrypted (AES-256-GCM): Pre-tagged with `ENC|` followed by the base64-encoded encrypted payload:
+    ```text
+    ENC|<encrypted_base64>\n
+    ```
+* **File Messages**:
+  * Unencrypted: Transmitted as a piped payload containing the file name and base64-encoded binary:
+    ```text
+    FILE|<filename>|<base64_data>\n
+    ```
+  * Encrypted (AES-256-GCM): Pre-tagged with `ENC_FILE|` containing the filename and encrypted base64 payload:
+    ```text
+    ENC_FILE|<filename>|<encrypted_base64>\n
+    ```
   * On Android, received files are decoded and stored in the app's internal sandbox: `filesDir/transfers/received`.
   * On Linux (Tauri), files are downloaded to the user's default system `Downloads` folder.
 
