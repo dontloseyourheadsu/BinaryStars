@@ -212,6 +212,12 @@ function App() {
             peerId={peerId}
             onDisconnect={handleDisconnect}
           />
+        ) : isHosting ? (
+          <ChatPanel
+            isDark={isDark}
+            peerId="Group Chat Session"
+            onDisconnect={handleDisconnect}
+          />
         ) : viewingHistoryPeerId ? (
           <ChatPanel
             isDark={isDark}

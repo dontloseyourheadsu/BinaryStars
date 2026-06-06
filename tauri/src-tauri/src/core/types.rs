@@ -32,6 +32,12 @@ pub struct LinuxBluetoothDevice {
     pub paired: bool,
 }
 
+pub struct ConnectedClient {
+    pub peer_id: String,
+    pub peer_address: String,
+    pub tx: mpsc::UnboundedSender<String>,
+}
+
 pub struct BluetoothState {
     pub session: StdMutex<Option<Session>>,
     pub tx: StdMutex<Option<mpsc::UnboundedSender<String>>>,
@@ -39,6 +45,7 @@ pub struct BluetoothState {
     pub connected_device_address: StdMutex<Option<String>>,
     pub messages: StdMutex<Vec<BluetoothMessage>>,
     pub password: StdMutex<Option<String>>,
+    pub clients: StdMutex<std::collections::HashMap<String, ConnectedClient>>,
 }
 
 impl BluetoothState {
@@ -50,6 +57,7 @@ impl BluetoothState {
             connected_device_address: StdMutex::new(None),
             messages: StdMutex::new(Vec::new()),
             password: StdMutex::new(None),
+            clients: StdMutex::new(std::collections::HashMap::new()),
         }
     }
 }
@@ -57,3 +65,4 @@ impl BluetoothState {
 pub struct AppState {
     pub bluetooth: BluetoothState,
 }
+

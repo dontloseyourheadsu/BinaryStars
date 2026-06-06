@@ -47,6 +47,9 @@ pub async fn stop_bluetooth_server(state: State<'_, AppState>) -> Result<(), Str
     let mut pwd = state.bluetooth.password.lock().unwrap();
     *pwd = None;
     
+    let mut clients = state.bluetooth.clients.lock().unwrap();
+    clients.clear();
+    
     Ok(())
 }
 

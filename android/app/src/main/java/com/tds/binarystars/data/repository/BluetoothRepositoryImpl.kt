@@ -377,7 +377,32 @@ class BluetoothRepositoryImpl(
                 val inputReader = reader ?: return@launch
                 while (isActive) {
                     val line = inputReader.readLine() ?: break
-                    if (line.startsWith("FILE|")) {
+                    if (line.startsWith("GROUP_MSG|")) {
+                        val parts = line.split("|", limit = 3)
+                        if (parts.size >= 3) {
+                            val senderId = parts[1]
+                            val content = parts[2]
+                            val msg = ChatMessage(
+                                id = UUID.randomUUID().toString(),
+                                deviceId = peerId,
+                                senderDeviceId = senderId,
+                                body = content,
+                                sentAt = System.currentTimeMillis(),
+                                isOutgoing = false
+                            )
+                            dbHelper.insertMessage(peerId, msg)
+                            _messages.value = _messages.value + msg
+                            triggerNotification(senderId, msg.body, false)
+                        }
+                    } else if (line.startsWith("GROUP_FILE|")) {
+                        val parts = line.split("|", limit = 4)
+                        if (parts.size >= 4) {
+                            val senderId = parts[1]
+                            val fileName = parts[2]
+                            val base64Data = parts[3]
+                            saveReceivedFileWithSender(peerId, senderId, fileName, base64Data)
+                        }
+                    } else if (line.startsWith("FILE|")) {
                         val parts = line.split("|", limit = 3)
                         if (parts.size >= 3) {
                             val fileName = parts[1]
@@ -385,7 +410,7 @@ class BluetoothRepositoryImpl(
                             saveReceivedFile(peerId, fileName, base64Data)
                         }
                     } else {
-                        Log.i(TAG, "MESSAGE RECEIVED: From $peerId to $selfDeviceIdInternal")
+                        Log.i(TAG, "MESSAGE RECEIVED: From peer $peerId")
                         val msg = ChatMessage(
                             id = UUID.randomUUID().toString(),
                             deviceId = peerId,
@@ -405,6 +430,39 @@ class BluetoothRepositoryImpl(
             } finally {
                 Log.d(TAG, "Reading loop ended, disconnecting...")
                 disconnect()
+            }
+        }
+    }
+
+    private fun saveReceivedFileWithSender(peerId: String, senderId: String, fileName: String, base64Data: String) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bytes = Base64.decode(base64Data, Base64.NO_WRAP)
+                val dir = File(context.filesDir, "transfers/received")
+                if (!dir.exists()) dir.mkdirs()
+                
+                val file = File(dir, "received_${System.currentTimeMillis()}_$fileName")
+                FileOutputStream(file).use { it.write(bytes) }
+                Log.d(TAG, "Saved received file to: ${file.absolutePath}")
+                Log.i(TAG, "FILE RECEIVED: $fileName From $senderId to $selfDeviceIdInternal (Saved internally: ${file.absolutePath})")
+
+                val msg = ChatMessage(
+                    id = UUID.randomUUID().toString(),
+                    deviceId = peerId,
+                    senderDeviceId = senderId,
+                    body = "Received file: $fileName",
+                    sentAt = System.currentTimeMillis(),
+                    isOutgoing = false,
+                    isFile = true,
+                    fileName = fileName,
+                    filePath = file.absolutePath
+                )
+                // Save to SQLite
+                dbHelper.insertMessage(peerId, msg)
+                _messages.value = _messages.value + msg
+                triggerNotification(senderId, msg.body, true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save file: ${e.message}")
             }
         }
     }

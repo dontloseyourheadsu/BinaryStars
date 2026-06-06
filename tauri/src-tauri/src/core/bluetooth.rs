@@ -5,8 +5,7 @@ use tokio::io::{AsyncWriteExt, AsyncBufReadExt, BufReader as TokioBufReader};
 use tokio::sync::mpsc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::fs;
-use std::collections::HashMap;
-use crate::core::types::{BluetoothMessage, AppState, LinuxBluetoothDevice};
+use crate::core::types::{BluetoothMessage, AppState};
 use base64::{Engine as _, engine::general_purpose};
 
 pub fn current_epoch_ms() -> u64 {
@@ -31,6 +30,15 @@ fn save_received_file(file_name: &str, base64_str: &str) -> Option<String> {
         }
     }
     None
+}
+
+pub fn broadcast_to_clients(state: &AppState, sender_id: &str, payload: String) {
+    let clients = state.bluetooth.clients.lock().unwrap();
+    for (cid, client) in clients.iter() {
+        if cid != sender_id {
+            let _ = client.tx.send(payload.clone());
+        }
+    }
 }
 
 pub async fn start_server_impl(
@@ -76,83 +84,79 @@ pub async fn start_server_impl(
             if let Ok(stream) = req.accept() {
                 let peer_address = stream.peer_addr().ok().map(|a| a.addr.to_string()).unwrap_or_default();
 
-                // Check if already connected (enforce single-client connection)
-                if state.bluetooth.connected_device_id.lock().unwrap().is_some() {
-                    let mut writer = stream;
-                    let _ = writer.write_all(b"ERROR|Host busy: client already connected\n").await;
-                    let _ = writer.flush().await;
-                    eprintln!("[ERROR] CONNECTION REJECTED (SERVER): Host is already connected");
-                    continue;
-                }
+                tokio::spawn(async move {
+                    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+                    let (reader, mut writer) = stream.into_split();
+                    let mut reader = TokioBufReader::new(reader);
 
-                let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-                let (reader, mut writer) = stream.into_split();
-                let mut reader = TokioBufReader::new(reader);
+                    // Handshake
+                    let mut identified = false;
+                    let mut pwd_fail = false;
+                    let mut peer_id = String::new();
+                    let mut line = String::new();
+                    let res = tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut line)).await;
+                    if let Ok(Ok(_)) = res {
+                        let raw = line.trim();
+                        if raw.starts_with("IDENTIFY|") {
+                            let parts: Vec<&str> = raw.split('|').collect();
+                            if parts.len() >= 2 {
+                                peer_id = parts[1].to_string();
+                                let client_pwd = parts.get(2).map(|s| s.to_string()).unwrap_or_default();
 
-                // Handshake
-                let mut identified = false;
-                let mut pwd_fail = false;
-                let mut peer_id = String::new();
-                let mut line = String::new();
-                let res = tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut line)).await;
-                if let Ok(Ok(_)) = res {
-                    let raw = line.trim();
-                    if raw.starts_with("IDENTIFY|") {
-                        let parts: Vec<&str> = raw.split('|').collect();
-                        if parts.len() >= 2 {
-                            peer_id = parts[1].to_string();
-                            let client_pwd = parts.get(2).map(|s| s.to_string()).unwrap_or_default();
-
-                            let host_pwd_opt = state.bluetooth.password.lock().unwrap().clone();
-                            if let Some(host_pwd) = host_pwd_opt {
-                                if !host_pwd.is_empty() && host_pwd != client_pwd {
-                                    pwd_fail = true;
+                                let host_pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+                                if let Some(host_pwd) = host_pwd_opt {
+                                    if !host_pwd.is_empty() && host_pwd != client_pwd {
+                                        pwd_fail = true;
+                                    } else {
+                                        identified = true;
+                                    }
                                 } else {
                                     identified = true;
                                 }
-                            } else {
-                                identified = true;
                             }
                         }
                     }
-                }
 
-                if pwd_fail {
-                    let mut writer = writer;
-                    let _ = writer.write_all(b"ERROR|Password required or incorrect\n").await;
+                    if pwd_fail {
+                        let mut writer = writer;
+                        let _ = writer.write_all(b"ERROR|Password required or incorrect\n").await;
+                        let _ = writer.flush().await;
+                        eprintln!("[ERROR] CONNECTION REJECTED (SERVER): Password mismatch from {}", peer_address);
+                        return;
+                    }
+
+                    if !identified {
+                        let mut writer = writer;
+                        let _ = writer.write_all(b"ERROR|Identity verification failed\n").await;
+                        let _ = writer.flush().await;
+                        eprintln!("[ERROR] CONNECTION FAILED (SERVER): Handshake validation failed from {}", peer_address);
+                        return;
+                    }
+
+                    let _ = writer.write_all(format!("IDENTIFIED|{}\n", my_id).as_bytes()).await;
                     let _ = writer.flush().await;
-                    eprintln!("[ERROR] CONNECTION REJECTED (SERVER): Password mismatch from {}", peer_address);
-                    continue;
-                }
+                    println!("[INFO] CONNECTION SUCCESSFUL (SERVER): Connected to peer {} ({})", peer_id, peer_address);
 
-                if !identified {
-                    let mut writer = writer;
-                    let _ = writer.write_all(b"ERROR|Identity verification failed\n").await;
-                    let _ = writer.flush().await;
-                    eprintln!("[ERROR] CONNECTION FAILED (SERVER): Handshake validation failed from {}", peer_address);
-                    continue;
-                }
+                    {
+                        let mut clients = state.bluetooth.clients.lock().unwrap();
+                        clients.insert(peer_id.clone(), crate::core::types::ConnectedClient {
+                            peer_id: peer_id.clone(),
+                            peer_address: peer_address.clone(),
+                            tx: tx.clone(),
+                        });
+                    }
 
-                let _ = writer.write_all(format!("IDENTIFIED|{}\n", my_id).as_bytes()).await;
-                let _ = writer.flush().await;
-                println!("[INFO] CONNECTION SUCCESSFUL (SERVER): Connected to peer {} ({})", peer_id, peer_address);
+                    {
+                        let mut state_id = state.bluetooth.connected_device_id.lock().unwrap();
+                        *state_id = Some("Group Chat Session".to_string());
+                        let mut state_addr = state.bluetooth.connected_device_address.lock().unwrap();
+                        *state_addr = Some(peer_address.clone());
+                    }
 
-                {
-                    let mut state_tx = state.bluetooth.tx.lock().unwrap();
-                    *state_tx = Some(tx);
-                    let mut state_id = state.bluetooth.connected_device_id.lock().unwrap();
-                    *state_id = Some(peer_id.clone());
-                    let mut state_addr = state.bluetooth.connected_device_address.lock().unwrap();
-                    *state_addr = Some(peer_address.clone());
-                }
-                
-                let _ = app_handle.emit("bluetooth-status", serde_json::json!({ "connected": true, "deviceId": peer_id, "deviceAddress": peer_address }));
+                    let app_handle_read = app_handle.clone();
+                    let peer_id_read = peer_id.clone();
 
-                let read_task = {
-                    let app_handle = app_handle.clone();
-                    let peer_id = peer_id.clone();
-                    let state = state;
-                    tokio::spawn(async move {
+                    let read_task = tokio::spawn(async move {
                         let mut line = String::new();
                         while let Ok(n) = reader.read_line(&mut line).await {
                             if n == 0 {
@@ -164,6 +168,10 @@ pub async fn start_server_impl(
                                 if parts.len() >= 3 {
                                     let file_name = parts[1].to_string();
                                     let encrypted_data = parts[2];
+                                    
+                                    let broadcast_payload = format!("GROUP_ENC_FILE|{}|{}|{}\n", peer_id_read, file_name, encrypted_data);
+                                    broadcast_to_clients(state, &peer_id_read, broadcast_payload);
+
                                     let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
                                     let decrypted_res = if let Some(pwd) = pwd_opt {
                                         crate::core::crypto::decrypt(encrypted_data, &pwd)
@@ -177,7 +185,7 @@ pub async fn start_server_impl(
                                             let file_path = save_received_file(&file_name, &decrypted_base64);
                                             BluetoothMessage {
                                                 id: format!("msg-{}", current_epoch_ms()),
-                                                sender: peer_id.clone(),
+                                                sender: peer_id_read.clone(),
                                                 content: format!("Received file: {}", file_name),
                                                 is_file: true,
                                                 file_name: Some(file_name),
@@ -189,7 +197,7 @@ pub async fn start_server_impl(
                                         Err(e) => {
                                             BluetoothMessage {
                                                 id: format!("msg-{}", current_epoch_ms()),
-                                                sender: peer_id.clone(),
+                                                sender: peer_id_read.clone(),
                                                 content: format!("Error decrypting file: {}", e),
                                                 is_file: false,
                                                 file_name: None,
@@ -202,7 +210,7 @@ pub async fn start_server_impl(
                                 } else {
                                     BluetoothMessage {
                                         id: format!("msg-{}", current_epoch_ms()),
-                                        sender: peer_id.clone(),
+                                        sender: peer_id_read.clone(),
                                         content: "Error: Malformed file payload received".to_string(),
                                         is_file: false,
                                         file_name: None,
@@ -215,10 +223,15 @@ pub async fn start_server_impl(
                                 let parts: Vec<&str> = raw.splitn(3, '|').collect();
                                 if parts.len() >= 3 {
                                     let file_name = parts[1].to_string();
-                                    let file_path = save_received_file(&file_name, parts[2]);
+                                    let base64_data = parts[2];
+
+                                    let broadcast_payload = format!("GROUP_FILE|{}|{}|{}\n", peer_id_read, file_name, base64_data);
+                                    broadcast_to_clients(state, &peer_id_read, broadcast_payload);
+
+                                    let file_path = save_received_file(&file_name, base64_data);
                                     BluetoothMessage {
                                         id: format!("msg-{}", current_epoch_ms()),
-                                        sender: peer_id.clone(),
+                                        sender: peer_id_read.clone(),
                                         content: format!("Received file: {}", file_name),
                                         is_file: true,
                                         file_name: Some(file_name),
@@ -229,7 +242,7 @@ pub async fn start_server_impl(
                                 } else {
                                     BluetoothMessage {
                                         id: format!("msg-{}", current_epoch_ms()),
-                                        sender: peer_id.clone(),
+                                        sender: peer_id_read.clone(),
                                         content: "Error: Malformed file payload received".to_string(),
                                         is_file: false,
                                         file_name: None,
@@ -240,6 +253,10 @@ pub async fn start_server_impl(
                                 }
                             } else if raw.starts_with("ENC|") {
                                 let encrypted_data = &raw[4..];
+
+                                let broadcast_payload = format!("GROUP_ENC|{}|{}\n", peer_id_read, encrypted_data);
+                                broadcast_to_clients(state, &peer_id_read, broadcast_payload);
+
                                 let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
                                 let decrypted_res = if let Some(pwd) = pwd_opt {
                                     crate::core::crypto::decrypt(encrypted_data, &pwd)
@@ -252,7 +269,7 @@ pub async fn start_server_impl(
                                         let decrypted_text = String::from_utf8(decrypted_bytes).unwrap_or_default();
                                         BluetoothMessage {
                                             id: format!("msg-{}", current_epoch_ms()),
-                                            sender: peer_id.clone(),
+                                            sender: peer_id_read.clone(),
                                             content: decrypted_text,
                                             is_file: false,
                                             file_name: None,
@@ -264,7 +281,7 @@ pub async fn start_server_impl(
                                     Err(e) => {
                                         BluetoothMessage {
                                             id: format!("msg-{}", current_epoch_ms()),
-                                            sender: peer_id.clone(),
+                                            sender: peer_id_read.clone(),
                                             content: format!("Error decrypting message: {}", e),
                                             is_file: false,
                                             file_name: None,
@@ -275,10 +292,14 @@ pub async fn start_server_impl(
                                     }
                                 }
                             } else {
-                                println!("[INFO] MESSAGE RECEIVED: From {} to Me", peer_id);
+                                println!("[INFO] MESSAGE RECEIVED: From {} to Me", peer_id_read);
+
+                                let broadcast_payload = format!("GROUP_MSG|{}|{}\n", peer_id_read, raw);
+                                broadcast_to_clients(state, &peer_id_read, broadcast_payload);
+
                                 BluetoothMessage {
                                     id: format!("msg-{}", current_epoch_ms()),
-                                    sender: peer_id.clone(),
+                                    sender: peer_id_read.clone(),
                                     content: raw.to_string(),
                                     is_file: false,
                                     file_name: None,
@@ -288,43 +309,38 @@ pub async fn start_server_impl(
                                 }
                             };
                             
-                            // Save to SQLite database
-                            let _ = crate::core::database::insert_message_to_db(&peer_id, &msg);
+                            let _ = crate::core::database::insert_message_to_db("Group Chat Session", &msg);
                             
                             {
                                 let mut messages = state.bluetooth.messages.lock().unwrap();
                                 messages.push(msg.clone());
                             }
-                            let _ = app_handle.emit("bluetooth-message", msg.clone());
-                            trigger_notification(&app_handle, &peer_id, &msg.content, msg.is_file);
+                            let _ = app_handle_read.emit("bluetooth-message", msg.clone());
+                            trigger_notification(&app_handle_read, &msg.sender, &msg.content, msg.is_file);
                             line.clear();
                         }
-                    })
-                };
+                    });
 
-                let write_task = tokio::spawn(async move {
-                    while let Some(msg) = rx.recv().await {
-                        if writer.write_all(msg.as_bytes()).await.is_err() {
-                            break;
+                    let mut writer = writer;
+                    let write_task = tokio::spawn(async move {
+                        while let Some(msg) = rx.recv().await {
+                            if writer.write_all(msg.as_bytes()).await.is_err() {
+                                break;
+                            }
+                            let _ = writer.flush().await;
                         }
-                        let _ = writer.flush().await;
+                    });
+
+                    tokio::select! {
+                        _ = read_task => (),
+                        _ = write_task => ()
+                    };
+
+                    {
+                        let mut clients = state.bluetooth.clients.lock().unwrap();
+                        clients.remove(&peer_id);
                     }
                 });
-
-                tokio::select! {
-                    _ = read_task => (),
-                    _ = write_task => ()
-                };
-
-                {
-                    let mut state_id = state.bluetooth.connected_device_id.lock().unwrap();
-                    *state_id = None;
-                    let mut state_addr = state.bluetooth.connected_device_address.lock().unwrap();
-                    *state_addr = None;
-                    let mut state_tx = state.bluetooth.tx.lock().unwrap();
-                    *state_tx = None;
-                }
-                let _ = app_handle.emit("bluetooth-status", serde_json::json!({ "connected": false, "deviceId": null, "deviceAddress": null }));
             }
         }
     });
@@ -452,7 +468,165 @@ pub async fn connect_impl(
                     break;
                 }
                 let raw = line.trim();
-                let msg = if raw.starts_with("ENC_FILE|") {
+                let msg = if raw.starts_with("GROUP_MSG|") {
+                    let parts: Vec<&str> = raw.splitn(3, '|').collect();
+                    if parts.len() >= 3 {
+                        let sender_id = parts[1].to_string();
+                        let content = parts[2].to_string();
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: sender_id,
+                            content,
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("GROUP_ENC|") {
+                    let parts: Vec<&str> = raw.splitn(3, '|').collect();
+                    if parts.len() >= 3 {
+                        let sender_id = parts[1].to_string();
+                        let encrypted_data = parts[2];
+                        let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+                        let decrypted_res = if let Some(pwd) = pwd_opt {
+                            crate::core::crypto::decrypt(encrypted_data, &pwd)
+                        } else {
+                            Err("No decryption password available".to_string())
+                        };
+                        match decrypted_res {
+                            Ok(decrypted_bytes) => {
+                                let decrypted_text = String::from_utf8(decrypted_bytes).unwrap_or_default();
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: decrypted_text,
+                                    is_file: false,
+                                    file_name: None,
+                                    base64_data: None,
+                                    file_path: None,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                            Err(e) => {
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: format!("Error decrypting message: {}", e),
+                                    is_file: false,
+                                    file_name: None,
+                                    base64_data: None,
+                                    file_path: None,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("GROUP_FILE|") {
+                    let parts: Vec<&str> = raw.splitn(4, '|').collect();
+                    if parts.len() >= 4 {
+                        let sender_id = parts[1].to_string();
+                        let file_name = parts[2].to_string();
+                        let base64_data = parts[3];
+                        let file_path = save_received_file(&file_name, base64_data);
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: sender_id,
+                            content: format!("Received file: {}", file_name),
+                            is_file: true,
+                            file_name: Some(file_name),
+                            base64_data: None,
+                            file_path,
+                            sent_at: current_epoch_ms(),
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("GROUP_ENC_FILE|") {
+                    let parts: Vec<&str> = raw.splitn(4, '|').collect();
+                    if parts.len() >= 4 {
+                        let sender_id = parts[1].to_string();
+                        let file_name = parts[2].to_string();
+                        let encrypted_data = parts[3];
+                        let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+                        let decrypted_res = if let Some(pwd) = pwd_opt {
+                            crate::core::crypto::decrypt(encrypted_data, &pwd)
+                        } else {
+                            Err("No decryption password available".to_string())
+                        };
+                        match decrypted_res {
+                            Ok(decrypted_bytes) => {
+                                let decrypted_base64 = String::from_utf8(decrypted_bytes).unwrap_or_default();
+                                let file_path = save_received_file(&file_name, &decrypted_base64);
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: format!("Received file: {}", file_name),
+                                    is_file: true,
+                                    file_name: Some(file_name),
+                                    base64_data: None,
+                                    file_path,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                            Err(e) => {
+                                BluetoothMessage {
+                                    id: format!("msg-{}", current_epoch_ms()),
+                                    sender: sender_id,
+                                    content: format!("Error decrypting file: {}", e),
+                                    is_file: false,
+                                    file_name: None,
+                                    base64_data: None,
+                                    file_path: None,
+                                    sent_at: current_epoch_ms(),
+                                }
+                            }
+                        }
+                    } else {
+                        BluetoothMessage {
+                            id: format!("msg-{}", current_epoch_ms()),
+                            sender: peer_id_read.clone(),
+                            content: raw.to_string(),
+                            is_file: false,
+                            file_name: None,
+                            base64_data: None,
+                            file_path: None,
+                            sent_at: current_epoch_ms(),
+                        }
+                    }
+                } else if raw.starts_with("ENC_FILE|") {
                     let parts: Vec<&str> = raw.splitn(3, '|').collect();
                     if parts.len() >= 3 {
                         let file_name = parts[1].to_string();
@@ -592,7 +766,7 @@ pub async fn connect_impl(
                     messages.push(msg.clone());
                 }
                 let _ = app_handle_read.emit("bluetooth-message", msg.clone());
-                trigger_notification(&app_handle_read, &peer_id_read, &msg.content, msg.is_file);
+                trigger_notification(&app_handle_read, &msg.sender, &msg.content, msg.is_file);
                 line.clear();
             }
         });
