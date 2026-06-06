@@ -17,16 +17,16 @@ export async function getBluetoothStatus(): Promise<BluetoothStatus> {
   return await invoke<BluetoothStatus>("get_bluetooth_status");
 }
 
-export async function startBluetoothServer(myDeviceId: string): Promise<string> {
-  return await invoke<string>("start_bluetooth_server", { myDeviceId });
+export async function startBluetoothServer(myDeviceId: string, password?: string): Promise<string> {
+  return await invoke<string>("start_bluetooth_server", { myDeviceId, password });
 }
 
 export async function stopBluetoothServer(): Promise<void> {
   return await invoke<void>("stop_bluetooth_server");
 }
 
-export async function connectBluetoothDevice(myDeviceId: string, deviceAddress: string): Promise<string> {
-  return await invoke<string>("connect_bluetooth_device", { myDeviceId, deviceAddress });
+export async function connectBluetoothDevice(myDeviceId: string, deviceAddress: string, password?: string): Promise<string> {
+  return await invoke<string>("connect_bluetooth_device", { myDeviceId, deviceAddress, password });
 }
 
 export async function getBluetoothDevices(): Promise<LinuxBluetoothDevice[]> {
