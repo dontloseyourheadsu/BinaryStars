@@ -249,8 +249,15 @@ pub async fn connect_impl(
     state: State<'_, AppState>,
     my_device_id: String,
     device_address: String,
+    password: Option<String>,
 ) -> Result<String, String> {
     let bluetooth = &state.bluetooth;
+    
+    {
+        let mut pwd = bluetooth.password.lock().unwrap();
+        *pwd = password.clone();
+    }
+
     let addr = device_address.parse::<bluer::Address>().map_err(|e| e.to_string())?;
     let session = Session::new().await.map_err(|e| e.to_string())?;
     let adapter = session.default_adapter().await.map_err(|e| e.to_string())?;
@@ -293,12 +300,19 @@ pub async fn connect_impl(
     let mut identified = false;
     let mut peer_id = String::new();
     
-    let _ = writer.write_all(format!("IDENTIFY|{}\n", my_device_id).as_bytes()).await;
+    let pwd_str = password.clone().unwrap_or_default();
+    let identify_msg = if pwd_str.is_empty() {
+        format!("IDENTIFY|{}\n", my_device_id)
+    } else {
+        format!("IDENTIFY|{}|{}\n", my_device_id, pwd_str)
+    };
+    let _ = writer.write_all(identify_msg.as_bytes()).await;
     let _ = writer.flush().await;
 
     let mut reader = reader;
     let mut line = String::new();
     let res = tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut line)).await;
+    let mut err_msg = "Handshake failed".to_string();
     if let Ok(Ok(_)) = res {
         let raw = line.trim();
         if raw.starts_with("IDENTIFIED|") {
@@ -307,12 +321,14 @@ pub async fn connect_impl(
                 identified = true;
                 peer_id = parts[1].to_string();
             }
+        } else if raw.starts_with("ERROR|") {
+            err_msg = raw[6..].to_string();
         }
     }
 
     if !identified {
-        eprintln!("[ERROR] CONNECTION FAILED (CLIENT): Handshake verification failed from {}", device_address);
-        return Err("Handshake failed".to_string());
+        eprintln!("[ERROR] CONNECTION FAILED (CLIENT): Handshake verification failed from {}: {}", device_address, err_msg);
+        return Err(err_msg);
     }
 
     let (write_tx, mut write_rx) = mpsc::unbounded_channel::<String>();
