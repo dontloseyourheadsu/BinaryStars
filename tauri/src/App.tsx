@@ -114,6 +114,21 @@ function App() {
     }
   };
 
+  const [pwdModal, setPwdModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    isOptional: boolean;
+    onSubmit: (pwd: string) => void;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    isOptional: true,
+    onSubmit: () => {},
+  });
+  const [pwdValue, setPwdValue] = useState("");
+
   const handleHostToggle = async () => {
     if (isHosting) {
       try {
@@ -123,23 +138,39 @@ function App() {
         alert(`Stop server failed: ${e}`);
       }
     } else {
-      try {
-        await startBluetoothServer(selfId);
-        setIsHosting(true);
-      } catch (e: any) {
-        alert(`Host server failed: ${e}`);
-      }
+      setPwdModal({
+        isOpen: true,
+        title: "Set Host Password",
+        description: "Choose an optional password to restrict who can connect. Leave blank for no password.",
+        isOptional: true,
+        onSubmit: async (pwd) => {
+          try {
+            await startBluetoothServer(selfId, pwd || undefined);
+            setIsHosting(true);
+          } catch (e: any) {
+            alert(`Host server failed: ${e}`);
+          }
+        }
+      });
     }
   };
 
   const handleConnect = async (device: LinuxBluetoothDevice) => {
-    setIsConnecting(true);
-    try {
-      await connectBluetoothDevice(selfId, device.address);
-    } catch (e: any) {
-      alert(`Connection failed: ${e}`);
-      setIsConnecting(false);
-    }
+    setPwdModal({
+      isOpen: true,
+      title: "Join Password",
+      description: `Enter the password to connect to ${device.name}. Leave blank if no password is required.`,
+      isOptional: true,
+      onSubmit: async (pwd) => {
+        setIsConnecting(true);
+        try {
+          await connectBluetoothDevice(selfId, device.address, pwd || undefined);
+        } catch (e: any) {
+          alert(`Connection failed: ${e}`);
+          setIsConnecting(false);
+        }
+      }
+    });
   };
 
   const handleDisconnect = async () => {
@@ -202,6 +233,54 @@ function App() {
           />
         )}
       </main>
+
+      {pwdModal.isOpen && (
+        <div className="pwd-modal-overlay" onClick={() => {
+          setPwdModal(prev => ({ ...prev, isOpen: false }));
+          setPwdValue("");
+        }}>
+          <div className="pwd-modal-card glass-card dark" onClick={(e) => e.stopPropagation()}>
+            <h3>{pwdModal.title}</h3>
+            <p>{pwdModal.description}</p>
+            <input
+              type="password"
+              value={pwdValue}
+              onChange={(e) => setPwdValue(e.target.value)}
+              placeholder="Enter password..."
+              className="pwd-modal-input"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  pwdModal.onSubmit(pwdValue);
+                  setPwdModal(prev => ({ ...prev, isOpen: false }));
+                  setPwdValue("");
+                }
+              }}
+            />
+            <div className="pwd-modal-actions">
+              <button
+                onClick={() => {
+                  setPwdModal(prev => ({ ...prev, isOpen: false }));
+                  setPwdValue("");
+                }}
+                className="btn-pwd-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  pwdModal.onSubmit(pwdValue);
+                  setPwdModal(prev => ({ ...prev, isOpen: false }));
+                  setPwdValue("");
+                }}
+                className="btn-pwd-submit"
+              >
+                {pwdModal.isOptional && !pwdValue ? "Skip / Continue" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
