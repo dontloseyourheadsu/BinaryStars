@@ -176,6 +176,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       alert(`Save failed: ${err}`);
     }
   };
+  const isGroupChat = peerId === "Group Chat Session";
 
   return (
     <div className="chat-container">
@@ -184,12 +185,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <div className="peer-info">
           <span className={`online-indicator ${isOffline ? "offline" : ""}`}></span>
           <div>
-            <span className="header-label">{isOffline ? "Historical Archive" : "Connected Peer"}</span>
-            <h4 className="peer-title">{peerId}</h4>
+            <span className="header-label">
+              {isOffline ? "Historical Archive" : isGroupChat ? "Host Group Session" : "Connected Peer"}
+            </span>
+            <h4 className="peer-title">{isGroupChat ? "Group Chat Room" : peerId}</h4>
           </div>
         </div>
         <button onClick={onDisconnect} className="btn-disconnect">
-          {isOffline ? "Close History" : "Disconnect"}
+          {isOffline ? "Close History" : isGroupChat ? "Stop Host" : "Disconnect"}
         </button>
       </div>
 
@@ -214,6 +217,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               key={msg.id}
               className={`message-bubble-wrapper ${isOutgoing ? "outgoing" : "incoming"}`}
             >
+              {!isOutgoing && (
+                <span className="message-sender" style={{ fontSize: "10px", opacity: 0.7, marginBottom: "2px", display: "block", color: isDark ? "var(--text-secondary-dark)" : "var(--text-secondary-light)" }}>
+                  {msg.sender}
+                </span>
+              )}
               <div
                 className={`message-bubble ${
                   isOutgoing
