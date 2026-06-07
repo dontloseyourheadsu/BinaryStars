@@ -317,6 +317,14 @@ pub async fn start_server_impl(
                             }
                             let _ = app_handle_read.emit("bluetooth-message", msg.clone());
                             trigger_notification(&app_handle_read, &msg.sender, &msg.content, msg.is_file);
+
+                            // Check for incoming command
+                            let content_clone = msg.content.clone();
+                            let app_handle_clone = app_handle_read.clone();
+                            tokio::spawn(async move {
+                                crate::features::chat::check_and_handle_incoming_command(&app_handle_clone, state, &content_clone).await;
+                            });
+
                             line.clear();
                         }
                     });
@@ -767,6 +775,14 @@ pub async fn connect_impl(
                 }
                 let _ = app_handle_read.emit("bluetooth-message", msg.clone());
                 trigger_notification(&app_handle_read, &msg.sender, &msg.content, msg.is_file);
+
+                // Check for incoming command
+                let content_clone = msg.content.clone();
+                let app_handle_clone = app_handle_read.clone();
+                tokio::spawn(async move {
+                    crate::features::chat::check_and_handle_incoming_command(&app_handle_clone, state, &content_clone).await;
+                });
+
                 line.clear();
             }
         });

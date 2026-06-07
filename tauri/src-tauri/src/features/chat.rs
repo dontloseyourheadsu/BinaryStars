@@ -5,10 +5,9 @@ use crate::core::types::{AppState, BluetoothMessage};
 use crate::core::bluetooth::current_epoch_ms;
 use crate::core::database::{insert_message_to_db, update_message_file_path, query_messages_paged};
 
-#[tauri::command]
-pub async fn send_bluetooth_message(
-    app_handle: AppHandle,
-    state: State<'_, AppState>,
+pub async fn send_bluetooth_message_internal(
+    app_handle: &AppHandle,
+    state: &AppState,
     content: String
 ) -> Result<(), String> {
     let clean = content.replace('\n', " ");
@@ -78,6 +77,33 @@ pub async fn send_bluetooth_message(
     m.push(msg);
     Ok(())
 }
+
+#[tauri::command]
+pub async fn send_bluetooth_message(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    content: String
+) -> Result<(), String> {
+    send_bluetooth_message_internal(&app_handle, &state, content).await
+}
+
+pub async fn check_and_handle_incoming_command(
+    app_handle: &AppHandle,
+    state: &AppState,
+    content: &str,
+) {
+    let trimmed = content.trim();
+    let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+    if tokens.is_empty() {
+        return;
+    }
+    
+    if tokens[0] == "!device-info" {
+        let response = crate::features::commands::get_device_info_string().await;
+        let _ = send_bluetooth_message_internal(app_handle, state, response).await;
+    }
+}
+
 
 #[tauri::command]
 pub async fn send_bluetooth_file(
