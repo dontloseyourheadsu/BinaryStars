@@ -121,3 +121,24 @@ sequenceDiagram
    * **[BluetoothRepositoryImpl.kt](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/android/app/src/main/java/com/tds/binarystars/data/repository/BluetoothRepositoryImpl.kt)**: Added parsing for `GROUP_MSG` and `GROUP_FILE` prefixes to display actual senders.
    * **[MainScreen.kt](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/android/app/src/main/java/com/tds/binarystars/presentation/ui/MainScreen.kt)**: Displayed the sender device ID above the message bubble for group chat messages.
 
+
+## Implementation: Commands Feature (e.g. Device Info)
+
+We have implemented a **Commands** feature allowing devices to trigger special actions in the chat using the syntax `![[command]] {{--params}}`.
+
+### Device Info Command (`!device-info`)
+* **Trigger**: `!device-info`
+* **Local Mode**: `!device-info --self`
+* **Response**: A formatted text message detailing MAC, IP, WiFi/link speed, occupied storage, battery, occupied RAM, and occupied CPU.
+* **Non-Linux Fallback**: Returns "not supported yet" for non-Linux devices.
+
+### Modified Files:
+* **[commands.rs](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/tauri/src-tauri/src/features/commands.rs)**: Handles retrieval of system statistics (MAC, IP, WiFi, storage, battery, RAM, CPU) on Linux.
+* **[chat.rs](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/tauri/src-tauri/src/features/chat.rs)**:
+  * Extracted `send_bluetooth_message_internal` helper.
+  * Added `check_and_handle_incoming_command` to run incoming commands asynchronously.
+  * Integrated local command execution for `!device-info --self` which bypasses Bluetooth connection transmission.
+* **[bluetooth.rs](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/tauri/src-tauri/src/core/bluetooth.rs)**: Integrated `check_and_handle_incoming_command` triggers into client and server read loops.
+* **[features.css](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/tauri/src/features/features.css)**: Styled `.message-text` with `white-space: pre-wrap;` to support multi-line formatted device info output.
+
+
