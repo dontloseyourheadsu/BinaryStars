@@ -245,3 +245,28 @@ pub async fn get_device_info_string() -> String {
         occupied_cpu
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_device_info_string() {
+        let info = get_device_info_string().await;
+        println!("Device Info Output:\n{}", info);
+        assert!(!info.is_empty());
+        if cfg!(target_os = "linux") {
+            assert!(info.contains("--- Device Info (Linux) ---"));
+            assert!(info.contains("MAC:"));
+            assert!(info.contains("IP:"));
+            assert!(info.contains("WiFi:"));
+            assert!(info.contains("Occupied Storage:"));
+            assert!(info.contains("Battery:"));
+            assert!(info.contains("Occupied RAM:"));
+            assert!(info.contains("Occupied CPU:"));
+        } else {
+            assert_eq!(info, "not supported yet");
+        }
+    }
+}
+
