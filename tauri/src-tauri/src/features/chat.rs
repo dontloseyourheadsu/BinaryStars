@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State, Emitter};
+use tauri::{AppHandle, State, Emitter, Manager};
 use base64::{Engine as _, engine::general_purpose};
 use std::fs;
 use crate::core::types::{AppState, BluetoothMessage};
@@ -10,56 +10,63 @@ pub async fn send_bluetooth_message_internal(
     state: &AppState,
     content: String
 ) -> Result<(), String> {
-    let clean = content.replace('\n', " ");
-    let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
-    let payload = if let Some(pwd) = pwd_opt {
-        if !pwd.is_empty() {
-            let encrypted = crate::core::crypto::encrypt(clean.as_bytes(), &pwd)?;
-            format!("ENC|{}\n", encrypted)
-        } else {
-            format!("{}\n", clean)
-        }
-    } else {
-        format!("{}\n", clean)
-    };
+    let trimmed = content.trim();
+    let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+    let is_device_info = !tokens.is_empty() && tokens[0] == "!device-info";
+    let is_self = is_device_info && tokens.iter().any(|&arg| arg == "--self");
 
-    let mut sent = false;
-
-    // Send to single client if connected as a client
-    {
-        let tx = state.bluetooth.tx.lock().unwrap();
-        if let Some(tx) = &*tx {
-            tx.send(payload.clone()).map_err(|e| e.to_string())?;
-            sent = true;
-        }
-    }
-
-    // Broadcast to all clients if hosting
     let is_hosting = state.bluetooth.session.lock().unwrap().is_some();
-    if is_hosting {
-        let clients = state.bluetooth.clients.lock().unwrap();
-        for client in clients.values() {
-            let _ = client.tx.send(payload.clone());
-        }
-        sent = true;
-    }
-
-    if !sent {
-        return Err("No active Bluetooth connection".to_string());
-    }
-
     let peer_id = if is_hosting {
         "Group Chat Session".to_string()
     } else {
         state.bluetooth.connected_device_id.lock().unwrap().clone().unwrap_or_else(|| "Unknown".to_string())
     };
 
+    if !is_self {
+        let clean = content.replace('\n', " ");
+        let pwd_opt = state.bluetooth.password.lock().unwrap().clone();
+        let payload = if let Some(pwd) = pwd_opt {
+            if !pwd.is_empty() {
+                let encrypted = crate::core::crypto::encrypt(clean.as_bytes(), &pwd)?;
+                format!("ENC|{}\n", encrypted)
+            } else {
+                format!("{}\n", clean)
+            }
+        } else {
+            format!("{}\n", clean)
+        };
+
+        let mut sent = false;
+
+        // Send to single client if connected as a client
+        {
+            let tx = state.bluetooth.tx.lock().unwrap();
+            if let Some(tx) = &*tx {
+                tx.send(payload.clone()).map_err(|e| e.to_string())?;
+                sent = true;
+            }
+        }
+
+        // Broadcast to all clients if hosting
+        if is_hosting {
+            let clients = state.bluetooth.clients.lock().unwrap();
+            for client in clients.values() {
+                let _ = client.tx.send(payload.clone());
+            }
+            sent = true;
+        }
+
+        if !sent {
+            return Err("No active Bluetooth connection".to_string());
+        }
+    }
+
     println!("[INFO] MESSAGE SENT: From Me to peer {}", peer_id);
     
     let msg = BluetoothMessage {
         id: format!("msg-{}", current_epoch_ms()),
         sender: "Me".to_string(),
-        content,
+        content: content.clone(),
         is_file: false,
         file_name: None,
         base64_data: None,
@@ -73,8 +80,37 @@ pub async fn send_bluetooth_message_internal(
     // Notify frontend
     let _ = app_handle.emit("bluetooth-message", msg.clone());
     
-    let mut m = state.bluetooth.messages.lock().unwrap();
-    m.push(msg);
+    {
+        let mut m = state.bluetooth.messages.lock().unwrap();
+        m.push(msg);
+    }
+
+    if is_self {
+        let app_handle_clone = app_handle.clone();
+        let peer_id_clone = peer_id.clone();
+        tokio::spawn(async move {
+            let response = crate::features::commands::get_device_info_string().await;
+            
+            let reply_msg = BluetoothMessage {
+                id: format!("msg-{}", current_epoch_ms()),
+                sender: "System".to_string(),
+                content: response,
+                is_file: false,
+                file_name: None,
+                base64_data: None,
+                file_path: None,
+                sent_at: current_epoch_ms(),
+            };
+            
+            let state = app_handle_clone.state::<AppState>();
+            let _ = insert_message_to_db(&peer_id_clone, &reply_msg);
+            let _ = app_handle_clone.emit("bluetooth-message", reply_msg.clone());
+            
+            let mut m = state.bluetooth.messages.lock().unwrap();
+            m.push(reply_msg);
+        });
+    }
+
     Ok(())
 }
 
