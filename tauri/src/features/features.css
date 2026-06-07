@@ -551,3 +551,9 @@
   color: var(--text-secondary-light);
 }
 
+.message-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+
