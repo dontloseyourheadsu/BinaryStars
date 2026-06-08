@@ -446,6 +446,13 @@ class BluetoothRepositoryImpl(
                         dbHelper.insertMessage(peerId, msg)
                         _messages.value = _messages.value + msg
                         triggerNotification(peerId, msg.body, false)
+
+                        if (CommandParser.isDeviceInfoCommand(line) && !CommandParser.isSelfCommand(line)) {
+                            launch {
+                                val info = DeviceInfoProvider.getDeviceInfoString(context)
+                                sendMessage(info)
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
