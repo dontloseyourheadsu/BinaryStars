@@ -306,13 +306,16 @@ class BluetoothRepositoryImpl(
 
     override suspend fun sendMessage(content: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val out = writer ?: return@withContext Result.failure(Exception("Not connected"))
             val peerId = (getConnectionStateValue() as? ConnectionState.Connected)?.peerId ?: "Unknown"
-            
-            val sanitized = content.replace("\n", " ")
-            out.write((sanitized + "\n").toByteArray())
-            out.flush()
-            Log.i(TAG, "MESSAGE SENT: From $selfDeviceIdInternal to $peerId")
+            val isSelf = CommandParser.isSelfCommand(content)
+
+            if (!isSelf) {
+                val out = writer ?: return@withContext Result.failure(Exception("Not connected"))
+                val sanitized = content.replace("\n", " ")
+                out.write((sanitized + "\n").toByteArray())
+                out.flush()
+                Log.i(TAG, "MESSAGE SENT: From $selfDeviceIdInternal to $peerId")
+            }
 
             val msg = ChatMessage(
                 id = UUID.randomUUID().toString(),
@@ -325,10 +328,30 @@ class BluetoothRepositoryImpl(
             // Save to SQLite
             dbHelper.insertMessage(peerId, msg)
             _messages.value = _messages.value + msg
+
+            if (isSelf) {
+                scope.launch {
+                    delay(200)
+                    val info = DeviceInfoProvider.getDeviceInfoString(context)
+                    val reply = ChatMessage(
+                        id = UUID.randomUUID().toString(),
+                        deviceId = peerId,
+                        senderDeviceId = "System",
+                        body = info,
+                        sentAt = System.currentTimeMillis(),
+                        isOutgoing = false
+                    )
+                    dbHelper.insertMessage(peerId, reply)
+                    _messages.value = _messages.value + reply
+                }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send message: ${e.message}")
-            disconnect()
+            if (!CommandParser.isSelfCommand(content)) {
+                disconnect()
+            }
             Result.failure(e)
         }
     }
@@ -423,6 +446,13 @@ class BluetoothRepositoryImpl(
                         dbHelper.insertMessage(peerId, msg)
                         _messages.value = _messages.value + msg
                         triggerNotification(peerId, msg.body, false)
+
+                        if (CommandParser.isDeviceInfoCommand(line) && !CommandParser.isSelfCommand(line)) {
+                            launch {
+                                val info = DeviceInfoProvider.getDeviceInfoString(context)
+                                sendMessage(info)
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {

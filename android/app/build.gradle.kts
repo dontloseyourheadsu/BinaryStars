@@ -114,3 +114,10 @@ tasks.register("installDeviceDebug") {
 
     dependsOn(":app:installDebug")
 }
+
+tasks.withType<Test> {
+    testLogging {
+        showStandardStreams = true
+        events("passed", "failed", "skipped")
+    }
+}

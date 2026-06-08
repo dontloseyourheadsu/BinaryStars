@@ -127,10 +127,11 @@ sequenceDiagram
 We have implemented a **Commands** feature allowing devices to trigger special actions in the chat using the syntax `![[command]] {{--params}}`.
 
 ### Device Info Command (`!device-info`)
-* **Trigger**: `!device-info`
-* **Local Mode**: `!device-info --self`
-* **Response**: A formatted text message detailing MAC, IP, WiFi/link speed, occupied storage, battery, occupied RAM, and occupied CPU.
-* **Non-Linux Fallback**: Returns "not supported yet" for non-Linux devices.
+* Trigger: `!device-info`
+* Local Mode: `!device-info --self`
+* Response: A formatted text message detailing MAC, IP, WiFi/link speed, occupied storage, battery, occupied RAM, and occupied CPU.
+* Android Support: Supported on Android devices using `DeviceInfoProvider`. Bypasses connection for local execution and auto-responds to incoming command requests.
+* Fallback: Returns "not supported yet" for unsupported environments.
 
 ### Modified Files:
 * **[commands.rs](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/tauri/src-tauri/src/features/commands.rs)**: Handles retrieval of system statistics (MAC, IP, WiFi, storage, battery, RAM, CPU) on Linux.
@@ -140,5 +141,6 @@ We have implemented a **Commands** feature allowing devices to trigger special a
   * Integrated local command execution for `!device-info --self` which bypasses Bluetooth connection transmission.
 * **[bluetooth.rs](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/tauri/src-tauri/src/core/bluetooth.rs)**: Integrated `check_and_handle_incoming_command` triggers into client and server read loops.
 * **[features.css](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/tauri/src/features/features.css)**: Styled `.message-text` with `white-space: pre-wrap;` to support multi-line formatted device info output.
-
-
+* **[DeviceInfoProvider.kt](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/android/app/src/main/java/com/tds/binarystars/data/repository/DeviceInfoProvider.kt)**: Gathers MAC, IP, WiFi/Link speed, Storage, Battery, RAM, and CPU on Android.
+* **[CommandParser.kt](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/android/app/src/main/java/com/tds/binarystars/data/repository/CommandParser.kt)**: Parses device-info commands and --self local flags.
+* **[BluetoothRepositoryImpl.kt](file:///home/dontloseyourheadsu/Documents/GitHub/BinaryStars/android/app/src/main/java/com/tds/binarystars/data/repository/BluetoothRepositoryImpl.kt)**: Intercepts `--self` commands locally and handles incoming `!device-info` commands from remote peers to auto-respond with statistics.

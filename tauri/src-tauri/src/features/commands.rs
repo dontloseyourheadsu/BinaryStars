@@ -253,9 +253,18 @@ mod tests {
     #[tokio::test]
     async fn test_get_device_info_string() {
         let info = get_device_info_string().await;
-        println!("Device Info Output:\n{}", info);
         assert!(!info.is_empty());
         if cfg!(target_os = "linux") {
+            println!("Device Info Output:");
+
+            println!("MAC: {}", info.lines().find(|line| line.starts_with("MAC:")).unwrap_or("N/A"));
+            println!("IP: {}", info.lines().find(|line| line.starts_with("IP:")).unwrap_or("N/A"));
+            println!("WiFi: {}", info.lines().find(|line| line.starts_with("WiFi:")).unwrap_or("N/A"));
+            println!("Occupied Storage: {}", info.lines().find(|line| line.starts_with("Occupied Storage:")).unwrap_or("N/A"));
+            println!("Battery: {}", info.lines().find(|line| line.starts_with("Battery:")).unwrap_or("N/A"));
+            println!("Occupied RAM: {}", info.lines().find(|line| line.starts_with("Occupied RAM:")).unwrap_or("N/A"));
+            println!("Occupied CPU: {}", info.lines().find(|line| line.starts_with("Occupied CPU:")).unwrap_or("N/A"));
+            
             assert!(info.contains("--- Device Info (Linux) ---"));
             assert!(info.contains("MAC:"));
             assert!(info.contains("IP:"));
