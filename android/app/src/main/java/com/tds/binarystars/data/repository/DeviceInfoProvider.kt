@@ -57,11 +57,12 @@ object DeviceInfoProvider {
         return "N/A"
     }
 
-    fun getWifiSpeed(context: Context): String {
+    fun getWifiSpeed(context: Context?): String {
+        if (context == null) return "N/A"
         try {
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val network = connectivityManager.activeNetwork
-            val capabilities = connectivityManager.getNetworkCapabilities(network)
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val network = connectivityManager?.activeNetwork
+            val capabilities = connectivityManager?.getNetworkCapabilities(network)
             if (capabilities != null) {
                 val downSpeed = capabilities.linkDownstreamBandwidthKbps / 1000
                 val upSpeed = capabilities.linkUpstreamBandwidthKbps / 1000
@@ -74,8 +75,8 @@ object DeviceInfoProvider {
         }
 
         try {
-            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val info = wifiManager.connectionInfo
+            val wifiManager = context.applicationContext?.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val info = wifiManager?.connectionInfo
             if (info != null && info.networkId != -1) {
                 val speed = info.linkSpeed
                 if (speed > 0) {
@@ -113,10 +114,11 @@ object DeviceInfoProvider {
         }
     }
 
-    fun getBatteryInfo(context: Context): String {
+    fun getBatteryInfo(context: Context?): String {
+        if (context == null) return "N/A"
         return try {
-            val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-            val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            val level = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
 
             val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
             val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
@@ -128,21 +130,26 @@ object DeviceInfoProvider {
                 BatteryManager.BATTERY_STATUS_UNKNOWN -> "unknown"
                 else -> ""
             }
-            if (statusStr.isNotEmpty()) {
-                "$level% ($statusStr)"
+            if (level != -1) {
+                if (statusStr.isNotEmpty()) {
+                    "$level% ($statusStr)"
+                } else {
+                    "$level%"
+                }
             } else {
-                "$level%"
+                "N/A"
             }
         } catch (e: Exception) {
             "N/A"
         }
     }
 
-    fun getOccupiedRam(context: Context): String {
+    fun getOccupiedRam(context: Context?): String {
+        if (context == null) return "N/A"
         return try {
-            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
             val memoryInfo = ActivityManager.MemoryInfo()
-            activityManager.getMemoryInfo(memoryInfo)
+            activityManager?.getMemoryInfo(memoryInfo)
 
             val totalMem = memoryInfo.totalMem
             val availMem = memoryInfo.availMem
@@ -207,7 +214,7 @@ object DeviceInfoProvider {
         return "12.5%"
     }
 
-    fun getDeviceInfoString(context: Context): String {
+    fun getDeviceInfoString(context: Context?): String {
         return """
             --- Device Info (Android) ---
             MAC: ${getMacAddress()}
