@@ -426,6 +426,85 @@ pub async fn hibernate_device_string() -> String {
     }
 }
 
+pub fn parse_level_parameter(tokens: &[&str]) -> Option<u32> {
+    for (i, token) in tokens.iter().enumerate() {
+        if token.starts_with("--level=") {
+            if let Some(val_str) = token.split('=').nth(1) {
+                if let Ok(val) = val_str.parse::<u32>() {
+                    return Some(val);
+                }
+            }
+        } else if *token == "--level" && i + 1 < tokens.len() {
+            if let Ok(val) = tokens[i + 1].parse::<u32>() {
+                return Some(val);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn execute_set_volume(level: u32) -> std::io::Result<()> {
+    let level = level.min(100);
+    let level_str = format!("{}%", level);
+    
+    let status = Command::new("amixer")
+        .args(&["sset", "Master", &level_str])
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("pactl")
+        .args(&["set-sink-volume", "@DEFAULT_SINK@", &level_str])
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let wp_val = format!("{:.2}", (level as f64) / 100.0);
+    let status = Command::new("wpctl")
+        .args(&["set-volume", "@DEFAULT_AUDIO_SINK@", &wp_val])
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "All volume setting attempts failed",
+    ))
+}
+
+pub async fn set_volume_string(level_opt: Option<u32>) -> String {
+    if !cfg!(target_os = "linux") {
+        return "not supported yet".to_string();
+    }
+
+    let level = match level_opt {
+        Some(lvl) => lvl,
+        None => return "Error: --level=[percentage] parameter is required and must be a number between 0 and 100.".to_string(),
+    };
+
+    #[cfg(target_os = "linux")]
+    {
+        match execute_set_volume(level) {
+            Ok(_) => format!("Volume set to {}%.", level),
+            Err(e) => format!("Failed to set volume: {}", e),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        "not supported yet".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,6 +569,29 @@ mod tests {
             assert!(result.contains("Device is hibernating...") || result.contains("Failed to hibernate:"));
         } else {
             let result = hibernate_device_string().await;
+            assert_eq!(result, "not supported yet");
+        }
+    }
+
+    #[test]
+    fn test_parse_level_parameter() {
+        assert_eq!(parse_level_parameter(&["!device-volume", "--level=45"]), Some(45));
+        assert_eq!(parse_level_parameter(&["!device-volume", "--level", "80"]), Some(80));
+        assert_eq!(parse_level_parameter(&["!device-volume"]), None);
+        assert_eq!(parse_level_parameter(&["!device-volume", "--level=abc"]), None);
+    }
+
+    #[tokio::test]
+    #[ignore] // DO NOT RUN THIS TEST. IT WILL CHANGE YOUR VOLUME!
+    async fn test_set_volume_string() {
+        if cfg!(target_os = "linux") {
+            let result = set_volume_string(Some(50)).await;
+            assert!(result.contains("Volume set to 50%.") || result.contains("Failed to set volume:"));
+            
+            let missing_result = set_volume_string(None).await;
+            assert!(missing_result.contains("Error: --level=[percentage] parameter is required"));
+        } else {
+            let result = set_volume_string(Some(50)).await;
             assert_eq!(result, "not supported yet");
         }
     }

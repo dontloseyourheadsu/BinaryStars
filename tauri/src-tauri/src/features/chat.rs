@@ -16,11 +16,23 @@ pub async fn send_bluetooth_message_internal(
     let is_device_turn_off = !tokens.is_empty() && tokens[0] == "!device-turn-off";
     let is_device_block_screen = !tokens.is_empty() && tokens[0] == "!device-block-screen";
     let is_device_hibernate = !tokens.is_empty() && tokens[0] == "!device-hibernate";
+    let is_device_volume = !tokens.is_empty() && tokens[0] == "!device-volume";
     let is_self_device_info = is_device_info && tokens.iter().any(|&arg| arg == "--self");
     let is_self_device_turn_off = is_device_turn_off && tokens.iter().any(|&arg| arg == "--self");
     let is_self_device_block_screen = is_device_block_screen && tokens.iter().any(|&arg| arg == "--self");
     let is_self_device_hibernate = is_device_hibernate && tokens.iter().any(|&arg| arg == "--self");
-    let is_self = is_self_device_info || is_self_device_turn_off || is_self_device_block_screen || is_self_device_hibernate;
+    let is_self_device_volume = is_device_volume && tokens.iter().any(|&arg| arg == "--self");
+    let is_self = is_self_device_info 
+        || is_self_device_turn_off 
+        || is_self_device_block_screen 
+        || is_self_device_hibernate
+        || is_self_device_volume;
+
+    let volume_level_val = if is_device_volume {
+        crate::features::commands::parse_level_parameter(&tokens)
+    } else {
+        None
+    };
 
     let is_hosting = state.bluetooth.session.lock().unwrap().is_some();
     let peer_id = if is_hosting {
@@ -102,8 +114,10 @@ pub async fn send_bluetooth_message_internal(
                 crate::features::commands::turn_off_device_string().await
             } else if is_self_device_block_screen {
                 crate::features::commands::block_screen_string().await
-            } else {
+            } else if is_self_device_hibernate {
                 crate::features::commands::hibernate_device_string().await
+            } else {
+                crate::features::commands::set_volume_string(volume_level_val).await
             };
             
             let reply_msg = BluetoothMessage {
@@ -160,6 +174,10 @@ pub async fn check_and_handle_incoming_command(
         let _ = send_bluetooth_message_internal(app_handle, state, response).await;
     } else if tokens[0] == "!device-hibernate" {
         let response = crate::features::commands::hibernate_device_string().await;
+        let _ = send_bluetooth_message_internal(app_handle, state, response).await;
+    } else if tokens[0] == "!device-volume" {
+        let lvl = crate::features::commands::parse_level_parameter(&tokens);
+        let response = crate::features::commands::set_volume_string(lvl).await;
         let _ = send_bluetooth_message_internal(app_handle, state, response).await;
     }
 }
