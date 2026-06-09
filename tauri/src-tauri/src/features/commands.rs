@@ -298,6 +298,134 @@ pub async fn turn_off_device_string() -> String {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn execute_block_screen() -> std::io::Result<()> {
+    let status = Command::new("loginctl")
+        .arg("lock-session")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("xdg-screensaver")
+        .arg("lock")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("gnome-screensaver-command")
+        .arg("-l")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("cinnamon-screensaver-command")
+        .arg("-l")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("mate-screensaver-command")
+        .arg("-l")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("dbus-send")
+        .args(&[
+            "--type=method_call",
+            "--dest=org.gnome.ScreenSaver",
+            "/org/gnome/ScreenSaver",
+            "org.gnome.ScreenSaver.Lock",
+        ])
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "All screen locking attempts failed",
+    ))
+}
+
+pub async fn block_screen_string() -> String {
+    if !cfg!(target_os = "linux") {
+        return "not supported yet".to_string();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        match execute_block_screen() {
+            Ok(_) => "Screen blocked successfully.".to_string(),
+            Err(e) => format!("Failed to block screen: {}", e),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        "not supported yet".to_string()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn execute_hibernate() -> std::io::Result<()> {
+    let status = Command::new("systemctl")
+        .arg("hibernate")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("pm-hibernate")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "All hibernation attempts failed",
+    ))
+}
+
+pub async fn hibernate_device_string() -> String {
+    if !cfg!(target_os = "linux") {
+        return "not supported yet".to_string();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        match execute_hibernate() {
+            Ok(_) => "Device is hibernating...".to_string(),
+            Err(e) => format!("Failed to hibernate: {}", e),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        "not supported yet".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,6 +466,30 @@ mod tests {
             assert!(result.contains("Device is shutting down...") || result.contains("Failed to initiate shutdown:"));
         } else {
             let result = turn_off_device_string().await;
+            assert_eq!(result, "not supported yet");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // DO NOT RUN THIS TEST. IT WILL LOCK YOUR SCREEN!
+    async fn test_block_screen_string() {
+        if cfg!(target_os = "linux") {
+            let result = block_screen_string().await;
+            assert!(result.contains("Screen blocked successfully.") || result.contains("Failed to block screen:"));
+        } else {
+            let result = block_screen_string().await;
+            assert_eq!(result, "not supported yet");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // DO NOT RUN THIS TEST. IT WILL HIBERNATE YOUR DEVICE!
+    async fn test_hibernate_device_string() {
+        if cfg!(target_os = "linux") {
+            let result = hibernate_device_string().await;
+            assert!(result.contains("Device is hibernating...") || result.contains("Failed to hibernate:"));
+        } else {
+            let result = hibernate_device_string().await;
             assert_eq!(result, "not supported yet");
         }
     }
