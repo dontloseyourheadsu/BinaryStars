@@ -246,6 +246,58 @@ pub async fn get_device_info_string() -> String {
     )
 }
 
+#[cfg(target_os = "linux")]
+fn execute_shutdown() -> std::io::Result<()> {
+    let status = Command::new("systemctl")
+        .arg("poweroff")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("shutdown")
+        .arg("now")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    let status = Command::new("poweroff")
+        .status();
+    if let Ok(s) = status {
+        if s.success() {
+            return Ok(());
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "All shutdown command attempts failed",
+    ))
+}
+
+pub async fn turn_off_device_string() -> String {
+    if !cfg!(target_os = "linux") {
+        return "not supported yet".to_string();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        match execute_shutdown() {
+            Ok(_) => "Device is shutting down...".to_string(),
+            Err(e) => format!("Failed to initiate shutdown: {}", e),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        "not supported yet".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,5 +329,18 @@ mod tests {
             assert_eq!(info, "not supported yet");
         }
     }
+
+    #[tokio::test]
+    #[ignore] // DO NOT RUN THIS TEST. IT WILL SHUT DOWN YOUR DEVICE!
+    async fn test_turn_off_device_string() {
+        if cfg!(target_os = "linux") {
+            let result = turn_off_device_string().await;
+            assert!(result.contains("Device is shutting down...") || result.contains("Failed to initiate shutdown:"));
+        } else {
+            let result = turn_off_device_string().await;
+            assert_eq!(result, "not supported yet");
+        }
+    }
 }
+
 
