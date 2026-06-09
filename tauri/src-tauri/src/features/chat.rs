@@ -13,7 +13,10 @@ pub async fn send_bluetooth_message_internal(
     let trimmed = content.trim();
     let tokens: Vec<&str> = trimmed.split_whitespace().collect();
     let is_device_info = !tokens.is_empty() && tokens[0] == "!device-info";
-    let is_self = is_device_info && tokens.iter().any(|&arg| arg == "--self");
+    let is_device_turn_off = !tokens.is_empty() && tokens[0] == "!device-turn-off";
+    let is_self_device_info = is_device_info && tokens.iter().any(|&arg| arg == "--self");
+    let is_self_device_turn_off = is_device_turn_off && tokens.iter().any(|&arg| arg == "--self");
+    let is_self = is_self_device_info || is_self_device_turn_off;
 
     let is_hosting = state.bluetooth.session.lock().unwrap().is_some();
     let peer_id = if is_hosting {
@@ -89,7 +92,11 @@ pub async fn send_bluetooth_message_internal(
         let app_handle_clone = app_handle.clone();
         let peer_id_clone = peer_id.clone();
         tokio::spawn(async move {
-            let response = crate::features::commands::get_device_info_string().await;
+            let response = if is_self_device_info {
+                crate::features::commands::get_device_info_string().await
+            } else {
+                crate::features::commands::turn_off_device_string().await
+            };
             
             let reply_msg = BluetoothMessage {
                 id: format!("msg-{}", current_epoch_ms()),
@@ -136,6 +143,9 @@ pub async fn check_and_handle_incoming_command(
     
     if tokens[0] == "!device-info" {
         let response = crate::features::commands::get_device_info_string().await;
+        let _ = send_bluetooth_message_internal(app_handle, state, response).await;
+    } else if tokens[0] == "!device-turn-off" {
+        let response = crate::features::commands::turn_off_device_string().await;
         let _ = send_bluetooth_message_internal(app_handle, state, response).await;
     }
 }
