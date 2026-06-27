@@ -27,7 +27,8 @@ class BluetoothViewModelFactory(private val context: Context) : ViewModelProvide
                 getTabletRatioUseCase = GetTabletRatioUseCase(repository),
                 sendTabletSignalUseCase = SendTabletSignalUseCase(repository),
                 requestTabletRatioUseCase = RequestTabletRatioUseCase(repository),
-                sendKeyboardKeyUseCase = SendKeyboardKeyUseCase(repository)
+                sendKeyboardKeyUseCase = SendKeyboardKeyUseCase(repository),
+                sendMouseSignalUseCase = SendMouseSignalUseCase(repository)
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

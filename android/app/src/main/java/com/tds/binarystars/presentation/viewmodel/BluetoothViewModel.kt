@@ -25,7 +25,8 @@ class BluetoothViewModel(
     private val getTabletRatioUseCase: GetTabletRatioUseCase,
     private val sendTabletSignalUseCase: SendTabletSignalUseCase,
     private val requestTabletRatioUseCase: RequestTabletRatioUseCase,
-    private val sendKeyboardKeyUseCase: SendKeyboardKeyUseCase
+    private val sendKeyboardKeyUseCase: SendKeyboardKeyUseCase,
+    private val sendMouseSignalUseCase: SendMouseSignalUseCase
 ) : ViewModel() {
 
     val selfDeviceId = getSelfDeviceDetailsUseCase.getDeviceId()
@@ -51,6 +52,13 @@ class BluetoothViewModel(
             sendKeyboardKeyUseCase(action, value)
         }
     }
+
+    fun sendMouseSignal(action: String, dx: Int, dy: Int, button: String = "") {
+        viewModelScope.launch {
+            sendMouseSignalUseCase(action, dx, dy, button)
+        }
+    }
+
 
 
 

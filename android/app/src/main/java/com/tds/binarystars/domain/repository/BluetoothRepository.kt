@@ -27,6 +27,7 @@ interface BluetoothRepository {
     suspend fun sendTabletSignal(action: String, x: Float, y: Float): Result<Unit>
     suspend fun requestTabletRatio(): Result<Unit>
     suspend fun sendKeyboardKey(action: String, value: String): Result<Unit>
+    suspend fun sendMouseSignal(action: String, dx: Int, dy: Int, button: String): Result<Unit>
 }
 
 

@@ -14,6 +14,7 @@ import { ChatPanel } from "./features/chat/ChatPanel";
 import { getRecentChats, RecentChat } from "./features/chat/chatApi";
 import { TabletPanel } from "./features/tablet/TabletPanel";
 import { KeyboardPanel } from "./features/keyboard/KeyboardPanel";
+import { MousepadPanel } from "./features/mousepad/MousepadPanel";
 import "./core/theme.css";
 import "./App.css";
 
@@ -35,7 +36,7 @@ function App() {
   const [devices, setDevices] = useState<LinuxBluetoothDevice[]>([]);
   const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [viewingHistoryPeerId, setViewingHistoryPeerId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"discovery" | "chat" | "tablet" | "keyboard">("discovery");
+  const [activeTab, setActiveTab] = useState<"discovery" | "chat" | "tablet" | "keyboard" | "mousepad">("discovery");
 
 
   const updateRecentChats = async () => {
@@ -236,6 +237,12 @@ function App() {
           >
             <span>⌨️</span> Keyboard Mode
           </button>
+          <button
+            onClick={() => setActiveTab("mousepad")}
+            className={`nav-tab-btn ${activeTab === "mousepad" ? "active" : ""}`}
+          >
+            <span>🖱️</span> Mousepad Mode
+          </button>
         </nav>
       )}
 
@@ -280,6 +287,12 @@ function App() {
           />
         ) : activeTab === "keyboard" ? (
           <KeyboardPanel
+            isDark={isDark}
+            connected={connected}
+            peerId={peerId}
+          />
+        ) : activeTab === "mousepad" ? (
+          <MousepadPanel
             isDark={isDark}
             connected={connected}
             peerId={peerId}

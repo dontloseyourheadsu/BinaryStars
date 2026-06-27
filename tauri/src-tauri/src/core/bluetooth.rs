@@ -215,7 +215,48 @@ pub async fn start_server_impl(
                                 break;
                             }
                             let raw = line.trim();
-                            if raw.starts_with("KEY|") {
+                            if raw.starts_with("MOUSE|") {
+                                let parts: Vec<&str> = raw.split('|').collect();
+                                if parts.len() >= 3 {
+                                    let action = parts[1];
+                                    match action {
+                                        "move" => {
+                                            if parts.len() >= 4 {
+                                                let dx: i32 = parts[2].parse().unwrap_or(0);
+                                                let dy: i32 = parts[3].parse().unwrap_or(0);
+                                                enigo.mouse_move_relative(dx, dy);
+                                            }
+                                        }
+                                        "click" => {
+                                            let btn = parts[2];
+                                            if btn == "left" {
+                                                enigo.mouse_click(MouseButton::Left);
+                                            } else if btn == "right" {
+                                                enigo.mouse_click(MouseButton::Right);
+                                            }
+                                        }
+                                        "down" => {
+                                            let btn = parts[2];
+                                            if btn == "left" {
+                                                enigo.mouse_down(MouseButton::Left);
+                                            } else if btn == "right" {
+                                                enigo.mouse_down(MouseButton::Right);
+                                            }
+                                        }
+                                        "up" => {
+                                            let btn = parts[2];
+                                            if btn == "left" {
+                                                enigo.mouse_up(MouseButton::Left);
+                                            } else if btn == "right" {
+                                                enigo.mouse_up(MouseButton::Right);
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                line.clear();
+                                continue;
+                            } else if raw.starts_with("KEY|") {
                                 let parts: Vec<&str> = raw.split('|').collect();
                                 if parts.len() >= 3 {
                                     let action = parts[1];
@@ -453,6 +494,8 @@ pub async fn start_server_impl(
                         enigo.key_up(Key::Alt);
                         enigo.key_up(Key::Shift);
                         enigo.key_up(Key::Meta);
+                        enigo.mouse_up(MouseButton::Left);
+                        enigo.mouse_up(MouseButton::Right);
                     });
 
                     let mut writer = writer;
@@ -604,7 +647,48 @@ pub async fn connect_impl(
                     break;
                 }
                 let raw = line.trim();
-                if raw.starts_with("KEY|") {
+                if raw.starts_with("MOUSE|") {
+                    let parts: Vec<&str> = raw.split('|').collect();
+                    if parts.len() >= 3 {
+                        let action = parts[1];
+                        match action {
+                            "move" => {
+                                if parts.len() >= 4 {
+                                    let dx: i32 = parts[2].parse().unwrap_or(0);
+                                    let dy: i32 = parts[3].parse().unwrap_or(0);
+                                    enigo.mouse_move_relative(dx, dy);
+                                }
+                            }
+                            "click" => {
+                                let btn = parts[2];
+                                if btn == "left" {
+                                    enigo.mouse_click(MouseButton::Left);
+                                } else if btn == "right" {
+                                    enigo.mouse_click(MouseButton::Right);
+                                }
+                            }
+                            "down" => {
+                                let btn = parts[2];
+                                if btn == "left" {
+                                    enigo.mouse_down(MouseButton::Left);
+                                } else if btn == "right" {
+                                    enigo.mouse_down(MouseButton::Right);
+                                }
+                            }
+                            "up" => {
+                                let btn = parts[2];
+                                if btn == "left" {
+                                    enigo.mouse_up(MouseButton::Left);
+                                } else if btn == "right" {
+                                    enigo.mouse_up(MouseButton::Right);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    line.clear();
+                    continue;
+                } else if raw.starts_with("KEY|") {
                     let parts: Vec<&str> = raw.split('|').collect();
                     if parts.len() >= 3 {
                         let action = parts[1];
@@ -987,6 +1071,8 @@ pub async fn connect_impl(
             enigo.key_up(Key::Alt);
             enigo.key_up(Key::Shift);
             enigo.key_up(Key::Meta);
+            enigo.mouse_up(MouseButton::Left);
+            enigo.mouse_up(MouseButton::Right);
         });
 
         let mut writer = writer;
