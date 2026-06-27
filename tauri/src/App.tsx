@@ -12,6 +12,7 @@ import {
 import { DiscoveryPanel } from "./features/discovery/DiscoveryPanel";
 import { ChatPanel } from "./features/chat/ChatPanel";
 import { getRecentChats, RecentChat } from "./features/chat/chatApi";
+import { TabletPanel } from "./features/tablet/TabletPanel";
 import "./core/theme.css";
 import "./App.css";
 
@@ -33,6 +34,8 @@ function App() {
   const [devices, setDevices] = useState<LinuxBluetoothDevice[]>([]);
   const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [viewingHistoryPeerId, setViewingHistoryPeerId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"discovery" | "chat" | "tablet">("discovery");
+
 
   const updateRecentChats = async () => {
     try {
@@ -55,6 +58,7 @@ function App() {
         if (status.connectedDeviceId) {
           setConnected(true);
           setPeerId(status.connectedDeviceId);
+          setActiveTab("chat");
         }
       })
       .catch(console.error);
@@ -72,6 +76,9 @@ function App() {
       
       if (payload.connected) {
         setIsHosting(false); // Stop hosting once connected
+        setActiveTab("chat");
+      } else {
+        setActiveTab("discovery");
       }
     });
 
@@ -134,6 +141,7 @@ function App() {
       try {
         await stopBluetoothServer();
         setIsHosting(false);
+        setActiveTab("discovery");
       } catch (e: any) {
         alert(`Stop server failed: ${e}`);
       }
@@ -147,6 +155,7 @@ function App() {
           try {
             await startBluetoothServer(selfId, pwd || undefined);
             setIsHosting(true);
+            setActiveTab("chat");
           } catch (e: any) {
             alert(`Host server failed: ${e}`);
           }
@@ -178,6 +187,7 @@ function App() {
       await stopBluetoothServer();
       setConnected(false);
       setPeerId("");
+      setActiveTab("discovery");
     } catch (e: any) {
       alert(`Disconnect failed: ${e}`);
     }
@@ -198,6 +208,30 @@ function App() {
         </button>
       </header>
 
+      {/* Navigation Bar */}
+      {!isConnecting && (
+        <nav className="app-nav-bar">
+          <button
+            onClick={() => setActiveTab("discovery")}
+            className={`nav-tab-btn ${activeTab === "discovery" ? "active" : ""}`}
+          >
+            <span>📶</span> Discovery
+          </button>
+          <button
+            onClick={() => setActiveTab("chat")}
+            className={`nav-tab-btn ${activeTab === "chat" ? "active" : ""}`}
+          >
+            <span>💬</span> Chat Room
+          </button>
+          <button
+            onClick={() => setActiveTab("tablet")}
+            className={`nav-tab-btn ${activeTab === "tablet" ? "active" : ""}`}
+          >
+            <span>🎨</span> Tablet Mode
+          </button>
+        </nav>
+      )}
+
       {/* Main Content Area */}
       <main className="app-main-content">
         {isConnecting ? (
@@ -206,39 +240,62 @@ function App() {
             <h3>Establishing Connection...</h3>
             <p>Exchanging identity handshakes</p>
           </div>
-        ) : connected ? (
-          <ChatPanel
+        ) : activeTab === "chat" ? (
+          connected ? (
+            <ChatPanel
+              isDark={isDark}
+              peerId={peerId}
+              onDisconnect={handleDisconnect}
+            />
+          ) : isHosting ? (
+            <ChatPanel
+              isDark={isDark}
+              peerId="Group Chat Session"
+              onDisconnect={handleDisconnect}
+            />
+          ) : (
+            <div className="empty-state" style={{ flexDirection: "column", gap: "12px", textAlign: "center", padding: "40px" }}>
+              <span style={{ fontSize: "36px" }}>📡</span>
+              <h3>No Active Connection</h3>
+              <p style={{ maxWidth: "320px", fontSize: "13px", opacity: 0.7 }}>
+                The chat room becomes available once you connect to a nearby peer or start hosting a session.
+              </p>
+              <button onClick={() => setActiveTab("discovery")} className="btn-host" style={{ marginTop: "8px" }}>
+                Go to Discovery
+              </button>
+            </div>
+          )
+        ) : activeTab === "tablet" ? (
+          <TabletPanel
             isDark={isDark}
+            connected={connected}
             peerId={peerId}
-            onDisconnect={handleDisconnect}
-          />
-        ) : isHosting ? (
-          <ChatPanel
-            isDark={isDark}
-            peerId="Group Chat Session"
-            onDisconnect={handleDisconnect}
-          />
-        ) : viewingHistoryPeerId ? (
-          <ChatPanel
-            isDark={isDark}
-            peerId={viewingHistoryPeerId}
-            isOffline={true}
-            onDisconnect={() => setViewingHistoryPeerId(null)}
           />
         ) : (
-          <DiscoveryPanel
-            isDark={isDark}
-            devices={devices}
-            recentChats={recentChats}
-            isScanning={isScanning}
-            isHosting={isHosting}
-            onScanToggle={handleScanToggle}
-            onHostToggle={handleHostToggle}
-            onConnect={handleConnect}
-            onViewHistory={setViewingHistoryPeerId}
-          />
+          /* activeTab === "discovery" */
+          viewingHistoryPeerId ? (
+            <ChatPanel
+              isDark={isDark}
+              peerId={viewingHistoryPeerId}
+              isOffline={true}
+              onDisconnect={() => setViewingHistoryPeerId(null)}
+            />
+          ) : (
+            <DiscoveryPanel
+              isDark={isDark}
+              devices={devices}
+              recentChats={recentChats}
+              isScanning={isScanning}
+              isHosting={isHosting}
+              onScanToggle={handleScanToggle}
+              onHostToggle={handleHostToggle}
+              onConnect={handleConnect}
+              onViewHistory={setViewingHistoryPeerId}
+            />
+          )
         )}
       </main>
+
 
       {pwdModal.isOpen && (
         <div className="pwd-modal-overlay" onClick={() => {
