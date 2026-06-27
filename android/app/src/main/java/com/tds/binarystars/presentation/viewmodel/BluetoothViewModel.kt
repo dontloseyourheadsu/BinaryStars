@@ -21,11 +21,30 @@ class BluetoothViewModel(
     private val sendMessageUseCase: SendMessageUseCase,
     private val sendFileUseCase: SendFileUseCase,
     private val getMessagesPagedUseCase: GetMessagesPagedUseCase,
-    getSelfDeviceDetailsUseCase: GetSelfDeviceDetailsUseCase
+    getSelfDeviceDetailsUseCase: GetSelfDeviceDetailsUseCase,
+    private val getTabletRatioUseCase: GetTabletRatioUseCase,
+    private val sendTabletSignalUseCase: SendTabletSignalUseCase,
+    private val requestTabletRatioUseCase: RequestTabletRatioUseCase
 ) : ViewModel() {
 
     val selfDeviceId = getSelfDeviceDetailsUseCase.getDeviceId()
     val selfDeviceName = getSelfDeviceDetailsUseCase.getDeviceName()
+
+    val tabletRatio = getTabletRatioUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun sendTabletSignal(action: String, x: Float, y: Float) {
+        viewModelScope.launch {
+            sendTabletSignalUseCase(action, x, y)
+        }
+    }
+
+    fun requestTabletRatio() {
+        viewModelScope.launch {
+            requestTabletRatioUseCase()
+        }
+    }
+
 
     val connectionState = getConnectionStateUseCase()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConnectionState.Disconnected)
