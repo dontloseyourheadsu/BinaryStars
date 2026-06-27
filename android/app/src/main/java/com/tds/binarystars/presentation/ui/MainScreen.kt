@@ -196,6 +196,47 @@ fun MainScreen(
                                 }
                             }
                         }
+                    } else if (activeTab == "keyboard") {
+                        val state = connState
+                        if (state is ConnectionState.Connected && state.peerId != "Group Chat Session") {
+                            KeyboardScreen(
+                                isDark = isDark,
+                                viewModel = viewModel,
+                                onBackToOptions = { activeTab = "discovery" }
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize().padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "⌨️ Keyboard Mode Offline",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDark) TextDarkPrimary else TextLightPrimary
+                                    )
+                                    Text(
+                                        text = "Requires a direct 1-on-1 device connection to a Linux host.",
+                                        fontSize = 12.sp,
+                                        color = if (isDark) TextDarkSecondary else TextLightSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Button(
+                                        onClick = { activeTab = "discovery" },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                                    ) {
+                                        Text("Go to Discovery", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
                     } else {
                         // activeTab == "discovery"
                         when (val state = connState) {
@@ -267,6 +308,20 @@ fun MainScreen(
                                 unselectedTextColor = if (isDark) TextDarkSecondary else TextLightSecondary
                             )
                         )
+
+                        NavigationBarItem(
+                            selected = activeTab == "keyboard",
+                            onClick = { activeTab = "keyboard" },
+                            icon = { Icon(Icons.Default.List, contentDescription = "Keyboard") },
+                            label = { Text("Keyboard Mode", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = PrimaryBlue,
+                                selectedTextColor = PrimaryBlue,
+                                unselectedIconColor = if (isDark) TextDarkSecondary else TextLightSecondary,
+                                unselectedTextColor = if (isDark) TextDarkSecondary else TextLightSecondary
+                            )
+                        )
+
                     }
                 }
 
