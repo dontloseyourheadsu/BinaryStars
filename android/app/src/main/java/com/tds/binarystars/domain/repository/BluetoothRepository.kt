@@ -26,5 +26,7 @@ interface BluetoothRepository {
     fun getTabletRatio(): Flow<Pair<Int, Int>?>
     suspend fun sendTabletSignal(action: String, x: Float, y: Float): Result<Unit>
     suspend fun requestTabletRatio(): Result<Unit>
+    suspend fun sendKeyboardKey(action: String, value: String): Result<Unit>
 }
+
 

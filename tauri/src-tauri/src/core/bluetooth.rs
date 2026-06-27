@@ -15,6 +15,32 @@ pub fn current_epoch_ms() -> u64 {
         .as_millis() as u64
 }
 
+fn map_key_name(name: &str) -> Option<enigo::Key> {
+    match name {
+        "ctrl" => Some(enigo::Key::Control),
+        "alt" => Some(enigo::Key::Alt),
+        "shift" => Some(enigo::Key::Shift),
+        "meta" => Some(enigo::Key::Meta),
+        "backspace" => Some(enigo::Key::Backspace),
+        "enter" => Some(enigo::Key::Return),
+        "tab" => Some(enigo::Key::Tab),
+        "escape" => Some(enigo::Key::Escape),
+        "space" => Some(enigo::Key::Space),
+        "home" => Some(enigo::Key::Home),
+        "end" => Some(enigo::Key::End),
+        "pgup" => Some(enigo::Key::PageUp),
+        "pgdn" => Some(enigo::Key::PageDown),
+        "ins" => Some(enigo::Key::Insert),
+        "del" => Some(enigo::Key::Delete),
+        "left" => Some(enigo::Key::LeftArrow),
+        "right" => Some(enigo::Key::RightArrow),
+        "up" => Some(enigo::Key::UpArrow),
+        "down" => Some(enigo::Key::DownArrow),
+        _ => None,
+    }
+}
+
+
 fn save_received_file(file_name: &str, base64_str: &str) -> Option<String> {
     if let Ok(bytes) = general_purpose::STANDARD.decode(base64_str) {
         let save_dir = dirs::data_dir()
@@ -181,7 +207,7 @@ pub async fn start_server_impl(
                     let peer_id_read = peer_id.clone();
 
                     let read_task = tokio::spawn(async move {
-                        use enigo::{Enigo, MouseControllable, MouseButton};
+                        use enigo::{Enigo, MouseControllable, MouseButton, KeyboardControllable, Key};
                         let mut enigo = Enigo::new();
                         let mut line = String::new();
                         while let Ok(n) = reader.read_line(&mut line).await {
@@ -189,7 +215,36 @@ pub async fn start_server_impl(
                                 break;
                             }
                             let raw = line.trim();
-                            if raw.starts_with("TABLET|") {
+                            if raw.starts_with("KEY|") {
+                                let parts: Vec<&str> = raw.split('|').collect();
+                                if parts.len() >= 3 {
+                                    let action = parts[1];
+                                    let val = parts[2];
+                                    match action {
+                                        "click" => {
+                                            if let Some(key) = map_key_name(val) {
+                                                enigo.key_click(key);
+                                            }
+                                        }
+                                        "down" => {
+                                            if let Some(key) = map_key_name(val) {
+                                                enigo.key_down(key);
+                                            }
+                                        }
+                                        "up" => {
+                                            if let Some(key) = map_key_name(val) {
+                                                enigo.key_up(key);
+                                            }
+                                        }
+                                        "char" => {
+                                            enigo.key_sequence(val);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                line.clear();
+                                continue;
+                            } else if raw.starts_with("TABLET|") {
                                 let parts: Vec<&str> = raw.split('|').collect();
                                 if parts.len() >= 4 {
                                     let action = parts[1];
@@ -394,6 +449,10 @@ pub async fn start_server_impl(
 
                             line.clear();
                         }
+                        enigo.key_up(Key::Control);
+                        enigo.key_up(Key::Alt);
+                        enigo.key_up(Key::Shift);
+                        enigo.key_up(Key::Meta);
                     });
 
                     let mut writer = writer;
@@ -537,7 +596,7 @@ pub async fn connect_impl(
         let peer_id_read = peer_id.clone();
         
         let read_task = tokio::spawn(async move {
-            use enigo::{Enigo, MouseControllable, MouseButton};
+            use enigo::{Enigo, MouseControllable, MouseButton, KeyboardControllable, Key};
             let mut enigo = Enigo::new();
             let mut line = String::new();
             while let Ok(n) = reader.read_line(&mut line).await {
@@ -545,7 +604,36 @@ pub async fn connect_impl(
                     break;
                 }
                 let raw = line.trim();
-                if raw.starts_with("TABLET|") {
+                if raw.starts_with("KEY|") {
+                    let parts: Vec<&str> = raw.split('|').collect();
+                    if parts.len() >= 3 {
+                        let action = parts[1];
+                        let val = parts[2];
+                        match action {
+                            "click" => {
+                                if let Some(key) = map_key_name(val) {
+                                    enigo.key_click(key);
+                                }
+                            }
+                            "down" => {
+                                if let Some(key) = map_key_name(val) {
+                                    enigo.key_down(key);
+                                }
+                            }
+                            "up" => {
+                                if let Some(key) = map_key_name(val) {
+                                    enigo.key_up(key);
+                                }
+                            }
+                            "char" => {
+                                enigo.key_sequence(val);
+                            }
+                            _ => {}
+                        }
+                    }
+                    line.clear();
+                    continue;
+                } else if raw.starts_with("TABLET|") {
                     let parts: Vec<&str> = raw.split('|').collect();
                     if parts.len() >= 4 {
                         let action = parts[1];
@@ -895,6 +983,10 @@ pub async fn connect_impl(
 
                 line.clear();
             }
+            enigo.key_up(Key::Control);
+            enigo.key_up(Key::Alt);
+            enigo.key_up(Key::Shift);
+            enigo.key_up(Key::Meta);
         });
 
         let mut writer = writer;

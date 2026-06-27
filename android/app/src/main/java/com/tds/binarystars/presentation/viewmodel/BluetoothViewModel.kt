@@ -24,7 +24,8 @@ class BluetoothViewModel(
     getSelfDeviceDetailsUseCase: GetSelfDeviceDetailsUseCase,
     private val getTabletRatioUseCase: GetTabletRatioUseCase,
     private val sendTabletSignalUseCase: SendTabletSignalUseCase,
-    private val requestTabletRatioUseCase: RequestTabletRatioUseCase
+    private val requestTabletRatioUseCase: RequestTabletRatioUseCase,
+    private val sendKeyboardKeyUseCase: SendKeyboardKeyUseCase
 ) : ViewModel() {
 
     val selfDeviceId = getSelfDeviceDetailsUseCase.getDeviceId()
@@ -44,6 +45,13 @@ class BluetoothViewModel(
             requestTabletRatioUseCase()
         }
     }
+
+    fun sendKeyboardKey(action: String, value: String) {
+        viewModelScope.launch {
+            sendKeyboardKeyUseCase(action, value)
+        }
+    }
+
 
 
     val connectionState = getConnectionStateUseCase()
