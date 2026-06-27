@@ -75,6 +75,10 @@ class BluetoothRepositoryImpl(
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     override fun getMessages(): Flow<List<ChatMessage>> = _messages.asStateFlow()
 
+    private val _tabletRatio = MutableStateFlow<Pair<Int, Int>?>(null)
+    override fun getTabletRatio(): Flow<Pair<Int, Int>?> = _tabletRatio.asStateFlow()
+
+
     override suspend fun getMessagesPaged(peerId: String, limit: Int, offset: Int): List<ChatMessage> {
         return withContext(Dispatchers.IO) {
             dbHelper.getMessagesPaged(peerId, limit, offset)
@@ -299,9 +303,11 @@ class BluetoothRepositoryImpl(
             } catch (_: Exception) {}
         }
         
+        _tabletRatio.value = null
         if (_connectionState.value != ConnectionState.Disconnected) {
             updateConnectionState(ConnectionState.Disconnected)
         }
+
     }
 
     override suspend fun sendMessage(content: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -400,8 +406,19 @@ class BluetoothRepositoryImpl(
                 val inputReader = reader ?: return@launch
                 while (isActive) {
                     val line = inputReader.readLine() ?: break
-                    if (line.startsWith("GROUP_MSG|")) {
+
+                    if (line.startsWith("TABLET_RATIO|")) {
+                        val parts = line.split("|")
+                        if (parts.size >= 3) {
+                            val w = parts[1].toIntOrNull() ?: 1920
+                            val h = parts[2].toIntOrNull() ?: 1080
+                            _tabletRatio.value = Pair(w, h)
+                            Log.d(TAG, "Tablet screen aspect ratio updated: $w x $h")
+                        }
+                    } else if (line.startsWith("GROUP_MSG|")) {
                         val parts = line.split("|", limit = 3)
+
+
                         if (parts.size >= 3) {
                             val senderId = parts[1]
                             val content = parts[2]
@@ -642,6 +659,29 @@ class BluetoothRepositoryImpl(
             .build()
 
         notificationManager.notify(peerId.hashCode(), notification)
+    }
+
+    override suspend fun sendTabletSignal(action: String, x: Float, y: Float): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val out = writer ?: return@withContext Result.failure(Exception("Not connected"))
+            val payload = "TABLET|$action|$x|$y\n"
+            out.write(payload.toByteArray())
+            out.flush()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun requestTabletRatio(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val out = writer ?: return@withContext Result.failure(Exception("Not connected"))
+            out.write("TABLET_RATIO_REQ\n".toByteArray())
+            out.flush()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     private fun getConnectionStateValue(): ConnectionState {

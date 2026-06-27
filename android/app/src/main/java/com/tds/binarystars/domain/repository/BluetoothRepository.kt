@@ -23,4 +23,8 @@ interface BluetoothRepository {
     fun scanDevices(): Flow<List<BtDevice>>
     fun getMessages(): Flow<List<ChatMessage>>
     fun getConnectionState(): Flow<ConnectionState>
+    fun getTabletRatio(): Flow<Pair<Int, Int>?>
+    suspend fun sendTabletSignal(action: String, x: Float, y: Float): Result<Unit>
+    suspend fun requestTabletRatio(): Result<Unit>
 }
+

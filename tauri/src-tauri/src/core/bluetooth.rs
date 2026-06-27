@@ -41,6 +41,30 @@ pub fn broadcast_to_clients(state: &AppState, sender_id: &str, payload: String) 
     }
 }
 
+pub fn send_raw_bluetooth_message(state: &AppState, payload: String) -> Result<(), String> {
+    let mut sent = false;
+    {
+        let tx = state.bluetooth.tx.lock().unwrap();
+        if let Some(tx) = &*tx {
+            let _ = tx.send(payload.clone());
+            sent = true;
+        }
+    }
+    {
+        let clients = state.bluetooth.clients.lock().unwrap();
+        for client in clients.values() {
+            let _ = client.tx.send(payload.clone());
+            sent = true;
+        }
+    }
+    if sent {
+        Ok(())
+    } else {
+        Err("No active Bluetooth connection".to_string())
+    }
+}
+
+
 pub async fn start_server_impl(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -157,12 +181,55 @@ pub async fn start_server_impl(
                     let peer_id_read = peer_id.clone();
 
                     let read_task = tokio::spawn(async move {
+                        use enigo::{Enigo, MouseControllable, MouseButton};
+                        let mut enigo = Enigo::new();
                         let mut line = String::new();
                         while let Ok(n) = reader.read_line(&mut line).await {
                             if n == 0 {
                                 break;
                             }
                             let raw = line.trim();
+                            if raw.starts_with("TABLET|") {
+                                let parts: Vec<&str> = raw.split('|').collect();
+                                if parts.len() >= 4 {
+                                    let action = parts[1];
+                                    let x: f64 = parts[2].parse().unwrap_or(0.0);
+                                    let y: f64 = parts[3].parse().unwrap_or(0.0);
+                                    let (mx, my, mw, mh) = {
+                                        let sx = state.bluetooth.selected_monitor_x.lock().unwrap();
+                                        let sy = state.bluetooth.selected_monitor_y.lock().unwrap();
+                                        let sw = state.bluetooth.selected_monitor_width.lock().unwrap();
+                                        let sh = state.bluetooth.selected_monitor_height.lock().unwrap();
+                                        (*sx, *sy, *sw, *sh)
+                                    };
+                                    let target_x = mx + (x * mw as f64) as i32;
+                                    let target_y = my + (y * mh as f64) as i32;
+                                    
+                                    enigo.mouse_move_to(target_x, target_y);
+                                    match action {
+                                        "down" => {
+                                            enigo.mouse_down(MouseButton::Left);
+                                        }
+                                        "up" => {
+                                            enigo.mouse_up(MouseButton::Left);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                line.clear();
+                                continue;
+                            } else if raw == "TABLET_RATIO_REQ" {
+                                let (mw, mh) = {
+                                    let sw = state.bluetooth.selected_monitor_width.lock().unwrap();
+                                    let sh = state.bluetooth.selected_monitor_height.lock().unwrap();
+                                    (*sw, *sh)
+                                };
+                                let ratio_msg = format!("TABLET_RATIO|{}|{}\n", mw, mh);
+                                let _ = send_raw_bluetooth_message(state, ratio_msg);
+                                line.clear();
+                                continue;
+                            }
+
                             let msg = if raw.starts_with("ENC_FILE|") {
                                 let parts: Vec<&str> = raw.splitn(3, '|').collect();
                                 if parts.len() >= 3 {
@@ -470,12 +537,55 @@ pub async fn connect_impl(
         let peer_id_read = peer_id.clone();
         
         let read_task = tokio::spawn(async move {
+            use enigo::{Enigo, MouseControllable, MouseButton};
+            let mut enigo = Enigo::new();
             let mut line = String::new();
             while let Ok(n) = reader.read_line(&mut line).await {
                 if n == 0 {
                     break;
                 }
                 let raw = line.trim();
+                if raw.starts_with("TABLET|") {
+                    let parts: Vec<&str> = raw.split('|').collect();
+                    if parts.len() >= 4 {
+                        let action = parts[1];
+                        let x: f64 = parts[2].parse().unwrap_or(0.0);
+                        let y: f64 = parts[3].parse().unwrap_or(0.0);
+                        let (mx, my, mw, mh) = {
+                            let sx = state.bluetooth.selected_monitor_x.lock().unwrap();
+                            let sy = state.bluetooth.selected_monitor_y.lock().unwrap();
+                            let sw = state.bluetooth.selected_monitor_width.lock().unwrap();
+                            let sh = state.bluetooth.selected_monitor_height.lock().unwrap();
+                            (*sx, *sy, *sw, *sh)
+                        };
+                        let target_x = mx + (x * mw as f64) as i32;
+                        let target_y = my + (y * mh as f64) as i32;
+                        
+                        enigo.mouse_move_to(target_x, target_y);
+                        match action {
+                            "down" => {
+                                enigo.mouse_down(MouseButton::Left);
+                            }
+                            "up" => {
+                                enigo.mouse_up(MouseButton::Left);
+                            }
+                            _ => {}
+                        }
+                    }
+                    line.clear();
+                    continue;
+                } else if raw == "TABLET_RATIO_REQ" {
+                    let (mw, mh) = {
+                        let sw = state.bluetooth.selected_monitor_width.lock().unwrap();
+                        let sh = state.bluetooth.selected_monitor_height.lock().unwrap();
+                        (*sw, *sh)
+                    };
+                    let ratio_msg = format!("TABLET_RATIO|{}|{}\n", mw, mh);
+                    let _ = send_raw_bluetooth_message(state, ratio_msg);
+                    line.clear();
+                    continue;
+                }
+
                 let msg = if raw.starts_with("GROUP_MSG|") {
                     let parts: Vec<&str> = raw.splitn(3, '|').collect();
                     if parts.len() >= 3 {

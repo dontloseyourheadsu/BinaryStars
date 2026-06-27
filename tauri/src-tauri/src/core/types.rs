@@ -38,6 +38,17 @@ pub struct ConnectedClient {
     pub tx: mpsc::UnboundedSender<String>,
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemMonitor {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
+    pub scale_factor: f64,
+}
+
 pub struct BluetoothState {
     pub session: StdMutex<Option<Session>>,
     pub tx: StdMutex<Option<mpsc::UnboundedSender<String>>>,
@@ -46,6 +57,11 @@ pub struct BluetoothState {
     pub messages: StdMutex<Vec<BluetoothMessage>>,
     pub password: StdMutex<Option<String>>,
     pub clients: StdMutex<std::collections::HashMap<String, ConnectedClient>>,
+    pub selected_monitor_x: StdMutex<i32>,
+    pub selected_monitor_y: StdMutex<i32>,
+    pub selected_monitor_width: StdMutex<u32>,
+    pub selected_monitor_height: StdMutex<u32>,
+    pub selected_monitor_name: StdMutex<String>,
 }
 
 impl BluetoothState {
@@ -58,6 +74,11 @@ impl BluetoothState {
             messages: StdMutex::new(Vec::new()),
             password: StdMutex::new(None),
             clients: StdMutex::new(std::collections::HashMap::new()),
+            selected_monitor_x: StdMutex::new(0),
+            selected_monitor_y: StdMutex::new(0),
+            selected_monitor_width: StdMutex::new(1920),
+            selected_monitor_height: StdMutex::new(1080),
+            selected_monitor_name: StdMutex::new("".to_string()),
         }
     }
 }

@@ -33,4 +33,5 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 rfd = "0.14"
 aes-gcm = "0.10"
 sha2 = "0.10"
+enigo = "0.1.3"
 
