@@ -19,6 +19,10 @@ use crate::features::chat::{
     save_file_to_custom_path,
     get_recent_chats,
 };
+use crate::features::tablet::{
+    get_available_screens,
+    set_mapped_screen,
+};
 
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
@@ -88,7 +92,10 @@ pub fn run() {
             download_bluetooth_file,
             get_messages_paged,
             save_file_to_custom_path,
-            get_recent_chats
+            get_recent_chats,
+            get_available_screens,
+            set_mapped_screen
+
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
