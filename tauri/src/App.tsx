@@ -13,6 +13,7 @@ import { DiscoveryPanel } from "./features/discovery/DiscoveryPanel";
 import { ChatPanel } from "./features/chat/ChatPanel";
 import { getRecentChats, RecentChat } from "./features/chat/chatApi";
 import { TabletPanel } from "./features/tablet/TabletPanel";
+import { KeyboardPanel } from "./features/keyboard/KeyboardPanel";
 import "./core/theme.css";
 import "./App.css";
 
@@ -34,7 +35,7 @@ function App() {
   const [devices, setDevices] = useState<LinuxBluetoothDevice[]>([]);
   const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [viewingHistoryPeerId, setViewingHistoryPeerId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"discovery" | "chat" | "tablet">("discovery");
+  const [activeTab, setActiveTab] = useState<"discovery" | "chat" | "tablet" | "keyboard">("discovery");
 
 
   const updateRecentChats = async () => {
@@ -229,6 +230,12 @@ function App() {
           >
             <span>🎨</span> Tablet Mode
           </button>
+          <button
+            onClick={() => setActiveTab("keyboard")}
+            className={`nav-tab-btn ${activeTab === "keyboard" ? "active" : ""}`}
+          >
+            <span>⌨️</span> Keyboard Mode
+          </button>
         </nav>
       )}
 
@@ -267,6 +274,12 @@ function App() {
           )
         ) : activeTab === "tablet" ? (
           <TabletPanel
+            isDark={isDark}
+            connected={connected}
+            peerId={peerId}
+          />
+        ) : activeTab === "keyboard" ? (
+          <KeyboardPanel
             isDark={isDark}
             connected={connected}
             peerId={peerId}
