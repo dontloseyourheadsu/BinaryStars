@@ -50,6 +50,21 @@ fun MainScreen(
     val isScanning by viewModel.isScanning.collectAsState()
     val isHosting by viewModel.isHosting.collectAsState()
 
+    var activeTab by remember { mutableStateOf("discovery") }
+
+    // Auto-navigate between tabs on connection changes
+    LaunchedEffect(connState) {
+        when (connState) {
+            is ConnectionState.Connected -> {
+                activeTab = "chat"
+            }
+            is ConnectionState.Disconnected -> {
+                activeTab = "discovery"
+            }
+            else -> {}
+        }
+    }
+
     BinaryStarsTheme(darkTheme = isDark) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -97,22 +112,30 @@ fun MainScreen(
                             onShareFile = onShareFile,
                             isOffline = true
                         )
-                    } else {
+                    } else if (activeTab == "chat") {
                         when (val state = connState) {
                             is ConnectionState.Disconnected -> {
-                                DashboardScreen(
-                                    isDark = isDark,
-                                    devices = devices,
-                                    isScanning = isScanning,
-                                    isHosting = isHosting,
-                                    onScanToggle = {
-                                        if (isScanning) viewModel.stopScanning() else viewModel.startScanning()
-                                    },
-                                    onHostToggle = {
-                                        if (isHosting) viewModel.stopHosting() else viewModel.startHosting()
-                                    },
-                                    onConnect = { viewModel.connectToDevice(it) }
-                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "📡 No Active Connection",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDark) TextDarkPrimary else TextLightPrimary
+                                        )
+                                        Text(
+                                            text = "Chat room becomes active once connected.",
+                                            fontSize = 12.sp,
+                                            color = if (isDark) TextDarkSecondary else TextLightSecondary
+                                        )
+                                    }
+                                }
                             }
                             is ConnectionState.Connecting -> {
                                 ConnectingScreen(isDark = isDark)
@@ -133,12 +156,125 @@ fun MainScreen(
                                 )
                             }
                         }
+                    } else if (activeTab == "tablet") {
+                        val state = connState
+                        if (state is ConnectionState.Connected && state.peerId != "Group Chat Session") {
+                            TabletScreen(
+                                isDark = isDark,
+                                viewModel = viewModel,
+                                onBackToOptions = { activeTab = "discovery" }
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize().padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "🎨 Tablet Mode Offline",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDark) TextDarkPrimary else TextLightPrimary
+                                    )
+                                    Text(
+                                        text = "Requires a direct 1-on-1 device connection to a Linux host.",
+                                        fontSize = 12.sp,
+                                        color = if (isDark) TextDarkSecondary else TextLightSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Button(
+                                        onClick = { activeTab = "discovery" },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                                    ) {
+                                        Text("Go to Discovery", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // activeTab == "discovery"
+                        when (val state = connState) {
+                            is ConnectionState.Connecting -> {
+                                ConnectingScreen(isDark = isDark)
+                            }
+                            else -> {
+                                DashboardScreen(
+                                    isDark = isDark,
+                                    devices = devices,
+                                    isScanning = isScanning,
+                                    isHosting = isHosting,
+                                    onScanToggle = {
+                                        if (isScanning) viewModel.stopScanning() else viewModel.startScanning()
+                                    },
+                                    onHostToggle = {
+                                        if (isHosting) viewModel.stopHosting() else viewModel.startHosting()
+                                    },
+                                    onConnect = { viewModel.connectToDevice(it) }
+                                )
+                            }
+                        }
                     }
                 }
+
+                // Bottom Navigation Bar
+                val historyPeerId by viewModel.viewingHistoryPeerId.collectAsState()
+                if (historyPeerId == null && connState !is ConnectionState.Connecting) {
+                    NavigationBar(
+                        containerColor = if (isDark) DarkCardBg else LightCardBg,
+                        tonalElevation = 8.dp,
+                        modifier = Modifier.height(64.dp)
+                    ) {
+                        NavigationBarItem(
+                            selected = activeTab == "discovery",
+                            onClick = { activeTab = "discovery" },
+                            icon = { Icon(Icons.Default.Search, contentDescription = "Discovery") },
+                            label = { Text("Discovery", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = PrimaryBlue,
+                                selectedTextColor = PrimaryBlue,
+                                unselectedIconColor = if (isDark) TextDarkSecondary else TextLightSecondary,
+                                unselectedTextColor = if (isDark) TextDarkSecondary else TextLightSecondary
+                            )
+                        )
+                        
+                        NavigationBarItem(
+                            selected = activeTab == "chat",
+                            onClick = { activeTab = "chat" },
+                            icon = { Icon(Icons.Default.Send, contentDescription = "Chat") },
+                            label = { Text("Chat Room", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = PrimaryBlue,
+                                selectedTextColor = PrimaryBlue,
+                                unselectedIconColor = if (isDark) TextDarkSecondary else TextLightSecondary,
+                                unselectedTextColor = if (isDark) TextDarkSecondary else TextLightSecondary
+                            )
+                        )
+
+                        NavigationBarItem(
+                            selected = activeTab == "tablet",
+                            onClick = { activeTab = "tablet" },
+                            icon = { Icon(Icons.Default.Edit, contentDescription = "Tablet") },
+                            label = { Text("Tablet Mode", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = PrimaryBlue,
+                                selectedTextColor = PrimaryBlue,
+                                unselectedIconColor = if (isDark) TextDarkSecondary else TextLightSecondary,
+                                unselectedTextColor = if (isDark) TextDarkSecondary else TextLightSecondary
+                            )
+                        )
+                    }
+                }
+
             }
         }
     }
 }
+
 
 @Composable
 fun HeaderBar(
