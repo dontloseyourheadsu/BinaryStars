@@ -50,3 +50,16 @@ class GetSelfDeviceDetailsUseCase(private val repository: BluetoothRepository) {
     fun getDeviceId(): String = repository.getSelfDeviceId()
     fun getDeviceName(): String = repository.getSelfDeviceName()
 }
+
+class GetTabletRatioUseCase(private val repository: BluetoothRepository) {
+    operator fun invoke(): Flow<Pair<Int, Int>?> = repository.getTabletRatio()
+}
+
+class SendTabletSignalUseCase(private val repository: BluetoothRepository) {
+    suspend operator fun invoke(action: String, x: Float, y: Float): Result<Unit> = repository.sendTabletSignal(action, x, y)
+}
+
+class RequestTabletRatioUseCase(private val repository: BluetoothRepository) {
+    suspend operator fun invoke(): Result<Unit> = repository.requestTabletRatio()
+}
+
