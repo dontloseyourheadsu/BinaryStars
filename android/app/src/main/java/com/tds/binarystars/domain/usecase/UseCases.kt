@@ -67,4 +67,10 @@ class SendKeyboardKeyUseCase(private val repository: BluetoothRepository) {
     suspend operator fun invoke(action: String, value: String): Result<Unit> = repository.sendKeyboardKey(action, value)
 }
 
+class SendMouseSignalUseCase(private val repository: BluetoothRepository) {
+    suspend operator fun invoke(action: String, dx: Int, dy: Int, button: String): Result<Unit> =
+        repository.sendMouseSignal(action, dx, dy, button)
+}
+
+
 

@@ -696,6 +696,22 @@ class BluetoothRepositoryImpl(
         }
     }
 
+    override suspend fun sendMouseSignal(action: String, dx: Int, dy: Int, button: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val out = writer ?: return@withContext Result.failure(Exception("Not connected"))
+            val payload = if (action == "move") {
+                "MOUSE|move|$dx|$dy\n"
+            } else {
+                "MOUSE|$action|$button\n"
+            }
+            out.write(payload.toByteArray())
+            out.flush()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun getConnectionStateValue(): ConnectionState {
         return _connectionState.value
     }
