@@ -63,3 +63,8 @@ class RequestTabletRatioUseCase(private val repository: BluetoothRepository) {
     suspend operator fun invoke(): Result<Unit> = repository.requestTabletRatio()
 }
 
+class SendKeyboardKeyUseCase(private val repository: BluetoothRepository) {
+    suspend operator fun invoke(action: String, value: String): Result<Unit> = repository.sendKeyboardKey(action, value)
+}
+
+

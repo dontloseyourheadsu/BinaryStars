@@ -684,6 +684,18 @@ class BluetoothRepositoryImpl(
         }
     }
 
+    override suspend fun sendKeyboardKey(action: String, value: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val out = writer ?: return@withContext Result.failure(Exception("Not connected"))
+            val payload = "KEY|$action|$value\n"
+            out.write(payload.toByteArray())
+            out.flush()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun getConnectionStateValue(): ConnectionState {
         return _connectionState.value
     }
